@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import hre from "hardhat";
-import { parseEther, zeroAddress } from "viem";
+import { parseEther, zeroAddress, getAddress } from "viem";
 import {
   LobbyStatus,
   PlayerLobbyState,
@@ -77,6 +77,7 @@ describe("Lobbies", function () {
       universalCredits: deployed.universalCredits,
       shipPurchaser: deployed.shipPurchaser,
       singlePlayerMatch: deployed.singlePlayerMatch,
+      gameResults: deployed.gameResults,
       owner,
       creator,
       joiner,
@@ -405,11 +406,26 @@ describe("Lobbies", function () {
     });
 
     it("should prevent creating lobby when in timeout", async function () {
-      const { creatorLobbies, joinerLobbies, creator, joiner } =
+      const { creatorLobbies, joinerLobbies, creator, joiner, ships, randomManager } =
         await loadFixture(deployLobbiesFixture);
       const costLimit = 1000n;
       const turnTime = 300n;
       const creatorGoesFirst = true;
+
+      // HA4-03 fix (2026-09-28): timeoutJoiner only penalizes the joiner
+      // (putting them "in timeout") if the creator actually committed a
+      // fleet themselves first — a creator who never creates a fleet is no
+      // longer able to penalize an innocent joiner. This test is about the
+      // timeout mechanism itself, not that fairness rule, so the creator
+      // now legitimately commits a fleet before timing the joiner out.
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, zeroAddress, 1],
+        { value: parseEther("4.99") },
+      );
+      const shipTuple = (await ships.read.ships([1n])) as ShipTuple;
+      const ship = tupleToShip(shipTuple);
+      await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      await ships.write.constructAllMyShips({ account: creator.account });
 
       // Create and join a lobby
       await creatorLobbies.write.createLobby([
@@ -421,6 +437,11 @@ describe("Lobbies", function () {
         zeroAddress, // reservedJoiner - no reservation
       ]);
       await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n],
+        generateStartingPositions([1n], true),
+      ]);
 
       // Timeout the joiner
       await hre.network.provider.send("evm_increaseTime", [301]); // Wait for timeout
@@ -691,12 +712,23 @@ describe("Lobbies", function () {
     });
 
     it("should revert when joining while in timeout", async function () {
-      const { creatorLobbies, joinerLobbies, otherLobbies } = await loadFixture(
-        deployLobbiesFixture
-      );
+      const { creatorLobbies, joinerLobbies, otherLobbies, creator, ships, randomManager } =
+        await loadFixture(deployLobbiesFixture);
       const costLimit = 1000n;
       const turnTime = 300n;
       const creatorGoesFirst = true;
+
+      // HA4-03 fix (2026-09-28): see the identical comment in "should
+      // prevent creating lobby when in timeout" above — timeoutJoiner now
+      // only penalizes the joiner if the creator committed a fleet first.
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, zeroAddress, 1],
+        { value: parseEther("4.99") },
+      );
+      const shipTuple = (await ships.read.ships([1n])) as ShipTuple;
+      const ship = tupleToShip(shipTuple);
+      await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      await ships.write.constructAllMyShips({ account: creator.account });
 
       // Create and join a lobby
       await creatorLobbies.write.createLobby([
@@ -708,6 +740,11 @@ describe("Lobbies", function () {
         zeroAddress, // reservedJoiner - no reservation
       ]);
       await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n],
+        generateStartingPositions([1n], true),
+      ]);
 
       // Timeout the joiner
       await hre.network.provider.send("evm_increaseTime", [301]); // Wait for timeout
@@ -1221,6 +1258,52 @@ describe("Lobbies", function () {
       ])) as unknown as PlayerLobbyState;
       expect(creatorState.kickCount).to.equal(1n);
     });
+
+    it("should NOT penalize the joiner via timeoutJoiner when the creator never created a fleet (HA4-03)", async function () {
+      // Regression test for HA4-03 (docs/audit-2.md): a creator who never
+      // commits a fleet themselves must not be able to penalize an innocent
+      // joiner just for waiting their turn — timeoutJoiner should still
+      // reset the lobby to Open, just without the punitive kickCount.
+      const { creatorLobbies, joinerLobbies, joiner } = await loadFixture(
+        deployLobbiesFixture,
+      );
+
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n,
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+
+      // Creator never calls createFleet.
+      await hre.network.provider.send("evm_increaseTime", [301]);
+      await hre.network.provider.send("evm_mine");
+      await creatorLobbies.write.timeoutJoiner([1n]);
+
+      // Lobby still resets — the creator can always reclaim it.
+      const lobby = await creatorLobbies.read.getLobby([1n]);
+      expect(lobby.players.joiner).to.equal(zeroAddress);
+      expect(lobby.state.status).to.equal(LobbyStatus.Open);
+
+      // But the joiner was NOT penalized: no kickCount, and they can
+      // immediately join another lobby without hitting PlayerInTimeout.
+      const joinerState = (await joinerLobbies.read.getPlayerState([
+        joiner.account.address,
+      ])) as unknown as PlayerLobbyState;
+      expect(joinerState.kickCount).to.equal(0n);
+
+      await creatorLobbies.write.createLobby(
+        [1000n, 300n, true, 0n, 100n, zeroAddress],
+        { value: parseEther("1") },
+      );
+      // must NOT revert PlayerInTimeout (a fee is still required — the
+      // joiner already used their free quota on lobby 1 — but that's a
+      // separate, unrelated check from the timeout this test is about).
+      await joinerLobbies.write.joinLobby([2n], { value: parseEther("1") });
+    });
   });
 
   describe("Fleet Creation", function () {
@@ -1289,6 +1372,86 @@ describe("Lobbies", function () {
           generateStartingPositions([1n], true),
         ])
       ).to.not.be.rejected;
+    });
+
+    it("keeps a lobby's game on the engine that was live at lobby creation, even if pvpMatch is repointed mid-FleetSelection (UA-10)", async function () {
+      const {
+        lobbies,
+        creatorLobbies,
+        joinerLobbies,
+        creator,
+        joiner,
+        owner,
+        ships,
+        randomManager,
+        game,
+        gameResults,
+      } = await loadFixture(deployLobbiesFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") }
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") }
+      );
+      for (let i = 1; i <= 10; i++) {
+        const shipTuple = (await ships.read.ships([BigInt(i)])) as ShipTuple;
+        const ship = tupleToShip(shipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      // Lobby created, joined, and the creator commits a fleet first — this
+      // is the pinning moment (lobby creation), well before the joiner's
+      // fleet completes the pair and actually starts the game.
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n, // selectedMapId
+        100n, // maxScore
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n],
+        generateStartingPositions([1n], true),
+      ]);
+
+      // Simulate an engine rollout mid-FleetSelection: deploy a second,
+      // deliberately UNWIRED PvPMatch (its own lobbiesAddress is never set
+      // to this real Lobbies contract) and repoint Lobbies.pvpMatch at it —
+      // what an admin rolling out a new engine for FUTURE lobbies might do
+      // while this lobby is still sitting open, one side already committed.
+      const newPvpMatch = await hre.viem.deployContract("PvPMatch", [
+        game.address,
+        gameResults.address,
+      ]);
+      await lobbies.write.setPvpMatchAddress([newPvpMatch.address], {
+        account: owner.account,
+      });
+
+      // The joiner completing their fleet must still start the game on the
+      // ORIGINAL (snapshotted) engine, not the new, unwired one — if this
+      // were still a live read of Lobbies.pvpMatch, it would revert
+      // NotLobbiesContract from the new PvPMatch's own caller guard.
+      await expect(
+        joinerLobbies.write.createFleet([
+          1n,
+          [6n],
+          generateStartingPositions([6n], false),
+        ])
+      ).to.not.be.rejected;
+
+      // Confirm the game actually landed on the ORIGINAL engine's Game
+      // contract (gameId == lobbyId for PvP).
+      const g = await game.read.getGame([1n]);
+      expect(g.metadata.creator).to.equal(getAddress(creator.account.address));
+      expect(g.metadata.joiner).to.equal(getAddress(joiner.account.address));
     });
 
     it("should reject fleet creation with duplicate positions", async function () {

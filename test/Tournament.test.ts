@@ -208,6 +208,30 @@ describe("Tournament", function () {
       const summary = await asOwner.read.getTournamentSummary([1n]);
       expect(summary[2]).to.equal(parseEther("6"));
     });
+
+    it("rejects claiming the sponsor slot with a zero-value call (HA4-04)", async function () {
+      const { asOwner, asAlice, now } = await loadFixture(
+        deployTournamentFixture,
+      );
+      // No sponsor set at creation.
+      await asOwner.write.createTournament([defaultConfig(now)]);
+
+      // Alice can't squat the sponsor slot for free.
+      await expect(
+        asAlice.write.addSponsorPrize([1n]),
+      ).to.be.rejectedWith("NoSponsorContribution");
+
+      // The slot is still open — a real contribution from anyone succeeds.
+      await asAlice.write.addSponsorPrize([1n], { value: parseEther("1") });
+      const summary = await asOwner.read.getTournamentSummary([1n]);
+      expect(summary[2]).to.equal(parseEther("1"));
+
+      // Now that Alice is the real sponsor, a zero-value call from someone
+      // else still correctly rejects as SponsorAlreadySet, not this check.
+      await expect(
+        asOwner.write.addSponsorPrize([1n]),
+      ).to.be.rejectedWith("SponsorAlreadySet");
+    });
   });
 
   describe("Registration (World ID gate)", function () {

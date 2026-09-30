@@ -18,10 +18,14 @@ import "./IShipAttributes.sol";
 // (IShipAttributes) rather than being owned by this contract, so factions
 // can retune numbers via ShipAttributes.setVariantAttributes without
 // redeploying this resolver.
+//
+// Engine-agnostic by construction (2026-09-28) — see EMPResolver's header
+// comment: reads live ship state via IGameView(msg.sender) instead of a
+// stored `game` address, so the same deployed instance works for every
+// future engine with no reconfiguration.
 contract ElectricStormResolver is IEffectResolver {
     int16 constant NO_RELOCATE = type(int16).min;
 
-    IGameView public game;
     IShipAttributes public shipAttributes;
     address public owner;
     // Which faction slot (0-7) this instance is registered at — Special is
@@ -33,16 +37,10 @@ contract ElectricStormResolver is IEffectResolver {
 
     error NotOwner();
 
-    constructor(address _game, address _shipAttributes, Special _slot) {
-        game = IGameView(_game);
+    constructor(address _shipAttributes, Special _slot) {
         shipAttributes = IShipAttributes(_shipAttributes);
         owner = msg.sender;
         slot = _slot;
-    }
-
-    function setGameAddress(address _game) external {
-        if (msg.sender != owner) revert NotOwner();
-        game = IGameView(_game);
     }
 
     function setShipAttributesAddress(address _shipAttributes) external {
@@ -76,7 +74,7 @@ contract ElectricStormResolver is IEffectResolver {
             actingCol
         );
 
-        ShipPosition[] memory positions = game.getAllShipPositions(gameId);
+        ShipPosition[] memory positions = IGameView(msg.sender).getAllShipPositions(gameId);
 
         // Exact-size the result array (a zero-filled unused slot would be
         // misread downstream as a relocation to (0,0), since newRow must be
@@ -115,7 +113,9 @@ contract ElectricStormResolver is IEffectResolver {
         int16 actingRow,
         int16 actingCol
     ) private view returns (StormContext memory) {
-        uint16 attrVersion = game.getShipAttributes(gameId, shipId).version;
+        uint16 attrVersion = IGameView(msg.sender)
+            .getShipAttributes(gameId, shipId)
+            .version;
         // HA3-06: int8(uint8) silently wraps negative for strength >= 128,
         // inverting "add to reactor timer" into "subtract from it." Clamp
         // to int8's max instead of letting a misconfigured value flip sign.

@@ -24,7 +24,20 @@ import pvpStarterContent from "../data/pvpStarterContent.json";
 // is false — this is a plain build-time boolean (not an Ignition
 // parameter) so gated m.call(...) invocations are simply never added to the
 // deployment graph when false, rather than being skipped at execution time.
-const PRODUCTION = true;
+const PRODUCTION = false;
+
+// Whether a PRODUCTION deploy wires the Selfie Check eligibility provider into
+// FreeShipClaim/TutorialClaim (2026-09-28: off for now, per explicit
+// direction). When false, neither contract's provider is ever set, so both
+// stay at the unset default (address(0)) = no verification at all, exactly
+// what scripts/disableClaimEligibility.ts does to an already-deployed pair.
+// The real SelfieCheckEligibilityProvider is still deployed (and its verifier
+// authorized) so verification can be turned back on later, with no redeploy,
+// via `setEligibilityProvider(<provider address>)` on each claim contract
+// from MAP_EDITOR. Non-production deploys (the test fixture) ignore this and
+// always wire the always-eligible mock, so tests still exercise the
+// provider-wired code path.
+const CLAIM_ELIGIBILITY_VERIFICATION_ENABLED = false;
 
 // Address allowed to mint ships from the Firebase Flow backend, with the same
 // rights as ShipPurchaser.
@@ -503,6 +516,12 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // Lobbies involved. `lobbies` is kept as a legacy constructor arg only
   // (see the contract's header comment). First arg is AIShips.sol, not
   // Ships.sol — this contract's AI fleets are allocated from AIShips' pool.
+  // Trailing 0 is engineIndex (HA4-01 fix, 2026-09-28) — this is engine 0
+  // (the first/only one), so it reproduces the exact nodeMatchCount-based
+  // gameId numbering every existing test already depends on. A future
+  // second SinglePlayerMatch (a new gameplay-rules "engine") would deploy
+  // with a distinct index instead — see SinglePlayerMatch.sol's own
+  // engineIndex comment and the engine-registry plan.
   const singlePlayerMatch = m.contract("SinglePlayerMatch", [
     aiShips,
     lobbies,
@@ -511,6 +530,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
     maps,
     nodeMap,
     fleets,
+    0,
   ]);
 
   // ---- Roguelike campaign mode ------------------------------------------
@@ -536,6 +556,8 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // is deployed and registered further down, next to that faction's
   // resolvers (Variant2AI needs the repair resolver).
   const aiBehaviorRegistry = m.contract("AIBehaviorRegistry");
+  // Trailing 0 is engineIndex (HA4-01 fix, 2026-09-28) — same reasoning as
+  // singlePlayerMatch's own comment above.
   const roguelikeMatch = m.contract("RoguelikeMatch", [
     aiShips,
     ships,
@@ -547,6 +569,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
     roguelikeNodeMap,
     roguelikeRun,
     aiBehaviorRegistry,
+    0,
   ]);
   // Resupply-node actions (repair, roster changes) split into their own
   // contract purely for size — see RoguelikeResupply.sol's header comment.
@@ -558,6 +581,16 @@ const DeployModule = buildModule("DeployModule", (m) => {
     roguelikeNodeMap,
     roguelikeRun,
   ]);
+
+  // UA-05 fix (2026-09-29): lets RoguelikeNodeMap.removeChild refuse to
+  // remove a node's last remaining child while an active run is actually
+  // standing there — see RoguelikeNodeMap.sol's own comment on
+  // runLedger/removeChild.
+  const setRoguelikeRunLedgerCall = m.call(
+    roguelikeNodeMap,
+    "setRunLedgerAddress",
+    [roguelikeRun],
+  );
 
   // Pluggable roguelike win effects (see IRoguelikeWinEffect.sol) — none
   // are assigned to any node by default (RoguelikeNodeMap.setNodeWinEffects
@@ -732,13 +765,17 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // Deploy RamResolver: the faction 1 innate ability (traits.variant == 1),
   // resolver-backed per IEffectResolver and dispatched via
   // ActionType.FactionAbility rather than the old
-  // automatic-side-effect-of-movement ramming mechanic.
-  const ramResolver = m.contract("RamResolver", [game]);
+  // automatic-side-effect-of-movement ramming mechanic. No Game address in
+  // the constructor (2026-09-28): resolvers now read live ship state via
+  // IGameView(msg.sender) — see RamResolver.sol's header comment — so the
+  // same deployed instance is reusable by every future engine with no
+  // rewiring, which is the whole point of the engine-registry work.
+  const ramResolver = m.contract("RamResolver", []);
 
   // Deploy RepairResolver: the faction 2 innate ability (traits.variant ==
   // 2), same shape as RamResolver above -- every variant-2 ship can heal a
   // nearby friendly ship regardless of loadout (range 1, heals 50 hull).
-  const repairResolver = m.contract("RepairResolver", [game]);
+  const repairResolver = m.contract("RepairResolver", []);
 
   // Deploy the equipped-Special resolvers: EMP/RepairDrones/FlakArray are
   // dispatched via Game.specialResolvers[variant][slot] (IEffectResolver),
@@ -749,18 +786,16 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // SpecialData table via shipAttributes, so numbers stay retunable via
   // ShipAttributes.setVariantAttributes without redeploying a resolver.
   // Special is a per-faction local slot (0-7), not a global identity, so
-  // each resolver is told its own slot at deploy time (third constructor
+  // each resolver is told its own slot at deploy time (second constructor
   // arg) — these three are faction 1's slots 1/2/3. A slot's behavior and
   // strength are looked up by variant first, then slot, so faction 2's
   // slots 1/2/3 below are unrelated to these.
-  const empResolver = m.contract("EMPResolver", [game, shipAttributes, 1]);
+  const empResolver = m.contract("EMPResolver", [shipAttributes, 1]);
   const repairDronesResolver = m.contract("RepairDronesResolver", [
-    game,
     shipAttributes,
     2,
   ]);
   const flakArrayResolver = m.contract("FlakArrayResolver", [
-    game,
     shipAttributes,
     3,
   ]);
@@ -774,12 +809,10 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // Game.specialResolvers[2][Slot3] staying unset is what makes trying to
   // *use* it as an action revert.
   const electricStormResolver = m.contract("ElectricStormResolver", [
-    game,
     shipAttributes,
     1,
   ]);
   const droneSwarmResolver = m.contract("DroneSwarmResolver", [
-    game,
     shipAttributes,
     2,
   ]);
@@ -805,13 +838,17 @@ const DeployModule = buildModule("DeployModule", (m) => {
     variantPurchaseGate, // purchaseGate
   ]);
 
-  // ShipsRouter's own auth config: gameAddress/fleetsAddress gate its
+  // ShipsRouter's own auth config: isAllowedGame/fleetsAddress gate its
   // setTimestampDestroyed/setInFleet the same way Ships.sol used to gate
   // them directly against Game.sol/Fleets.sol. lobbyAddress feeds
   // DestroyRewardLib the same way it did when called from inside Ships.sol.
-  const setShipsRouterGameAddressCall = m.call(shipsRouter, "setGameAddress", [
-    game,
-  ]);
+  // isAllowedGame is an allowlist (2026-09-28) — see ShipsRouter.sol's own
+  // comment and the engine-registry plan.
+  const setShipsRouterGameAddressCall = m.call(
+    shipsRouter,
+    "setIsAllowedGame",
+    [game, true],
+  );
   const setShipsRouterFleetsAddressCall = m.call(
     shipsRouter,
     "setFleetsAddress",
@@ -1383,16 +1420,23 @@ const DeployModule = buildModule("DeployModule", (m) => {
     { id: "SetVariant2Attributes" },
   );
 
-  // Set PvPMatch contract address in GameResults contract (PvPMatch now
-  // records PvP results, not core Game.sol)
+  // Authorize PvPMatch to record results into GameResults (PvPMatch
+  // records PvP results, not core Game.sol). Widened to an allowlist
+  // (2026-09-28) — see GameResults.sol's isAllowedRecorder comment and the
+  // engine-registry plan.
   const setGameResultsGameContractCall = m.call(
     gameResults,
-    "setGameContract",
-    [pvpMatch],
+    "setIsAllowedRecorder",
+    [pvpMatch, true],
   );
 
   // Set Game address in Maps contract
-  const setMapsGameAddressCall = m.call(maps, "setGameAddress", [game]);
+  // Widened to an allowlist (2026-09-28) — see Maps.sol's isAllowedGame
+  // comment and the engine-registry plan.
+  const setMapsGameAddressCall = m.call(maps, "setIsAllowedGame", [
+    game,
+    true,
+  ]);
 
   // Allow the designated map editor wallet to create/edit preset maps
   const allowMapEditorCall = m.call(maps, "setMapEditor", [MAP_EDITOR, true], {
@@ -1931,8 +1975,18 @@ const DeployModule = buildModule("DeployModule", (m) => {
     { id: "AllowSinglePlayerMatchToManageFleets" },
   );
 
-  // Set Game address in Fleets contract
-  const setFleetsGameAddressCall = m.call(fleets, "setGameAddress", [game]);
+  // Authorize Game itself to manage fleets directly (removeShipFromFleet/
+  // clearFleet, for ship-destruction/game-end cleanup) — folded into the
+  // same allowlist as the orchestrators above (2026-09-28) rather than a
+  // dedicated single-address `gameAddress` slot, so a future engine's own
+  // Game instance can be authorized the same way without touching Fleets
+  // again. See the engine-registry plan.
+  const allowGameToManageFleetsCall = m.call(
+    fleets,
+    "setIsAllowedToManageFleets",
+    [game, true],
+    { id: "AllowGameToManageFleets" },
+  );
 
   // Set ShipAttributes address in Fleets contract
   const setFleetsShipAttributesCall = m.call(fleets, "setShipAttributes", [
@@ -2081,12 +2135,16 @@ const DeployModule = buildModule("DeployModule", (m) => {
       { id: "SetSelfieCheckAuthorizedVerifier" },
     );
   }
-  const setFreeShipClaimEligibilityProviderCall = eligibilityProvider
+  // Skipped entirely on a production deploy with verification disabled (see
+  // CLAIM_ELIGIBILITY_VERIFICATION_ENABLED) — an unset provider is "off".
+  const wireEligibilityProvider =
+    !PRODUCTION || CLAIM_ELIGIBILITY_VERIFICATION_ENABLED;
+  const setFreeShipClaimEligibilityProviderCall = wireEligibilityProvider
     ? m.call(freeShipClaim, "setEligibilityProvider", [eligibilityProvider], {
         id: "SetFreeShipClaimEligibilityProvider",
       })
     : undefined;
-  const setTutorialClaimEligibilityProviderCall = eligibilityProvider
+  const setTutorialClaimEligibilityProviderCall = wireEligibilityProvider
     ? m.call(tutorialClaim, "setEligibilityProvider", [eligibilityProvider], {
         id: "SetTutorialClaimEligibilityProvider",
       })
@@ -2235,6 +2293,66 @@ const DeployModule = buildModule("DeployModule", (m) => {
     FIREBASE_FLOW_MINTER,
   ]);
 
+  // GameEngineRegistry (2026-09-28): registers this deploy's `game` as the
+  // first "engine" and authorizes its three orchestrators to record each
+  // new game they start — see GameEngineRegistry.sol/the engine-registry
+  // plan for the full rationale. A future gameplay-rules upgrade deploys a
+  // new Game + orchestrators, registers that as a new engine here, and
+  // points setEngineRegistry/currentEngine at it, without touching
+  // anything deployed in this module again.
+  const gameEngineRegistry = m.contract("GameEngineRegistry");
+  const registerFirstEngineCall = m.call(
+    gameEngineRegistry,
+    "registerEngine",
+    [game, "v1", true],
+    { id: "RegisterFirstEngine" },
+  );
+  const allowPvPMatchToRecordCall = m.call(
+    gameEngineRegistry,
+    "setIsAllowedToRecord",
+    [pvpMatch, true],
+    { id: "AllowPvPMatchToRecord" },
+  );
+  const allowSinglePlayerMatchToRecordCall = m.call(
+    gameEngineRegistry,
+    "setIsAllowedToRecord",
+    [singlePlayerMatch, true],
+    { id: "AllowSinglePlayerMatchToRecord" },
+  );
+  const allowRoguelikeMatchToRecordCall = m.call(
+    gameEngineRegistry,
+    "setIsAllowedToRecord",
+    [roguelikeMatch, true],
+    { id: "AllowRoguelikeMatchToRecord" },
+  );
+  const setPvpMatchEngineRegistryCall = m.call(
+    pvpMatch,
+    "setEngineRegistry",
+    [gameEngineRegistry],
+    { id: "SetPvpMatchEngineRegistry" },
+  );
+  const setSinglePlayerMatchEngineRegistryCall = m.call(
+    singlePlayerMatch,
+    "setEngineRegistry",
+    [gameEngineRegistry],
+    { id: "SetSinglePlayerMatchEngineRegistry" },
+  );
+  const setRoguelikeMatchEngineRegistryCall = m.call(
+    roguelikeMatch,
+    "setEngineRegistry",
+    [gameEngineRegistry],
+    { id: "SetRoguelikeMatchEngineRegistry" },
+  );
+  // UA-12 fix (2026-09-29): lets Maps.setBlockedTile/setImpassableTile/
+  // setScoringTile refuse a debug tile edit against an already-ended game —
+  // see Maps.sol's own comment on engineRegistry/_gameHasEnded.
+  const setMapsEngineRegistryCall = m.call(
+    maps,
+    "setEngineRegistry",
+    [gameEngineRegistry],
+    { id: "SetMapsEngineRegistry" },
+  );
+
   if (PRODUCTION) {
     // --- Ownership handover ------------------------------------------------
     // Every Ownable contract above defaults to Ownable(msg.sender) — the
@@ -2348,6 +2466,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
       after: [
         setMapsGameAddressCall,
         allowMapEditorCall,
+        setMapsEngineRegistryCall,
         ...Object.values(mapCalls),
       ],
     });
@@ -2391,7 +2510,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
         allowSinglePlayerMatchToManageFleetsCall,
         allowRoguelikeMatchToManageFleetsCall,
         allowRoguelikeResupplyToManageFleetsCall,
-        setFleetsGameAddressCall,
+        allowGameToManageFleetsCall,
         setFleetsShipAttributesCall,
         setFleetsMapsAddressCall,
       ],
@@ -2409,7 +2528,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
 
     m.call(pvpMatch, "transferOwnership", [MAP_EDITOR], {
       id: "TransferPvPMatchOwnership",
-      after: [setPvpMatchLobbiesAddressCall],
+      after: [setPvpMatchLobbiesAddressCall, setPvpMatchEngineRegistryCall],
     });
 
     m.call(singlePlayerMatch, "transferOwnership", [MAP_EDITOR], {
@@ -2418,6 +2537,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
         setSinglePlayerMatchUniversalCreditsAddressCall,
         setSinglePlayerMatchHumanShipsAddressCall,
         setSinglePlayerMatchAIRegistryCall,
+        setSinglePlayerMatchEngineRegistryCall,
       ],
     });
 
@@ -2455,6 +2575,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
         setRoguelikeAutoHealPercentCall,
         setRoguelikeRequiredVariantCall,
         setRoguelikeRootCall,
+        setRoguelikeRunLedgerCall,
         ...roguelikeEdgeCalls,
       ],
     });
@@ -2475,6 +2596,17 @@ const DeployModule = buildModule("DeployModule", (m) => {
 
     m.call(roguelikeMatch, "transferOwnership", [MAP_EDITOR], {
       id: "TransferRoguelikeMatchOwnership",
+      after: [setRoguelikeMatchEngineRegistryCall],
+    });
+
+    m.call(gameEngineRegistry, "transferOwnership", [MAP_EDITOR], {
+      id: "TransferGameEngineRegistryOwnership",
+      after: [
+        registerFirstEngineCall,
+        allowPvPMatchToRecordCall,
+        allowSinglePlayerMatchToRecordCall,
+        allowRoguelikeMatchToRecordCall,
+      ],
     });
 
     m.call(roguelikeResupply, "transferOwnership", [MAP_EDITOR], {
@@ -2573,24 +2705,35 @@ const DeployModule = buildModule("DeployModule", (m) => {
     // eligibility gating on/off (setEligibilityProvider) the same way it
     // controls everything else, but without these two calls both contracts
     // stayed owned by the deployer forever.
+    // The eligibility-provider set calls are undefined when verification is
+    // disabled (CLAIM_ELIGIBILITY_VERIFICATION_ENABLED), so drop them from
+    // the dependency lists rather than depending on a call that doesn't exist.
     m.call(freeShipClaim, "transferOwnership", [MAP_EDITOR], {
       id: "TransferFreeShipClaimOwnership",
       after: [
         setFreeShipClaimDroneStorefrontCall,
-        setFreeShipClaimEligibilityProviderCall!,
+        ...(setFreeShipClaimEligibilityProviderCall
+          ? [setFreeShipClaimEligibilityProviderCall]
+          : []),
       ],
     });
 
     m.call(tutorialClaim, "transferOwnership", [MAP_EDITOR], {
       id: "TransferTutorialClaimOwnership",
-      after: [setTutorialClaimEligibilityProviderCall!],
+      after: setTutorialClaimEligibilityProviderCall
+        ? [setTutorialClaimEligibilityProviderCall]
+        : [],
     });
 
     m.call(eligibilityProvider, "transferOwnership", [MAP_EDITOR], {
       id: "TransferSelfieCheckEligibilityProviderOwnership",
       after: [
-        setFreeShipClaimEligibilityProviderCall!,
-        setTutorialClaimEligibilityProviderCall!,
+        ...(setFreeShipClaimEligibilityProviderCall
+          ? [setFreeShipClaimEligibilityProviderCall]
+          : []),
+        ...(setTutorialClaimEligibilityProviderCall
+          ? [setTutorialClaimEligibilityProviderCall]
+          : []),
         setSelfieCheckAuthorizedVerifierCall,
       ],
     });
@@ -2667,6 +2810,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
     maps,
     gameResults,
     game,
+    gameEngineRegistry,
     pvpMatch,
     singlePlayerMatch,
     fleets,

@@ -103,7 +103,7 @@ describe("ShipsRouter", function () {
     await aiShips.write.setRouter([shipsRouter.address]);
     await aiShips.write.setIsAllowedToCreateShips([owner.account.address, true]);
 
-    await shipsRouter.write.setGameAddress([gameEOA.account.address]);
+    await shipsRouter.write.setIsAllowedGame([gameEOA.account.address, true]);
     await shipsRouter.write.setFleetsAddress([fleetsEOA.account.address]);
     await shipsRouter.write.setLobbyAddress([mockLobbyCheck.address]);
 

@@ -7,6 +7,7 @@ import "./Game.sol";
 import "./IGameResults.sol";
 import "./IGameOrchestrator.sol";
 import "./IWinEffect.sol";
+import "./IGameEngineRegistry.sol";
 
 // PvP-specific orchestration split out of Game.sol: this is what Lobbies
 // talks to for starting a match, and it owns human-forfeit mechanics
@@ -17,6 +18,11 @@ contract PvPMatch is Ownable, IGameOrchestrator {
     Game public game;
     IGameResults public gameResults;
     address public lobbiesAddress;
+    // Optional (2026-09-28): records each new game's engine in a shared
+    // registry for trustless FE lookup — see GameEngineRegistry.sol.
+    // Skipped entirely if unset, so this contract works unchanged without
+    // one wired in (e.g. in tests that don't need it).
+    IGameEngineRegistry public engineRegistry;
 
     // Pluggable win effects (see IWinEffect.sol) — fires for the winner of
     // every non-draw PvP match, same mechanism roguelike combat nodes use
@@ -30,17 +36,36 @@ contract PvPMatch is Ownable, IGameOrchestrator {
     // accessor, not a length/full-array getter.
     address[] private winEffects;
 
+    // UA-02 fix (2026-09-29): once this orchestrator has ever started a
+    // game, `game`/`gameResults` can never be repointed again — see
+    // setGameAddress/setGameResultsAddress below.
+    uint public gamesStarted;
+
     error NotGame();
     error NotLobbiesContract();
     error TurnTimeoutNotReached();
     error NotInGame();
     error InvalidMove();
+    error EngineAlreadyLive();
 
     event WinEffectsSet(uint effectCount);
     event WinEffectFailed(
         address indexed player,
         uint indexed gameId,
         address indexed resolver
+    );
+    // UA-03 fix (2026-09-29): recordGameResult can revert if
+    // GameResults.isAllowedRecorder is ever revoked for this contract while
+    // it still has in-flight games — without a try/catch, that revert
+    // (like any revert here) fails the ENTIRE game-ending transaction
+    // (Game._endGame calls onGameEnded with no try/catch of its own). This
+    // event fires instead, so the game itself still ends cleanly (ships
+    // released, winner recorded on Game.sol) even if the PvP leaderboard
+    // write is the one thing that failed.
+    event GameResultRecordFailed(
+        uint indexed gameId,
+        address indexed winner,
+        address indexed loser
     );
 
     constructor(address _game, address _gameResults) Ownable(msg.sender) {
@@ -63,12 +88,37 @@ contract PvPMatch is Ownable, IGameOrchestrator {
         return winEffects;
     }
 
+    // UA-02 fix (2026-09-29): `game.metadata.orchestrator` is snapshotted
+    // per-game (Game.startGame, msg.sender at that moment) and used for
+    // every later callback/authorization check on Game.sol's own side —
+    // but this contract had no mirror-image snapshot of its own `game`
+    // reference. Every call this PvPMatch has ever made (flee,
+    // endGameOnTimeout, and critically Game._endGame's uncaught callback
+    // into onGameEnded) reads `game`/`gameResults` fresh from storage, for
+    // every game this orchestrator has ever started, not just future ones.
+    // Repointing either while a game this orchestrator started is still
+    // active permanently strands it: onGameEnded's `msg.sender !=
+    // address(game)` check (or recordGameResult's allowlist check on a
+    // gameResults instance that never authorized this contract) reverts,
+    // and since Game._endGame calls the orchestrator with no try/catch,
+    // that revert unwinds the entire game-ending transaction, forever.
+    // Under this project's engine-registry architecture a genuine rules
+    // change always gets a brand-new PvPMatch instance, never a
+    // re-pointed live one — so these never need to move once this
+    // orchestrator has started its first game. See
+    // docs/upgrade-safety-audit-2026-09-29.md UA-02.
     function setGameAddress(address _game) external onlyOwner {
+        if (gamesStarted > 0) revert EngineAlreadyLive();
         game = Game(_game);
     }
 
     function setGameResultsAddress(address _gameResults) external onlyOwner {
+        if (gamesStarted > 0) revert EngineAlreadyLive();
         gameResults = IGameResults(_gameResults);
+    }
+
+    function setEngineRegistry(address _registry) external onlyOwner {
+        engineRegistry = IGameEngineRegistry(_registry);
     }
 
     // Called by Lobbies once both sides' fleets are set; forwards straight
@@ -86,6 +136,7 @@ contract PvPMatch is Ownable, IGameOrchestrator {
         uint _maxScore
     ) external {
         if (msg.sender != lobbiesAddress) revert NotLobbiesContract();
+        gamesStarted++;
         game.startGame(
             _lobbyId,
             _creator,
@@ -97,6 +148,10 @@ contract PvPMatch is Ownable, IGameOrchestrator {
             _selectedMapId,
             _maxScore
         );
+        // gameId == lobbyId (see Game.sol's own startGame comment).
+        if (address(engineRegistry) != address(0)) {
+            engineRegistry.recordGameEngine(_lobbyId, address(game));
+        }
     }
 
     // Flee function - either player can end the game at any time
@@ -154,14 +209,16 @@ contract PvPMatch is Ownable, IGameOrchestrator {
         if (msg.sender != address(game)) revert NotGame();
         // Only record non-draw results, matching Game._endGame's old guard
         if (_winner != address(0)) {
-            gameResults.recordGameResult(_gameId, _winner, _loser);
-
             // Each call is individually try/catch'd — onGameEnded is
             // invoked by Game.sol as a bare external call with no
             // try/catch of its own (see Game.sol's _endGame), so an
             // unguarded revert here would fail the entire game-ending
             // transaction. Same reasoning as RoguelikeMatch.onGameEnded's
             // matching dispatch loop.
+            try gameResults.recordGameResult(_gameId, _winner, _loser) {} catch {
+                emit GameResultRecordFailed(_gameId, _winner, _loser);
+            }
+
             for (uint i = 0; i < winEffects.length; i++) {
                 try IWinEffect(winEffects[i]).onWin(_winner, _gameId) {} catch {
                     emit WinEffectFailed(_winner, _gameId, winEffects[i]);

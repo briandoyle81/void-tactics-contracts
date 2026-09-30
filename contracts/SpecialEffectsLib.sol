@@ -61,12 +61,18 @@ library SpecialEffectsLib {
         int32[] relocatePositions;
     }
 
+    // UA-06 fix (2026-09-29): healCapPercent used to be passed in as a
+    // separate parameter (Game.sol's live, unpinned value) — now read
+    // directly off `game.healCapPercentAtStart`, snapshotted once at
+    // startGame, so a later live change to Game.healCapPercent can't
+    // retroactively affect an already-active game's heal cap. Dropping the
+    // parameter also relieves _dispatchEffects' own stack pressure at the
+    // call site (see Game.sol's comment there).
     function resolveAndApply(
         GameData storage game,
         address resolver,
         IShips ships,
-        ResolveContext memory ctx,
-        uint8 healCapPercent
+        ResolveContext memory ctx
     ) external returns (EffectResults memory results) {
         // Defense in depth: guarantee a non-zero target actually exists and
         // isn't already destroyed before any resolver ever sees it, the same
@@ -106,7 +112,7 @@ library SpecialEffectsLib {
                 game,
                 ctx.shipId,
                 effect,
-                healCapPercent
+                game.healCapPercentAtStart
             );
             if (removed) {
                 results.removeShipIds[removeIdx] = effect.shipId;

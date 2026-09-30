@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./IMaps.sol";
 import "./Types.sol";
+import "./IRoguelikeRunView.sol";
 
 // Non-combat nodes have no map/AI encounter — the player repairs, adjusts
 // roster composition, and/or gets a new fleet-cost cap instead of fighting.
@@ -46,6 +47,14 @@ struct RoguelikeNode {
 // the campaign under NodeMap's model.
 contract RoguelikeNodeMap is Ownable {
     IMaps public maps;
+    // UA-05 fix (2026-09-29): optional (unset falls back to the old,
+    // unguarded behavior — same "unwired = permissive" convention this
+    // codebase already uses elsewhere, e.g. Fleets' maps address). When
+    // set, removeChild refuses to remove a node's LAST remaining child
+    // while any run is actually standing there right now, so an ordinary
+    // content edit can't silently strand an in-progress run with zero
+    // forward moves. See docs/upgrade-safety-audit-2026-09-29.md UA-05.
+    IRoguelikeRunView public runLedger;
 
     mapping(uint => bool) public campaignExists;
     uint public campaignCount;
@@ -85,6 +94,7 @@ contract RoguelikeNodeMap is Ownable {
     error ChildAlreadyExists();
     error ChildNotInNode();
     error InvalidHealPercent();
+    error WouldStrandActiveRun();
 
     event NodeEditorSet(address indexed editor, bool allowed);
     event CampaignCreated(uint indexed campaignId);
@@ -110,6 +120,10 @@ contract RoguelikeNodeMap is Ownable {
 
     function setMapsAddress(address _maps) external onlyOwner {
         maps = IMaps(_maps);
+    }
+
+    function setRunLedgerAddress(address _runLedger) external onlyOwner {
+        runLedger = IRoguelikeRunView(_runLedger);
     }
 
     function setNodeEditor(address _editor, bool _allowed) external onlyOwner {
@@ -280,6 +294,16 @@ contract RoguelikeNodeMap is Ownable {
         uint length = parent.children.length;
         for (uint i = 0; i < length; i++) {
             if (parent.children[i].childId == _childId) {
+                // UA-05 fix: removing a node's LAST remaining child is the
+                // one edit that can leave an in-progress run with zero
+                // forward moves — removing any other child is always safe
+                // (the run still has at least one other way forward), so
+                // only this specific case needs the occupancy check.
+                if (
+                    length == 1 &&
+                    address(runLedger) != address(0) &&
+                    runLedger.activeRunsAtNode(_parentId) > 0
+                ) revert WouldStrandActiveRun();
                 parent.children[i] = parent.children[length - 1];
                 parent.children.pop();
                 emit ChildRemoved(_parentId, _childId);

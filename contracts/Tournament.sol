@@ -195,6 +195,7 @@ contract Tournament is Ownable, ReentrancyGuard {
     error NothingToClaim();
     error InvalidConfig();
     error SponsorAlreadySet();
+    error NoSponsorContribution();
     error TransferFailed();
     error GameNotComplete();
     error NotADraw();
@@ -291,7 +292,14 @@ contract Tournament is Ownable, ReentrancyGuard {
             t.state != TournamentState.Active
         ) revert NotInRegistration();
 
+        // HA4-04 fix (2026-09-29): only a real contribution claims the
+        // sponsor slot — matches createTournament's own `msg.value > 0`
+        // gate on the same field. Without this, any address could squat
+        // the slot for free the instant a tournament is created, then
+        // SponsorAlreadySet blocks every later contribution from anyone
+        // else, including the tournament's intended real backer.
         if (t.sponsor == address(0)) {
+            if (msg.value == 0) revert NoSponsorContribution();
             t.sponsor = msg.sender;
         } else if (t.sponsor != msg.sender) {
             revert SponsorAlreadySet();

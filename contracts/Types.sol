@@ -234,6 +234,12 @@ struct GameData {
     uint[] goneShipIds; // shipIds that have been destroyed or retreated this round
     uint totalActiveShipsAtRoundStart; // set at start of each round
     uint shipsRemovedThisRound; // destroyed or retreated this round (incremented in _removeShipFromGame)
+    // UA-06 fix (2026-09-29): Game.healCapPercent's value snapshotted once
+    // at startGame, so a later live change can't retroactively affect an
+    // already-active game's heal effects. Not surfaced on GameDataView —
+    // internal scheduling detail for SpecialEffectsLib, not player-facing
+    // game state.
+    uint8 healCapPercentAtStart;
 }
 
 struct GameDataView {
@@ -401,6 +407,17 @@ struct LobbyGameConfig {
     uint turnTime; // Time in seconds for each turn
     uint selectedMapId; // ID of the preset map to use for this game
     uint maxScore; // Maximum score needed to win the game
+    // UA-10 fix (2026-09-29): snapshotted at lobby creation, not read live
+    // from Lobbies.pvpMatch at fleet-completion time. Without this, a lobby
+    // that's already sat in FleetSelection for a while (one side already
+    // committed a fleet, up to MAX_TURN_TIME before the other side submits
+    // theirs) could have its game silently start on a DIFFERENT engine than
+    // either player implicitly assumed, if the owner repoints
+    // Lobbies.pvpMatch mid-window (e.g. rolling out a new engine) —
+    // matches the same "pin it at commitment time" discipline this
+    // codebase already applies to costLimit/turnTime/selectedMapId/maxScore
+    // above. See docs/upgrade-safety-audit-2026-09-29.md UA-10.
+    address pvpMatch;
 }
 
 // Lobby state and status

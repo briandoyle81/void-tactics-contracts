@@ -15,6 +15,7 @@ import "./NodeMap.sol";
 import "./IFleets.sol";
 import "./AIBehaviorRegistry.sol";
 import "./IShips.sol";
+import "./IGameEngineRegistry.sol";
 
 // Plays single-player matches as an on-chain opponent. Players enter via a
 // node-graph campaign (NodeMap) rather than the Lobbies UI: startNodeMatch
@@ -32,6 +33,12 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // Maps each faction (variant) to its own AI decision contract — see
     // AIBehaviorRegistry/IVariantAI. Set via setAIRegistryAddress.
     AIBehaviorRegistry public aiRegistry;
+    // UA-08 fix (2026-09-29): which aiRegistry was live when each node
+    // match started, read by _decideMove instead of the live aiRegistry
+    // above — so an admin AI balance patch mid-match can't change how the
+    // opponent thinks partway through a fight the human already committed
+    // to. See docs/upgrade-safety-audit-2026-09-29.md UA-08.
+    mapping(uint => address) public aiRegistryAtStart;
     IUniversalCredits public universalCredits;
     NodeMap public nodeMap;
     IFleets public fleets;
@@ -39,6 +46,10 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // AI's own ship pool) — needed only to read a human fleet's variant
     // against NodeMap.campaignRequiredVariant before starting a node match.
     IShips public humanShips;
+    // Optional (2026-09-28): records each new game's engine in a shared
+    // registry for trustless FE lookup — see GameEngineRegistry.sol.
+    // Skipped entirely if unset.
+    IGameEngineRegistry public engineRegistry;
 
     // Node-match game ids live in a disjoint range above Lobbies.lobbyCount
     // (PvP's id source), so Game.sol's gameId == lobbyId scheme can never
@@ -50,6 +61,22 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // read way to tell a node-match gameId from a PvP one if it ever needs
     // that without already knowing from context which flow started it.
     uint public constant NODE_MATCH_ID_OFFSET = 2 ** 40;
+    // HA4-01 fix (2026-09-28): NODE_MATCH_ID_OFFSET + nodeMatchCount alone
+    // isn't unique across deployed instances — a second SinglePlayerMatch
+    // (e.g. a future gameplay-rules "engine" upgrade, see the
+    // engine-registry plan) starts nodeMatchCount fresh at 0, so its first
+    // game would compute the exact same gameId as the first instance's
+    // first game, colliding in GameEngineRegistry.engineOfGame (a single
+    // mapping shared across every engine) and reverting that shared call —
+    // which reverts this entire startNodeMatch transaction, unconditionally,
+    // on the very first game the second instance ever tries to start. Fixed
+    // by folding an immutable per-instance engineIndex into the id: index 0
+    // (every instance deployed before this fix, and the one instance that
+    // exists as of this fix) reproduces today's exact numbering unchanged;
+    // any later co-existing instance gets its own disjoint block, sized far
+    // beyond any realistic nodeMatchCount.
+    uint public constant ENGINE_ID_BLOCK_SIZE = 2 ** 64;
+    uint public immutable engineIndex;
     uint public nodeMatchCount;
     mapping(uint => uint) public gameIdToNodeId;
     mapping(uint => address) public gameIdToHuman;
@@ -99,7 +126,8 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         address _aiEncounters,
         address _maps,
         address _nodeMap,
-        address _fleets
+        address _fleets,
+        uint _engineIndex
     ) Ownable(msg.sender) {
         ships = AIShips(_ships);
         lobbies = Lobbies(_lobbies);
@@ -107,6 +135,7 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         aiEncounters = AIEncounters(_aiEncounters);
         maps = IMaps(_maps);
         nodeMap = NodeMap(_nodeMap);
+        engineIndex = _engineIndex;
         fleets = IFleets(_fleets);
     }
 
@@ -123,6 +152,10 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
 
     function setGameAddress(address _game) external onlyOwner {
         game = Game(_game);
+    }
+
+    function setEngineRegistry(address _registry) external onlyOwner {
+        engineRegistry = IGameEngineRegistry(_registry);
     }
 
     function setAIEncountersAddress(address _aiEncounters) external onlyOwner {
@@ -200,7 +233,13 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         ) revert WrongCampaignVariant();
 
         nodeMatchCount++;
-        gameId = NODE_MATCH_ID_OFFSET + nodeMatchCount;
+        gameId =
+            NODE_MATCH_ID_OFFSET +
+            engineIndex *
+            ENGINE_ID_BLOCK_SIZE +
+            nodeMatchCount;
+        // UA-08 fix: pin this match's AI registry for its whole duration.
+        aiRegistryAtStart[gameId] = address(aiRegistry);
 
         uint humanFleetId = fleets.createFleet(
             gameId,
@@ -228,6 +267,9 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
             node.mapId,
             node.maxScore
         );
+        if (address(engineRegistry) != address(0)) {
+            engineRegistry.recordGameEngine(gameId, address(game));
+        }
 
         emit NodeMatchStarted(gameId, _nodeId, msg.sender);
     }
@@ -437,12 +479,12 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         // for variant 2), so the tree is chosen by variant first, then by the
         // ship's archetype inside that faction's contract. A variant with no
         // registered AI reverts NoAIForVariant.
+        // UA-08 fix: pinned registry (see aiRegistryAtStart), not the live
+        // aiRegistry field.
         return
-            aiRegistry.aiFor(info.variant).decide(
-                ctx,
-                info.archetype,
-                info.special
-            );
+            AIBehaviorRegistry(aiRegistryAtStart[_gameId])
+                .aiFor(info.variant)
+                .decide(ctx, info.archetype, info.special);
     }
 
     function _findUnmovedShip(

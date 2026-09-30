@@ -23,14 +23,29 @@ contract DroneStorefront is Ownable {
 
     error MaxTierReached(address);
     error WrongAmount(uint256 expected, uint256 provided);
+    error InvalidDroneEnergyCoresAddress();
 
     constructor(address _droneEnergyCores) Ownable(msg.sender) {
-        droneEnergyCores = _droneEnergyCores;
+        _setDroneEnergyCoresAddress(_droneEnergyCores);
     }
 
     function setDroneEnergyCoresAddress(
         address _droneEnergyCores
     ) external onlyOwner {
+        _setDroneEnergyCoresAddress(_droneEnergyCores);
+    }
+
+    // HA4-06 fix (2026-09-29): rejects address(0) and any address with no
+    // deployed code. Without this, turnInCores' burnFrom call against a
+    // misconfigured address silently succeeds (a call to a non-existent
+    // void-returning function has no return data to fail decoding on),
+    // advancing droneCoreTier — a permanent free-ship bonus — with no DEC
+    // ever actually burned.
+    function _setDroneEnergyCoresAddress(address _droneEnergyCores) private {
+        if (
+            _droneEnergyCores == address(0) ||
+            _droneEnergyCores.code.length == 0
+        ) revert InvalidDroneEnergyCoresAddress();
         droneEnergyCores = _droneEnergyCores;
     }
 
@@ -52,6 +67,15 @@ contract DroneStorefront is Ownable {
             revert WrongAmount(required, _amount);
         }
 
+        // HA4-07 fix (2026-09-29): state updated before the external call
+        // (checks-effects-interactions), not after. Not currently
+        // exploitable — DroneEnergyCores is a stock OpenZeppelin
+        // ERC20/ERC20Burnable with no transfer/burn hooks, so there's no
+        // live reentrancy surface today — but this is free defense-in-depth
+        // against a future non-standard token ever being wired in (the same
+        // precondition HA4-06's check above guards against).
+        droneCoreTier[msg.sender] = currentTier + 1;
+
         // Burn turned-in cores directly out of circulation (requires the
         // caller to have approved this contract for `_amount`) rather than
         // pulling them into this contract's own balance — DEC turned in
@@ -59,8 +83,6 @@ contract DroneStorefront is Ownable {
         // existed), so burning is strictly more honest about what already
         // happens to it, and it's now reflected in totalSupply().
         IDroneEnergyCores(droneEnergyCores).burnFrom(msg.sender, _amount);
-
-        droneCoreTier[msg.sender] = currentTier + 1;
 
         emit CoresTurnedIn(msg.sender, currentTier + 1, _amount);
     }

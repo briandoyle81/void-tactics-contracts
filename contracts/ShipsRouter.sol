@@ -35,7 +35,12 @@ contract ShipsRouter is IShips, Ownable {
     IUniversalCredits public universalCredits;
     IFactionRewardTokenRegistry public factionRewardTokenRegistry;
 
-    address public gameAddress;
+    // Game instances allowed to call setTimestampDestroyed (report a ship
+    // destroyed). Was a single `gameAddress` until 2026-09-28 — widened to
+    // an allowlist so more than one Game "engine" instance can be trusted
+    // at once, the same way Fleets.isAllowedToManageFleets already is. See
+    // the engine-registry plan.
+    mapping(address => bool) public isAllowedGame;
     address public fleetsAddress;
     address public lobbyAddress; // SinglePlayerMatch — see DestroyRewardLib
 
@@ -57,8 +62,8 @@ contract ShipsRouter is IShips, Ownable {
         AI_SHIP_ID_OFFSET = aiShips.AI_SHIP_ID_OFFSET();
     }
 
-    function setGameAddress(address _gameAddress) external onlyOwner {
-        gameAddress = _gameAddress;
+    function setIsAllowedGame(address _game, bool _allowed) external onlyOwner {
+        isAllowedGame[_game] = _allowed;
     }
 
     function setFleetsAddress(address _fleetsAddress) external onlyOwner {
@@ -103,7 +108,7 @@ contract ShipsRouter is IShips, Ownable {
     }
 
     function setTimestampDestroyed(uint _id, uint _destroyerId) external {
-        if (msg.sender != owner() && msg.sender != gameAddress) {
+        if (msg.sender != owner() && !isAllowedGame[msg.sender]) {
             revert NotAuthorized(msg.sender);
         }
 

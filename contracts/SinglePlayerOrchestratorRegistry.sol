@@ -20,12 +20,29 @@ contract SinglePlayerOrchestratorRegistry is Ownable, ILobbiesOrchestratorCheck 
 
     event OrchestratorSet(address indexed orchestrator, bool allowed);
 
+    error CannotDeregisterOrchestrator();
+
     constructor() Ownable(msg.sender) {}
 
+    // UA-09 fix (2026-09-29): an orchestrator's classification here is a
+    // permanent property of that CONTRACT ADDRESS (whether it's a
+    // single-player-style, AI-ship-owning orchestrator or not), not
+    // something scoped to one run/game — every kill ever processed against
+    // any of that orchestrator's AI ships, across every run it has ever
+    // had or will ever have, reads this live at the moment of the kill (see
+    // DestroyRewardLib.payDestroyReward). Deregistering `true -> false`
+    // would silently misroute every future kill against that orchestrator
+    // to the wrong reward token, with no revert to signal it — so, unlike
+    // adding a new orchestrator (unrestricted, additive), that direction is
+    // disallowed entirely. See docs/upgrade-safety-audit-2026-09-29.md
+    // UA-09.
     function setOrchestrator(
         address _orchestrator,
         bool _allowed
     ) external onlyOwner {
+        if (!_allowed && isRegisteredOrchestrator[_orchestrator]) {
+            revert CannotDeregisterOrchestrator();
+        }
         isRegisteredOrchestrator[_orchestrator] = _allowed;
         emit OrchestratorSet(_orchestrator, _allowed);
     }

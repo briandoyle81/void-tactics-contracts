@@ -2,6 +2,8 @@
 
 **Written: 2026-09-26.** Everything that changed in the contracts since `docs/frontend-handoff-maps-and-deployment-zones-2026-09-23.md` (including its 2026-09-25 amendment — still the source of truth for maps/impassable-terrain/deployment-zones/map-names; nothing here supersedes it). Describes the contracts **on `main` in the working tree**; only §3 below is actually live anywhere — everything else is not yet deployed. Re-verify against the contracts if they have changed since this date.
 
+**Update (2026-09-28):** §1's enemy-ship blocking now has one exception — **disabled (0 HP) enemy ships do not block movement-through or line of sight.** A disabled ship stays on the board (until its reactor timer destroys it), and nothing can land on its tile (unchanged), but ships can fly past it and shoot past it. So a disabled enemy on the straight line between a ship and its destination, or between a shooter and its target, no longer makes `moveShip` revert `InvalidMove()`. Still not deployed. No ABI change — behavior only. If the FE builds its own client-side move/shot preview (§1.2), it should skip enemy ships with `hullPoints == 0` when building the blocking set; a preview that treats them as walls will now wrongly reject legal moves and shots. The single-player/roguelike AI follows the same rule.
+
 Companion docs: `docs/frontend-handoff-maps-and-deployment-zones-2026-09-23.md` (maps/zones/impassable terrain, unaffected by this doc), `docs/frontend-handoff-attributes-costs-and-ai-2026-09-21.md` (attributes/costs/AI trees, unaffected), `docs/ai-ship-configs.md` (unaffected).
 
 ---
@@ -25,7 +27,7 @@ Previously, only terrain mattered for blocking: `impassable` tiles blocked movem
 
 That's now split by side:
 - **Ally ships**: unchanged. Still only block landing on their exact tile; never block movement-through or line of sight.
-- **Enemy ships**: now a hard obstacle, like a wall. They block landing on their tile (already true), **and now also block movement passing through their tile, and line of sight shooting through their tile.**
+- **Enemy ships**: now a hard obstacle, like a wall. They block landing on their tile (already true), **and now also block movement passing through their tile, and line of sight shooting through their tile.** *(Exception added 2026-09-28: a disabled, 0 HP enemy ship only blocks landing on its own tile — see the update note at the top.)*
 
 ### 1.2 How it's enforced (mostly internal, know this exists)
 

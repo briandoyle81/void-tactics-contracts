@@ -595,6 +595,26 @@ describe("Per-variant AI behavior trees", function () {
       expect(r.target).to.equal(r.humanIds[0]);
     });
 
+    // Counterpart to 1b (2026-09-28): same geometry, but the ship sitting on
+    // the repair approach is DISABLED (0 HP), and a disabled ship no longer
+    // blocks movement — so the approach is reachable again and the repair
+    // (the higher priority) happens instead of the fall-through to shooting.
+    // A second, healthy human sits far away to take the turn-passing move
+    // (a 0-HP ship can't act).
+    it("1c: still repairs when the ship on the approach is a DISABLED enemy (wreckage doesn't block)", async function () {
+      const r = await run({
+        ai: [
+          { variant: 2, archetype: GRUNT, at: [5, 12] },
+          GRUNT_AT([5, 9], { hp: 10 }),
+        ],
+        humans: [{ at: [0, 0] }, { at: [5, 11], downed: true }],
+        scoringTiles: [{ row: 5, col: 9 }],
+      });
+      expect(r.action).to.equal(ActionType.FactionAbility);
+      expect(r.target).to.equal(r.aiIds[1]);
+      expect([r.row, r.col]).to.deep.equal([5, 10]);
+    });
+
     it("1: also repairs a DISABLED friendly on a scoring tile, and prefers it to an injured one", async function () {
       const r = await run({
         ai: [

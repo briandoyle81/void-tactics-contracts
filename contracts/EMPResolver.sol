@@ -16,10 +16,21 @@ import "./IShipAttributes.sol";
 // (IShipAttributes) rather than being owned by this contract, so factions
 // can retune numbers via ShipAttributes.setVariantAttributes without
 // redeploying this resolver.
+//
+// Engine-agnostic by construction (2026-09-28): reads live ship state via
+// IGameView(msg.sender) instead of a stored/owner-settable `game` address.
+// resolveEffect is only ever reached via a call chain that starts at some
+// Game contract's own moveShip (Game -[delegatecall]-> SpecialEffectsLib
+// -[call]-> this resolver), so msg.sender here IS that calling Game,
+// whichever "engine" it is — this resolver never needs to be told or
+// updated to know which Game to trust, and the same deployed instance is
+// reused by every future engine automatically. A contract that isn't a
+// real Game calling in only ever gets to manipulate its own storage this
+// way, exactly as it already could without going through this resolver at
+// all — no new attack surface.
 contract EMPResolver is IEffectResolver {
     int16 constant NO_RELOCATE = type(int16).min;
 
-    IGameView public game;
     IShipAttributes public shipAttributes;
     address public owner;
     // Which faction slot (0-7) this instance is registered at — Special is
@@ -34,16 +45,10 @@ contract EMPResolver is IEffectResolver {
     error TargetNotEnemy();
     error OutOfRange();
 
-    constructor(address _game, address _shipAttributes, Special _slot) {
-        game = IGameView(_game);
+    constructor(address _shipAttributes, Special _slot) {
         shipAttributes = IShipAttributes(_shipAttributes);
         owner = msg.sender;
         slot = _slot;
-    }
-
-    function setGameAddress(address _game) external {
-        if (msg.sender != owner) revert NotOwner();
-        game = IGameView(_game);
     }
 
     function setShipAttributesAddress(address _shipAttributes) external {
@@ -59,6 +64,7 @@ contract EMPResolver is IEffectResolver {
         int16 actingRow,
         int16 actingCol
     ) external view returns (SpecialEffect[] memory effects) {
+        IGameView game = IGameView(msg.sender);
         ShipPosition memory acting = game.getShipPosition(gameId, shipId);
         ShipPosition memory target = game.getShipPosition(gameId, targetShipId);
         if (acting.shipId == 0 || target.shipId == 0) revert TargetNotFound();
@@ -114,7 +120,7 @@ contract EMPResolver is IEffectResolver {
         uint gameId,
         uint shipId
     ) private view returns (uint16) {
-        return game.getShipAttributes(gameId, shipId).version;
+        return IGameView(msg.sender).getShipAttributes(gameId, shipId).version;
     }
 
     function _manhattanDistance(

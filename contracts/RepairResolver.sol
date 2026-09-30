@@ -14,10 +14,14 @@ import "./IGameView.sol";
 // (IShipAttributes) that equipped Specials like RepairDronesResolver read
 // from -- a faction ability was never equipped, so, like Ram, it has no
 // reason to share that config table.
+//
+// Engine-agnostic by construction (2026-09-28) — see EMPResolver's header
+// comment: reads live ship state via IGameView(msg.sender) instead of a
+// stored `game` address, so the same deployed instance works for every
+// future engine with no reconfiguration.
 contract RepairResolver is IEffectResolver {
     int16 constant NO_RELOCATE = type(int16).min;
 
-    IGameView public game;
     address public owner;
 
     uint8 public range = 1;
@@ -28,14 +32,8 @@ contract RepairResolver is IEffectResolver {
     error TargetNotFriendly();
     error OutOfRange();
 
-    constructor(address _game) {
-        game = IGameView(_game);
+    constructor() {
         owner = msg.sender;
-    }
-
-    function setGameAddress(address _game) external {
-        if (msg.sender != owner) revert NotOwner();
-        game = IGameView(_game);
     }
 
     function setRange(uint8 _range) external {
@@ -56,6 +54,7 @@ contract RepairResolver is IEffectResolver {
         int16 actingRow,
         int16 actingCol
     ) external view returns (SpecialEffect[] memory effects) {
+        IGameView game = IGameView(msg.sender);
         ShipPosition memory acting = game.getShipPosition(gameId, shipId);
         ShipPosition memory target = game.getShipPosition(gameId, targetShipId);
         if (acting.shipId == 0 || target.shipId == 0) revert TargetNotFound();

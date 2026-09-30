@@ -67,7 +67,6 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         [5, 10],
       );
       return hre.viem.deployContract("DroneSwarmResolver", [
-        gameView.address,
         shipAttrs.address,
         1, // Special.Slot1
       ]);
@@ -93,7 +92,8 @@ describe("Effect resolver target-status validation (SP-02)", function () {
       ]);
 
       await expect(
-        resolver.read.resolveEffect([
+        gameView.read.callResolveEffect([
+          resolver.address,
           GAME_ID,
           ACTING_SHIP_ID,
           1,
@@ -123,8 +123,9 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         { ...zeroAttrs, hullPoints: 20, maxHullPoints: 20 },
       ]);
 
-      const effects = await resolver.read.resolveEffect([
-        GAME_ID,
+      const effects = await gameView.read.callResolveEffect([
+          resolver.address,
+          GAME_ID,
         ACTING_SHIP_ID,
         1,
         TARGET_SHIP_ID,
@@ -142,7 +143,6 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         [5, 1],
       );
       return hre.viem.deployContract("EMPResolver", [
-        gameView.address,
         shipAttrs.address,
         1, // Special.Slot1
       ]);
@@ -163,7 +163,8 @@ describe("Effect resolver target-status validation (SP-02)", function () {
       ]);
 
       await expect(
-        resolver.read.resolveEffect([
+        gameView.read.callResolveEffect([
+          resolver.address,
           GAME_ID,
           ACTING_SHIP_ID,
           1,
@@ -188,8 +189,9 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         targetPosition(0),
       ]);
 
-      const effects = await resolver.read.resolveEffect([
-        GAME_ID,
+      const effects = await gameView.read.callResolveEffect([
+          resolver.address,
+          GAME_ID,
         ACTING_SHIP_ID,
         1,
         TARGET_SHIP_ID,
@@ -210,7 +212,6 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         [5, 200],
       );
       const resolver = await hre.viem.deployContract("EMPResolver", [
-        gameView.address,
         shipAttrs.address,
         1, // Special.Slot1
       ]);
@@ -225,8 +226,9 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         targetPosition(0),
       ]);
 
-      const effects = await resolver.read.resolveEffect([
-        GAME_ID,
+      const effects = await gameView.read.callResolveEffect([
+          resolver.address,
+          GAME_ID,
         ACTING_SHIP_ID,
         1,
         TARGET_SHIP_ID,
@@ -243,7 +245,6 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         [5, 200],
       );
       const resolver = await hre.viem.deployContract("ElectricStormResolver", [
-        gameView.address,
         shipAttrs.address,
         1, // Special.Slot1
       ]);
@@ -253,11 +254,12 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         actingPosition,
       ]);
 
-      const effects = await resolver.read.resolveEffect([
+      const effects = await gameView.read.callResolveEffect([
+        resolver.address,
         GAME_ID,
         ACTING_SHIP_ID,
         1,
-        0,
+        0n,
         actingPosition.position.row,
         actingPosition.position.col,
       ]);
@@ -268,7 +270,7 @@ describe("Effect resolver target-status validation (SP-02)", function () {
 
   describe("RamResolver", function () {
     async function deployResolver(gameView: any) {
-      return hre.viem.deployContract("RamResolver", [gameView.address]);
+      return hre.viem.deployContract("RamResolver", []);
     }
 
     it("rejects a fled/destroyed target (status != 0) even though its deleted Attributes read hullPoints == 0", async function () {
@@ -291,7 +293,8 @@ describe("Effect resolver target-status validation (SP-02)", function () {
       ]);
 
       await expect(
-        resolver.read.resolveEffect([
+        gameView.read.callResolveEffect([
+          resolver.address,
           GAME_ID,
           ACTING_SHIP_ID,
           1,
@@ -321,8 +324,9 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         zeroAttrs,
       ]);
 
-      const effects = await resolver.read.resolveEffect([
-        GAME_ID,
+      const effects = await gameView.read.callResolveEffect([
+          resolver.address,
+          GAME_ID,
         ACTING_SHIP_ID,
         1,
         TARGET_SHIP_ID,
@@ -335,7 +339,7 @@ describe("Effect resolver target-status validation (SP-02)", function () {
 
   describe("RepairResolver", function () {
     async function deployResolver(gameView: any) {
-      return hre.viem.deployContract("RepairResolver", [gameView.address]);
+      return hre.viem.deployContract("RepairResolver", []);
     }
 
     it("rejects a fled/destroyed friendly target (status != 0) — HA2-08", async function () {
@@ -353,7 +357,8 @@ describe("Effect resolver target-status validation (SP-02)", function () {
       ]);
 
       await expect(
-        resolver.read.resolveEffect([
+        gameView.read.callResolveEffect([
+          resolver.address,
           GAME_ID,
           ACTING_SHIP_ID,
           1,
@@ -378,8 +383,9 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         friendlyTargetPosition(0),
       ]);
 
-      const effects = await resolver.read.resolveEffect([
-        GAME_ID,
+      const effects = await gameView.read.callResolveEffect([
+          resolver.address,
+          GAME_ID,
         ACTING_SHIP_ID,
         1,
         TARGET_SHIP_ID,
@@ -397,7 +403,6 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         [5, 10],
       );
       return hre.viem.deployContract("RepairDronesResolver", [
-        gameView.address,
         shipAttrs.address,
         1, // Special.Slot1
       ]);
@@ -418,7 +423,8 @@ describe("Effect resolver target-status validation (SP-02)", function () {
       ]);
 
       await expect(
-        resolver.read.resolveEffect([
+        gameView.read.callResolveEffect([
+          resolver.address,
           GAME_ID,
           ACTING_SHIP_ID,
           1,
@@ -443,8 +449,9 @@ describe("Effect resolver target-status validation (SP-02)", function () {
         friendlyTargetPosition(0),
       ]);
 
-      const effects = await resolver.read.resolveEffect([
-        GAME_ID,
+      const effects = await gameView.read.callResolveEffect([
+          resolver.address,
+          GAME_ID,
         ACTING_SHIP_ID,
         1,
         TARGET_SHIP_ID,

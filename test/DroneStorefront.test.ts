@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import hre from "hardhat";
-import { parseEther } from "viem";
+import { parseEther, getAddress } from "viem";
 import { deployShipsFixture } from "./fixtures/deployShipsFixture";
 
 // DroneStorefront's turn-in-cores tier ladder — see Ships.sol/FreeShipClaim.sol
@@ -160,5 +160,42 @@ describe("DroneStorefront", function () {
     await droneStorefront.write.addTier([5000n], { account: owner.account });
 
     expect(await droneStorefront.read.tierCoreCost([10n])).to.equal(5000n);
+  });
+
+  it("Should reject a zero or non-contract droneEnergyCores address at construction and via the setter (HA4-06)", async function () {
+    const [owner, user1] = await hre.viem.getWalletClients();
+    const zeroAddress = "0x0000000000000000000000000000000000000000";
+
+    await expect(
+      hre.viem.deployContract("DroneStorefront", [zeroAddress]),
+    ).to.be.rejectedWith("InvalidDroneEnergyCoresAddress");
+    await expect(
+      hre.viem.deployContract("DroneStorefront", [user1.account.address]),
+    ).to.be.rejectedWith("InvalidDroneEnergyCoresAddress");
+
+    // A real deployed contract is accepted, and the setter enforces the
+    // same rule post-deploy.
+    const { droneStorefront, droneEnergyCores } = await loadFixture(
+      deployShipsFixture,
+    );
+    await expect(
+      droneStorefront.write.setDroneEnergyCoresAddress([zeroAddress], {
+        account: owner.account,
+      }),
+    ).to.be.rejectedWith("InvalidDroneEnergyCoresAddress");
+    await expect(
+      droneStorefront.write.setDroneEnergyCoresAddress(
+        [user1.account.address],
+        { account: owner.account },
+      ),
+    ).to.be.rejectedWith("InvalidDroneEnergyCoresAddress");
+    // Sanity: re-setting to the real address still works.
+    await droneStorefront.write.setDroneEnergyCoresAddress(
+      [droneEnergyCores.address],
+      { account: owner.account },
+    );
+    expect(await droneStorefront.read.droneEnergyCores()).to.equal(
+      getAddress(droneEnergyCores.address),
+    );
   });
 });

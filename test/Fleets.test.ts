@@ -81,6 +81,23 @@ describe("Fleets — deployment zones (per-map)", function () {
     ).to.not.be.rejected;
   });
 
+  it("rejects a duplicate shipId across two slots in the same fleet (HA4-05)", async function () {
+    const f = await loadFixture(deployFixture);
+    const mapId = await createEmptyMap(f);
+
+    await expect(
+      f.fleets.write.createFleet([
+        0n,
+        f.creator.account.address,
+        [1n, 1n],
+        [{ row: 0, col: 0 }, { row: 0, col: 1 }],
+        1000n,
+        true,
+        mapId,
+      ]),
+    ).to.be.rejectedWith("DuplicateShipId");
+  });
+
   it("rejects a creator position outside the default column band when the map has no custom zone", async function () {
     const f = await loadFixture(deployFixture);
     const mapId = await createEmptyMap(f);

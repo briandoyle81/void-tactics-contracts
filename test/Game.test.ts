@@ -223,6 +223,236 @@ describe("Game", function () {
     };
   }
 
+  describe("setAddresses engine-live guard (UA-01)", function () {
+    it("rejects setAddresses once this engine has started its first game", async function () {
+      const {
+        creatorLobbies,
+        joinerLobbies,
+        creator,
+        joiner,
+        owner,
+        ships,
+        game,
+        maps,
+        fleets,
+        shipAttributes,
+        randomManager,
+      } = await loadFixture(deployGameFixture);
+
+      // Sanity: still callable before any game exists (this is the normal
+      // deploy-time wiring call every fixture/deploy relies on).
+      await expect(
+        game.write.setAddresses(
+          [maps.address, fleets.address, shipAttributes.address, ships.address],
+          { account: owner.account },
+        ),
+      ).to.not.be.rejected;
+
+      // Start a real game on this engine.
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const shipTuple = (await ships.read.ships([BigInt(i)])) as ShipTuple;
+        const ship = tupleToShip(shipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n,
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n],
+        generateStartingPositions([1n], true),
+      ]);
+      await joinerLobbies.write.createFleet([
+        1n,
+        [6n],
+        generateStartingPositions([6n], false),
+      ]);
+
+      // Now that gameCount > 0, this engine's shared-infra addresses must
+      // be permanently locked — swapping any of them here would instantly
+      // corrupt the game that's now active on this exact Game contract.
+      await expect(
+        game.write.setAddresses(
+          [maps.address, fleets.address, shipAttributes.address, ships.address],
+          { account: owner.account },
+        ),
+      ).to.be.rejectedWith("EngineAlreadyLive");
+    });
+  });
+
+  describe("Resolver setters engine-live guard (UA-07)", function () {
+    it("rejects setFactionAbilityResolver/setSpecialResolver once this engine has started its first game", async function () {
+      const {
+        creatorLobbies,
+        joinerLobbies,
+        creator,
+        joiner,
+        owner,
+        ships,
+        game,
+        randomManager,
+      } = await loadFixture(deployGameFixture);
+
+      // Sanity: still callable before any game exists. The actual address
+      // doesn't matter for this test — only the access-control gate is
+      // under test, not resolver behavior — so any placeholder works.
+      const dummyResolver = owner.account.address;
+      await expect(
+        game.write.setFactionAbilityResolver([1, dummyResolver], {
+          account: owner.account,
+        }),
+      ).to.not.be.rejected;
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const shipTuple = (await ships.read.ships([BigInt(i)])) as ShipTuple;
+        const ship = tupleToShip(shipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n,
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n],
+        generateStartingPositions([1n], true),
+      ]);
+      await joinerLobbies.write.createFleet([
+        1n,
+        [6n],
+        generateStartingPositions([6n], false),
+      ]);
+
+      await expect(
+        game.write.setFactionAbilityResolver([1, dummyResolver], {
+          account: owner.account,
+        }),
+      ).to.be.rejectedWith("EngineAlreadyLive");
+      await expect(
+        game.write.setSpecialResolver([1, 1, dummyResolver], {
+          account: owner.account,
+        }),
+      ).to.be.rejectedWith("EngineAlreadyLive");
+    });
+  });
+
+  describe("Maps debug tile setters engine-ended guard (UA-12)", function () {
+    it("rejects setBlockedTile/setImpassableTile/setScoringTile against an already-ended game, but still allows them against an active one", async function () {
+      const {
+        creatorLobbies,
+        joinerLobbies,
+        creator,
+        joiner,
+        owner,
+        ships,
+        game,
+        maps,
+        pvpMatch,
+        randomManager,
+      } = await loadFixture(deployGameFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const shipTuple = (await ships.read.ships([BigInt(i)])) as ShipTuple;
+        const ship = tupleToShip(shipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n,
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n],
+        generateStartingPositions([1n], true),
+      ]);
+      await joinerLobbies.write.createFleet([
+        1n,
+        [6n],
+        generateStartingPositions([6n], false),
+      ]);
+      const gameId = 1n;
+
+      // Still active: the debug setters work normally.
+      await expect(
+        maps.write.setBlockedTile([gameId, 0, 0, true], {
+          account: owner.account,
+        }),
+      ).to.not.be.rejected;
+
+      // End the game.
+      await pvpMatch.write.flee([gameId], { account: creator.account });
+      expect((await game.read.getGame([gameId])).metadata.ended).to.equal(
+        true,
+      );
+
+      // Now rejected across all three setters.
+      await expect(
+        maps.write.setBlockedTile([gameId, 0, 0, true], {
+          account: owner.account,
+        }),
+      ).to.be.rejectedWith("GameAlreadyEnded");
+      await expect(
+        maps.write.setImpassableTile([gameId, 0, 0, true], {
+          account: owner.account,
+        }),
+      ).to.be.rejectedWith("GameAlreadyEnded");
+      await expect(
+        maps.write.setScoringTile([gameId, 0, 0, 5], {
+          account: owner.account,
+        }),
+      ).to.be.rejectedWith("GameAlreadyEnded");
+    });
+  });
+
   describe("Game Ship Attributes", function () {
     it("should calculate correct hull points for ships", async function () {
       const {
@@ -1618,6 +1848,89 @@ describe("Game", function () {
         await setShipPosition(game.address, 1n, 1n, 5, 2);
         await setShipPosition(game.address, 1n, 2n, 5, 3);
 
+        await game.write.moveShip([1n, 1n, 5, 4, ActionType.Pass, 0n], {
+          account: creator.account,
+        });
+
+        const gameData = (await game.read.getGame([
+          1n,
+        ])) as unknown as GameDataView;
+        const newPosition = findShipPosition(gameData, 1n);
+        expect(newPosition.row).to.equal(5);
+        expect(newPosition.col).to.equal(4);
+      }
+    });
+
+    // Disabled (0 HP) ships are wreckage, not obstacles (2026-09-28): an
+    // enemy that's been shot down to 0 HP no longer blocks passing through
+    // its tile — only landing on it, via the pre-existing occupied-tile rule.
+    it("should let a ship pass THROUGH a disabled (0 HP) enemy ship, but still not land ON its tile", async function () {
+      const {
+        creatorLobbies,
+        joinerLobbies,
+        creator,
+        joiner,
+        ships,
+        game,
+        randomManager,
+      } = await loadFixture(deployGameFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const shipTuple = (await ships.read.ships([BigInt(i)])) as ShipTuple;
+        const ship = tupleToShip(shipTuple);
+        await randomManager.write.revealRandomness([
+          ship.traits.serialNumber,
+        ]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n,
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n],
+        generateStartingPositions([1n], true),
+      ]);
+      // 6n stays healthy so the game keeps going; 7n is the one disabled and
+      // parked in the mover's path.
+      await joinerLobbies.write.createFleet([
+        1n,
+        [6n, 7n],
+        generateStartingPositions([6n, 7n], false),
+      ]);
+
+      const creatorAttributes = await game.read.getShipAttributes([1n, 1]);
+      const movementRange = creatorAttributes.movement;
+
+      if (movementRange >= 2) {
+        await setShipPosition(game.address, 1n, 1n, 5, 2);
+        await setShipPosition(game.address, 1n, 7n, 5, 3);
+        await setShipHullPointsToZero(game.address, 1n, 7n);
+
+        // Landing on the disabled ship's own tile is still illegal.
+        await expect(
+          game.write.moveShip([1n, 1n, 5, 3, ActionType.Pass, 0n], {
+            account: creator.account,
+          }),
+        ).to.be.rejectedWith("InvalidMove");
+
+        // Passing through it to the tile beyond is legal now.
         await game.write.moveShip([1n, 1n, 5, 4, ActionType.Pass, 0n], {
           account: creator.account,
         });
@@ -4103,6 +4416,77 @@ describe("Game", function () {
       // way never blocked the shot.
     });
 
+    // Disabled (0 HP) enemy ships don't block line of sight either
+    // (2026-09-28) — same wreckage-isn't-an-obstacle rule as movement.
+    it("should NOT block shooting when the obstruction is a disabled (0 HP) enemy ship", async function () {
+      const {
+        creatorLobbies,
+        joinerLobbies,
+        creator,
+        joiner,
+        ships,
+        game,
+        randomManager,
+      } = await loadFixture(deployGameFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      const totalShipCount = Number(await ships.read.shipCount());
+      for (let i = 1; i <= totalShipCount; i++) {
+        const shipTuple = (await ships.read.ships([BigInt(i)])) as ShipTuple;
+        const ship = tupleToShip(shipTuple);
+        await randomManager.write.revealRandomness([
+          ship.traits.serialNumber,
+        ]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n,
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n],
+        generateStartingPositions([1n], true),
+      ]);
+      // Same geometry as the ENEMY-obstruction test above, except the
+      // in-between enemy (7n) is disabled, so the shot at 6n now lands.
+      await joinerLobbies.write.createFleet([
+        1n,
+        [6n, 7n],
+        generateStartingPositions([6n, 7n], false),
+      ]);
+
+      await setShipPosition(game.address, 1n, 1n, 10, 5);
+      await setShipPosition(game.address, 1n, 6n, 10, 7);
+      await setShipPosition(game.address, 1n, 7n, 10, 6);
+      await setShipHullPointsToZero(game.address, 1n, 7n);
+
+      const gameData = (await game.read.getGame([
+        1n,
+      ])) as unknown as GameDataView;
+      const creatorPos = findShipPosition(gameData, 1n);
+
+      await game.write.moveShip(
+        [1n, 1n, creatorPos.row, creatorPos.col, ActionType.Shoot, 6n],
+        { account: creator.account },
+      );
+      // Reaching here without a revert is the assertion.
+    });
+
     it("should allow special actions even when line of sight is obstructed (only range matters)", async function () {
       const {
         creatorLobbies,
@@ -5840,6 +6224,17 @@ describe("Game", function () {
       await ships.write.constructShip([2n], { account: creator.account });
       await ships.write.constructShip([6n], { account: joiner.account });
 
+      // UA-06 fix (2026-09-29): healCapPercent is now pinned per-game at
+      // startGame, so this must be set BEFORE the game starts (before the
+      // joiner's fleet completes the pair below) to actually apply to it —
+      // setting it on an already-active game no longer retroactively
+      // changes that game's cap, by design.
+      const capPercent = 1;
+      await game.write.setHealCapPercent([capPercent], {
+        account: owner.account,
+      });
+      expect(await game.read.healCapPercent()).to.equal(capPercent);
+
       await creatorLobbies.write.createLobby([
         1000n,
         300n,
@@ -5867,12 +6262,7 @@ describe("Game", function () {
       // baseline test above confirms maxHullPoints >= 40, since an
       // uncapped heal there lands at exactly 40) — 1% is guaranteed to
       // bite regardless of this ship's actual max HP.
-      const capPercent = 1;
       const expectedCap = (Number(maxHullPoints) * capPercent) / 100; // integer division, matches _applyHullDelta's Solidity math
-      await game.write.setHealCapPercent([capPercent], {
-        account: owner.account,
-      });
-      expect(await game.read.healCapPercent()).to.equal(capPercent);
 
       await game.write.moveShip([1n, 1n, 2, 0, ActionType.Special, 2n], {
         account: creator.account,
@@ -5900,6 +6290,119 @@ describe("Game", function () {
       ).to.be.rejected;
 
       expect(await game.read.healCapPercent()).to.equal(100);
+    });
+
+    it("keeps an active game's heal cap pinned to whatever was live at startGame, even if the owner lowers it mid-game (UA-06)", async function () {
+      const {
+        creatorLobbies,
+        joinerLobbies,
+        creator,
+        joiner,
+        ships,
+        game,
+        randomManager,
+        owner,
+      } = await loadFixture(deployGameFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const shipTuple = (await ships.read.ships([BigInt(i)])) as ShipTuple;
+        const ship = tupleToShip(shipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+
+      const repairShip: Ship = {
+        name: "Repair Ship",
+        id: 1n,
+        equipment: { mainWeapon: 0, armor: 0, shields: 0, special: 2 }, // RepairDrones
+        traits: {
+          serialNumber: 12345n,
+          colors: {
+            h1: 0,
+            s1: 0,
+            l1: 0,
+            h2: 0,
+            s2: 0,
+            l2: 0,
+            h3: 0,
+            s3: 0,
+            l3: 0,
+          },
+          variant: 1,
+          accuracy: 0,
+          hull: 0,
+          speed: 2,
+        },
+        shipData: {
+          shipsDestroyed: 0,
+          costsVersion: 1,
+          cost: 0,
+          shiny: false,
+          constructed: false,
+          inFleet: false,
+          isFreeShip: false,
+          modified: 0,
+          timestampDestroyed: 0n,
+        },
+        owner: creator.account.address,
+      };
+      await ships.write.setIsAllowedToCreateShips(
+        [owner.account.address, true],
+        { account: owner.account },
+      );
+      await ships.write.customizeShip([1n, repairShip], {
+        account: owner.account,
+      });
+      await ships.write.constructShip([2n], { account: creator.account });
+      await ships.write.constructShip([6n], { account: joiner.account });
+
+      // Game starts with the default 100% cap still live.
+      expect(await game.read.healCapPercent()).to.equal(100);
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n,
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n, 2n],
+        generateStartingPositions([1n, 2n], true),
+      ]);
+      await joinerLobbies.write.createFleet([
+        1n,
+        [6n],
+        generateStartingPositions([6n], false),
+      ]);
+
+      await setShipHullPointsToZero(game.address, 1n, 2n);
+
+      // Owner lowers the cap AFTER this game has already started — this is
+      // exactly the UA-06 scenario. A live (unpinned) read would make the
+      // upcoming heal apply this new, much lower cap retroactively.
+      await game.write.setHealCapPercent([1], { account: owner.account });
+      expect(await game.read.healCapPercent()).to.equal(1);
+
+      await game.write.moveShip([1n, 1n, 2, 0, ActionType.Special, 2n], {
+        account: creator.account,
+      });
+
+      // RepairDrones' fixed strength (40) heals the ship in full, uncapped
+      // by the new 1% value — proving this game's heal cap stayed pinned
+      // to the 100% that was live when it started, not the value the owner
+      // changed mid-game.
+      const ship2AttrsAfter = await game.read.getShipAttributes([1n, 2n]);
+      expect(ship2AttrsAfter.hullPoints).to.equal(40);
     });
 
     it("should not complete round until repaired (formerly 0 HP) ship moves", async function () {
@@ -7640,6 +8143,95 @@ describe("Game", function () {
 
       // Draws should not be recorded in GameResults
       expect(await gameResults.read.isGameResultRecorded([gameId])).to.be.false;
+    });
+
+    it("does not brick round completion if Maps.isAllowedGame is revoked for this engine mid-game (UA-04)", async function () {
+      const {
+        creatorLobbies,
+        joinerLobbies,
+        creator,
+        joiner,
+        ships,
+        game,
+        maps,
+        randomManager,
+        owner,
+      } = await loadFixture(deployGameFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const shipTuple = (await ships.read.ships([BigInt(i)])) as ShipTuple;
+        const ship = tupleToShip(shipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      // High maxScore so this round's scoring doesn't end the game — this
+      // test only cares whether the round can complete at all.
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n, // maxScore
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n],
+        generateStartingPositions([1n], true),
+      ]);
+      await joinerLobbies.write.createFleet([
+        1n,
+        [6n],
+        generateStartingPositions([6n], false),
+      ]);
+
+      const gameId = 1n;
+      let gameData = (await game.read.getGame([gameId])) as GameDataView;
+      const creatorPos = findShipPosition(gameData, 1n);
+      const joinerPos = findShipPosition(gameData, 6n);
+      await maps.write.setScoringTile(
+        [gameId, creatorPos.row, creatorPos.col, 5],
+        { account: owner.account },
+      );
+
+      // Simulate a live-ops "retire this engine" cleanup action, exactly
+      // like UA-04 describes, while this game is still active.
+      await maps.write.setIsAllowedGame([game.address, false], {
+        account: owner.account,
+      });
+
+      // Completing the round (a no-op Pass for each player, landing the
+      // creator's ship back on the scoring tile) must still succeed —
+      // before the fix, Maps.getScoreAndZeroOut's revert would propagate
+      // all the way up through moveShip, permanently blocking this game.
+      await expect(
+        game.write.moveShip(
+          [gameId, 1n, creatorPos.row, creatorPos.col, ActionType.Pass, 0n],
+          { account: creator.account },
+        ),
+      ).to.not.be.rejected;
+      await expect(
+        game.write.moveShip(
+          [gameId, 6n, joinerPos.row, joinerPos.col, ActionType.Pass, 0n],
+          { account: joiner.account },
+        ),
+      ).to.not.be.rejected;
+
+      // The round completed, but the points were NOT awarded — scoring is
+      // the thing that degraded, not the round itself.
+      const finalGame = (await game.read.getGame([gameId])) as any;
+      expect(finalGame.creatorScore).to.equal(0n);
     });
 
     it("should respect preset maps when calculating line of sight", async function () {

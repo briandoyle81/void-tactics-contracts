@@ -113,18 +113,35 @@ contract Game is Ownable {
     error InvalidHealCapPercent();
     error ShipDestroyed();
     error GameAlreadyExists();
+    error EngineAlreadyLive();
 
     constructor(address _ships, address _shipAttributes) Ownable(msg.sender) {
         ships = IShips(_ships);
         shipAttributes = IShipAttributes(_shipAttributes);
     }
 
+    // UA-01 fix (2026-09-29): once this engine has ever started a game,
+    // maps/fleets/shipAttributes/ships can never be repointed again. These
+    // four are read live, fresh from storage, by every active game's every
+    // turn (moveShip's whole call tree) — they were never meant to be a
+    // live post-launch knob, only deploy-time wiring (Fleets/Maps are
+    // deployed AFTER Game in DeployAndConfig.ts, so they can't be
+    // constructor args; this setter exists purely to close that ordering
+    // gap once, right after deploy). Under this project's engine-registry
+    // architecture, a genuine rules/infra change always gets a brand-new
+    // engine (a fresh Game.sol), never a re-pointed live one — repointing
+    // any of these on a live engine would instantly break every one of its
+    // active games (a swapped Maps/Fleets/Ships instance has no record of
+    // an already-placed ship, fleet, or map for this engine's games, so
+    // moveShip/Shoot start reverting or misbehaving for everyone already
+    // mid-match). See docs/upgrade-safety-audit-2026-09-29.md UA-01.
     function setAddresses(
         address _mapsAddress,
         address _fleetsAddress,
         address _shipAttributesAddress,
         address _shipsAddress
     ) public onlyOwner {
+        if (gameCount > 0) revert EngineAlreadyLive();
         maps = IMaps(_mapsAddress);
         fleets = IFleets(_fleetsAddress);
         shipAttributes = IShipAttributes(_shipAttributesAddress);
@@ -138,10 +155,23 @@ contract Game is Ownable {
         isAllowedToStartGames[_address] = _isAllowed;
     }
 
+    // UA-07 fix (2026-09-29): locked once this engine is live, same as
+    // setAddresses (UA-01) — both resolver mappings are read live at
+    // dispatch time (_performSpecial/_performFactionAbility), with no
+    // per-game pin, so retuning either on an already-active engine would
+    // change behavior for every game in progress, not just future ones.
+    // Per-game pinning (the alternative this project already uses for ship
+    // attributes) isn't practical here — resolvers span an open-ended,
+    // owner-configured (variant, slot) space with no cheap way to snapshot
+    // "every configured entry" at startGame, and Game.sol has almost no
+    // bytecode headroom left to spare for trying. A genuine resolver
+    // retune belongs in a brand-new engine instead, exactly like any other
+    // rules change. See docs/upgrade-safety-audit-2026-09-29.md UA-07.
     function setFactionAbilityResolver(
         uint16 _variant,
         address _resolver
     ) public onlyOwner {
+        if (gameCount > 0) revert EngineAlreadyLive();
         factionAbilityResolvers[_variant] = _resolver;
     }
 
@@ -150,6 +180,7 @@ contract Game is Ownable {
         Special _slot,
         address _resolver
     ) public onlyOwner {
+        if (gameCount > 0) revert EngineAlreadyLive();
         specialResolvers[_variant][_slot] = _resolver;
     }
 
@@ -209,6 +240,17 @@ contract Game is Ownable {
 
         // Set max score for the game
         game.maxScore = _maxScore;
+
+        // UA-06 fix (2026-09-29): pin this game's heal cap for its whole
+        // duration — mirroring the version-pinning pattern ShipAttributes
+        // already uses. Read directly off GameData by SpecialEffectsLib
+        // (not passed as a separate parameter — Game.sol's own
+        // _dispatchEffects has too little stack headroom left to spare an
+        // extra local here, see docs/upgrade-safety-audit-2026-09-29.md
+        // UA-06) instead of the live healCapPercent above, so changing the
+        // live value mid-game can't retroactively change an already-active
+        // game's heal cap.
+        game.healCapPercentAtStart = healCapPercent;
 
         // Apply the selected preset map to this game if a map was selected
         if (_selectedMapId > 0) {
@@ -757,7 +799,8 @@ contract Game is Ownable {
     }
 
     // Bit-per-cell mask (same packing Maps.sol's own bitmaps use: row *
-    // GRID_WIDTH + col) of every currently-alive enemy ship's tile, for
+    // GRID_WIDTH + col) of every currently-alive, non-disabled (HP > 0)
+    // enemy ship's tile, for
     // hasMovementPathAvoidingShips/hasMapsAvoidingShips — Maps.sol has no
     // ship-position knowledge of its own, so this has to be built here.
     // playerActiveShipIds is kept in lockstep with shipPositions on every
@@ -778,7 +821,15 @@ contract Game is Ownable {
         uint len = EnumerableSet.length(enemyIds);
         for (uint i = 0; i < len; i++) {
             uint shipId = EnumerableSet.at(enemyIds, i);
-            if (shipId == _excludeShipId) continue;
+            // A disabled (0 HP) ship is wreckage, not an obstacle: it stays
+            // in playerActiveShipIds until its reactor timer destroys it, but
+            // never blocks passing through or shooting past its tile — only
+            // landing on it, which the occupied-destination check in
+            // _validateAndApplyMovement already covers on its own.
+            if (
+                shipId == _excludeShipId ||
+                game.shipAttributes[shipId].hullPoints == 0
+            ) continue;
             Position storage pos = game.shipPositions[shipId].position;
             bitmap |= (uint256(1) <<
                 (uint(uint16(pos.row)) *
@@ -1226,8 +1277,7 @@ contract Game is Ownable {
                     targetShipId: _targetShipId,
                     newRow: _newRow,
                     newCol: _newCol
-                }),
-                healCapPercent
+                })
             );
         // Removals must be applied before relocations — a relocation that
         // lands on a cell a removal is vacating would otherwise get
@@ -1518,7 +1568,27 @@ contract Game is Ownable {
             // Skip ships with 0 hull points (treated as destroyed/disabled)
             if (game.shipAttributes[shipId].hullPoints == 0) continue;
 
-            uint8 points = maps.getScoreAndZeroOut(_gameId, pos.row, pos.col);
+            // UA-04 fix (2026-09-29): degrade to "skip this tile's scoring"
+            // rather than reverting the whole round if this call fails —
+            // e.g. Maps.isAllowedGame was revoked for this engine (an
+            // admin "retire the old engine" cleanup action) while this
+            // game is still active. Without this, every active game with
+            // any live ship on a scoring tile would have every future
+            // moveShip call revert permanently the moment a round
+            // completes, since this is called unconditionally from
+            // _handleEndOfRound with no way around it. Never revoke
+            // Maps.isAllowedGame for an engine that could still have games
+            // in progress — this is defense-in-depth, not a substitute for
+            // that discipline (points are silently lost for that tile that
+            // round, not awarded some other way).
+            uint8 points;
+            try maps.getScoreAndZeroOut(_gameId, pos.row, pos.col) returns (
+                uint8 p
+            ) {
+                points = p;
+            } catch {
+                points = 0;
+            }
             if (points == 0) continue;
 
             // Update the player's score based on which side the ship belongs to

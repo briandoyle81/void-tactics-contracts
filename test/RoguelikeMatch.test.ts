@@ -238,6 +238,40 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       ).to.equal(true);
     });
 
+    it("rejects deregistering an already-registered orchestrator, but still allows registering a new one (UA-09)", async function () {
+      const { deployed, other } = await loadFixture(deployFixture);
+      const { singlePlayerOrchestratorRegistry, roguelikeMatch } = deployed;
+
+      // Deregistering a live orchestrator would silently misroute every
+      // future kill against its AI ships to the wrong reward token — must
+      // be rejected outright, not just discouraged.
+      await expect(
+        singlePlayerOrchestratorRegistry.write.setOrchestrator([
+          roguelikeMatch.address,
+          false,
+        ]),
+      ).to.be.rejectedWith("CannotDeregisterOrchestrator");
+      expect(
+        await singlePlayerOrchestratorRegistry.read.isRegisteredOrchestrator([
+          roguelikeMatch.address,
+        ]),
+      ).to.equal(true);
+
+      // Registering a brand-new orchestrator (the additive, safe
+      // direction) must still work unrestricted.
+      await expect(
+        singlePlayerOrchestratorRegistry.write.setOrchestrator([
+          other.account.address,
+          true,
+        ]),
+      ).to.not.be.rejected;
+      expect(
+        await singlePlayerOrchestratorRegistry.read.isRegisteredOrchestrator([
+          other.account.address,
+        ]),
+      ).to.equal(true);
+    });
+
     it("pays DEC (not UTC) for destroying a RoguelikeMatch-owned AI ship", async function () {
       const { deployed, owner, human } = await loadFixture(deployFixture);
       const {
@@ -526,6 +560,215 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     });
   });
 
+  describe("RoguelikeNodeMap.removeChild stranding guard (UA-05)", function () {
+    it("refuses to remove a node's last remaining child while a run is standing there", async function () {
+      const { deployed, human } = await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
+        deployed;
+      const { campaignId, mapId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const onlyChild = await createCombatNode(
+        roguelikeNodeMap,
+        campaignId,
+        mapId,
+      );
+      await roguelikeNodeMap.write.addChild([rootNodeId, onlyChild, false]);
+
+      const humanRoguelikeMatch = await hre.viem.getContractAt(
+        "RoguelikeMatch",
+        deployed.roguelikeMatch.address,
+        { client: { wallet: human } },
+      );
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      // Run's currentNodeId is now rootNodeId, whose ONLY child is onlyChild.
+
+      await expect(
+        roguelikeNodeMap.write.removeChild([rootNodeId, onlyChild]),
+      ).to.be.rejectedWith("WouldStrandActiveRun");
+    });
+
+    it("still allows removing a child when it isn't the node's last one", async function () {
+      const { deployed, human } = await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
+        deployed;
+      const { campaignId, mapId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const childA = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      const childB = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childA, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childB, false]);
+
+      const humanRoguelikeMatch = await hre.viem.getContractAt(
+        "RoguelikeMatch",
+        deployed.roguelikeMatch.address,
+        { client: { wallet: human } },
+      );
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+
+      // rootNodeId still has childB left after this — not the last child,
+      // so this must still succeed even with an active run standing there.
+      await expect(
+        roguelikeNodeMap.write.removeChild([rootNodeId, childA]),
+      ).to.not.be.rejected;
+    });
+
+    it("allows removing a node's last child once no run is standing there anymore", async function () {
+      const { deployed, human } = await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
+        deployed;
+      const { campaignId, mapId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const onlyChild = await createCombatNode(
+        roguelikeNodeMap,
+        campaignId,
+        mapId,
+      );
+      await roguelikeNodeMap.write.addChild([rootNodeId, onlyChild, false]);
+
+      const humanRoguelikeMatch = await hre.viem.getContractAt(
+        "RoguelikeMatch",
+        deployed.roguelikeMatch.address,
+        { client: { wallet: human } },
+      );
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.retreatRun([0n]);
+
+      await expect(
+        roguelikeNodeMap.write.removeChild([rootNodeId, onlyChild]),
+      ).to.not.be.rejected;
+    });
+
+    it("moves the guard with the run when it advances to a new node", async function () {
+      const { deployed, human } = await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
+        deployed;
+      const { campaignId, mapId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      // Root has two children so it's never itself down to "last child" —
+      // isolates this test to exercising setCurrentNode's own
+      // increment/decrement, not removeChild's length==1 gate again.
+      const hub = await createResupplyNode(roguelikeNodeMap, campaignId);
+      const decoy = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, hub, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, decoy, false]);
+      // The hub's only child — this is what should become guarded once the
+      // run actually moves onto the hub, and NOT before.
+      const hubOnlyChild = await createCombatNode(
+        roguelikeNodeMap,
+        campaignId,
+        mapId,
+      );
+      await roguelikeNodeMap.write.addChild([hub, hubOnlyChild, false]);
+
+      const humanRoguelikeMatch = await hre.viem.getContractAt(
+        "RoguelikeMatch",
+        deployed.roguelikeMatch.address,
+        { client: { wallet: human } },
+      );
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+
+      // Run is still at rootNodeId — the hub's only child isn't guarded
+      // yet, since no run has actually reached the hub.
+      await expect(
+        roguelikeNodeMap.write.removeChild([hub, hubOnlyChild]),
+      ).to.not.be.rejected;
+      // Re-add it for the rest of the test.
+      await roguelikeNodeMap.write.addChild([hub, hubOnlyChild, false]);
+
+      // Advance onto the hub.
+      await humanRoguelikeMatch.write.enterResupplyNode([hub]);
+
+      // Now the hub's only child IS guarded (setCurrentNode's increment
+      // fired for the new node)...
+      await expect(
+        roguelikeNodeMap.write.removeChild([hub, hubOnlyChild]),
+      ).to.be.rejectedWith("WouldStrandActiveRun");
+
+      // ...and rootNodeId's old occupancy was correctly cleared
+      // (setCurrentNode's decrement fired for the node the run left) — a
+      // fresh single-remaining-child scenario back at root must not be
+      // blocked by stale accounting from before the run moved on.
+      await roguelikeNodeMap.write.removeChild([rootNodeId, decoy]);
+      await expect(
+        roguelikeNodeMap.write.removeChild([rootNodeId, hub]),
+      ).to.not.be.rejected;
+    });
+  });
+
+  describe("AI registry engine-live pin (UA-08)", function () {
+    it("keeps an active combat node's AI on the registry that was live when it started, even if the owner swaps it mid-fight", async function () {
+      const { deployed, owner, human } = await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
+        deployed;
+      const { campaignId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+
+      const humanRoguelikeMatch = await hre.viem.getContractAt(
+        "RoguelikeMatch",
+        deployed.roguelikeMatch.address,
+        { client: { wallet: human } },
+      );
+      const otherRoguelikeMatch = await hre.viem.getContractAt(
+        "RoguelikeMatch",
+        deployed.roguelikeMatch.address,
+        { client: { wallet: owner } },
+      );
+      const humanGame = await hre.viem.getContractAt(
+        "Game",
+        deployed.game.address,
+        { client: { wallet: human } },
+      );
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+      const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
+
+      await humanGame.write.moveShip(
+        [gameId, 1n, 0, 0, ActionType.Pass, 0n],
+        { account: human.account },
+      );
+
+      // Simulate an admin AI rollout mid-fight: swap in a brand-new, EMPTY
+      // registry (no variant registered at all).
+      const emptyRegistry = await hre.viem.deployContract(
+        "AIBehaviorRegistry",
+        [],
+      );
+      await deployed.roguelikeMatch.write.setAIRegistryAddress([
+        emptyRegistry.address,
+      ]);
+
+      // The AI's turn in this already-active fight must still succeed — a
+      // live read would instead revert NoAIForVariant from the new,
+      // unconfigured registry.
+      await expect(otherRoguelikeMatch.write.takeAITurn([gameId])).to.not.be
+        .rejected;
+    });
+  });
+
   describe("Combat node reward farming via a twoWay edge (SP-05)", function () {
     // Hub (Resupply, root) <-twoWay-> Combat node -> dummy Resupply node
     // (kept non-final so winning it doesn't immediately end the run,
@@ -704,6 +947,107 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
 
       const shipAfter = await ships.read.getShip([1n]);
       expect(shipAfter.shipData.inFleet).to.equal(false);
+    });
+
+    it("still ends the run as Won at a node that was final at entry, even if an admin adds a child to it mid-fight (UA-11)", async function () {
+      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
+        await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, game } =
+        deployed;
+      const { campaignId, mapId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      // rootNodeId has no children at entry -- it IS final at that moment.
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+
+      const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
+
+      // Simulate an admin content edit mid-fight: give the node the human
+      // is CURRENTLY fighting at a real child — after this, a LIVE
+      // re-check of "is this node final" would read false.
+      const newChild = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, newChild, false]);
+
+      await winCombatNode(
+        game,
+        humanGame,
+        otherRoguelikeMatch,
+        owner,
+        human,
+        gameId,
+        1n,
+      );
+
+      // The run still ends as Won — proving isFinalNode stayed pinned to
+      // what was true at entry (no children yet), not re-derived live at
+      // resolution time (which would now see the newly-added child and
+      // wrongly continue the run instead of ending it).
+      const run = await deployed.roguelikeRun.read.getRun([
+        human.account.address,
+      ]);
+      expect(run.status).to.equal(2); // Won
+    });
+
+    it("keeps a combat node's auto-heal floor pinned to whatever was live at entry, even if an admin retunes it mid-fight (UA-11)", async function () {
+      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
+        await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, game } =
+        deployed;
+      const { campaignId, mapId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const nextNode = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode, false]);
+      // Live at entry: 90%, engineered (as the sibling persistence test
+      // above does) so real combat damage lands well below it.
+      await roguelikeNodeMap.write.setCampaignAutoHealPercent([campaignId, 90]);
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+      const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
+
+      // Admin retunes the floor mid-fight — a live (unpinned) read would
+      // apply this new, much lower floor to this fight's own result.
+      await roguelikeNodeMap.write.setCampaignAutoHealPercent([campaignId, 1]);
+
+      await winCombatNode(
+        game,
+        humanGame,
+        otherRoguelikeMatch,
+        owner,
+        human,
+        gameId,
+        1n,
+      );
+
+      const attrsAfterCombat = await game.read.getShipAttributes([gameId, 1n]);
+      const floorAt90 = Math.floor(
+        (Number(attrsAfterCombat.maxHullPoints) * 90) / 100,
+      );
+      const expectedPersisted = Math.max(
+        Number(attrsAfterCombat.hullPoints),
+        floorAt90,
+      );
+      const persistedHP = await deployed.roguelikeRun.read.getShipHP([
+        human.account.address,
+        1n,
+      ]);
+      // Proves the 90% floor that was live at entry applied, not the 1%
+      // the admin changed it to mid-fight.
+      expect(persistedHP).to.equal(expectedPersisted);
     });
   });
 
@@ -1412,6 +1756,60 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
           [],
         ]),
       ).to.be.rejectedWith("WrongCampaignVariant");
+    });
+
+    it("keeps a run's required-variant rule pinned to whatever was live at startRun, even if an admin retunes it mid-run (UA-16)", async function () {
+      const { deployed, owner, human, humanRoguelikeMatch, humanRoguelikeResupply } =
+        await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
+        deployed;
+      const { campaignId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      // Unrestricted (0) at the moment the run starts.
+      const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode, true]);
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+
+      // A variant-2 ship, same technique as the sibling test above.
+      await ships.write.setIsAllowedToCreateShips(
+        [owner.account.address, true],
+        { account: owner.account },
+      );
+      await ships.write.createShips(
+        [human.account.address, 1, 1, 0, false],
+        { account: owner.account },
+      );
+      const variant2ShipId = 6n;
+      const shipTuple = (await ships.read.ships([variant2ShipId])) as ShipTuple;
+      const ship = tupleToShip(shipTuple);
+      await ships.write.customizeShip(
+        [variant2ShipId, { ...ship, traits: { ...ship.traits, variant: 2 } }],
+        { account: owner.account },
+      );
+
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+
+      // Admin tightens the requirement AFTER the run has already started —
+      // a live (unpinned) read would apply this new rule to this run's
+      // resupply stops too.
+      await roguelikeNodeMap.write.setCampaignRequiredVariant([campaignId, 1]);
+
+      await humanRoguelikeMatch.write.enterResupplyNode([resupplyNode]);
+
+      // Still succeeds — swapping the roster to the variant-2 ship entirely
+      // (avoiding Fleets' own separate MixedVariantFleet check) — proving
+      // the pinned (unrestricted) rule from startRun applied, not the
+      // tightened live one.
+      await expect(
+        humanRoguelikeResupply.write.resupplyModifyRoster([
+          [variant2ShipId],
+          [1n],
+        ]),
+      ).to.not.be.rejected;
     });
 
     it("reverts resupplyModifyRoster when not at a resupply node", async function () {

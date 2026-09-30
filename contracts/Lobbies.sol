@@ -364,6 +364,9 @@ contract Lobbies is Ownable, ReentrancyGuard {
         newLobby.gameConfig.turnTime = _turnTime;
         newLobby.gameConfig.selectedMapId = _selectedMapId;
         newLobby.gameConfig.maxScore = _maxScore;
+        // UA-10 fix: pin which PvPMatch/engine this lobby's eventual game
+        // starts on, at creation time — see LobbyGameConfig.pvpMatch.
+        newLobby.gameConfig.pvpMatch = address(pvpMatch);
 
         // Set reserved joiner if provided
         if (_reservedJoiner != address(0)) {
@@ -518,12 +521,25 @@ contract Lobbies is Ownable, ReentrancyGuard {
             block.timestamp < lobby.players.joinedAt + lobby.gameConfig.turnTime
         ) revert TimeoutNotReached();
 
-        // Update joiner's kick state.
+        // HA4-03 fix (2026-09-28): only penalize the joiner if the creator
+        // actually held up their own end (committed a fleet) first —
+        // mirrors quitWithPenalty's symmetric check (it requires the
+        // penalizing party to have already committed a fleet before it can
+        // penalize the other side). Without this, a creator who never
+        // creates a fleet could repeatedly call this against any joiner
+        // who's simply waiting their turn, penalizing them for the
+        // creator's own inaction, at near-zero repeatable cost (the min
+        // 5-minute timeout, then immediately reusable against the next
+        // victim). The lobby still resets to Open either way — the creator
+        // can always reclaim it — just without the punitive kickCount when
+        // they haven't proven good faith themselves.
         PlayerLobbyState storage joinerState = playerStates[
             lobby.players.joiner
         ];
-        joinerState.kickCount++;
-        joinerState.lastKickTime = block.timestamp;
+        if (lobby.players.creatorFleetId != 0) {
+            joinerState.kickCount++;
+            joinerState.lastKickTime = block.timestamp;
+        }
         joinerState.hasActiveLobby = false;
         joinerState.activeLobbyId = 0;
 
@@ -643,8 +659,12 @@ contract Lobbies is Ownable, ReentrancyGuard {
             // Remove from tracking sets when game starts
             _cleanupLobbyFromAllSets(_lobbyId);
 
-            // Start the game
-            pvpMatch.startGame(
+            // Start the game — on whichever engine was pinned to this lobby
+            // at creation time (UA-10 fix), not necessarily today's live
+            // pvpMatch, so a lobby that's been sitting in FleetSelection
+            // can't have its game silently switch engines out from under
+            // an already-committed player.
+            PvPMatch(lobby.gameConfig.pvpMatch).startGame(
                 _lobbyId,
                 lobby.basic.creator,
                 lobby.players.joiner,
@@ -739,6 +759,9 @@ contract Lobbies is Ownable, ReentrancyGuard {
         newLobby.gameConfig.turnTime = _turnTime;
         newLobby.gameConfig.selectedMapId = _selectedMapId;
         newLobby.gameConfig.maxScore = _maxScore;
+        // UA-10 fix: pin which PvPMatch/engine this lobby's eventual game
+        // starts on, at creation time — see LobbyGameConfig.pvpMatch.
+        newLobby.gameConfig.pvpMatch = address(pvpMatch);
         // creatorGoesFirst will be set when fleets are created based on who creates first
 
         // Set joiner immediately

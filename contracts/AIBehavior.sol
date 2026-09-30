@@ -92,7 +92,8 @@ library AIBehavior {
     }
 
     // Bit-per-cell mask (same packing Maps.sol's own bitmaps use: row *
-    // gridWidth + col) of every currently-alive ship on the given side, for
+    // gridWidth + col) of every currently-alive, non-disabled ship on the
+    // given side, for
     // hasMapsAvoidingShips — ships don't block their own side's shots, only
     // the opposing side's, so the caller picks isCreatorSide based on whose
     // shot is being checked (not always "the enemy from the AI's own point
@@ -108,10 +109,14 @@ library AIBehavior {
     ) private pure returns (uint256 bitmap) {
         for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
             ShipPosition memory sp = ctx.g.shipPositions[i];
+            // Disabled (0 HP) ships never block — same rule as
+            // Game._enemyOccupiedBitmap. shipAttributes[i] is this same
+            // ship's (see the parallel-array note on the lookups above).
             if (
                 sp.status != 0 ||
                 sp.isCreator != isCreatorSide ||
-                sp.shipId == excludeShipId
+                sp.shipId == excludeShipId ||
+                ctx.g.shipAttributes[i].hullPoints == 0
             ) continue;
             bitmap |= (uint256(1) <<
                 (uint(uint16(sp.position.row)) *

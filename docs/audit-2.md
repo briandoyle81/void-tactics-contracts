@@ -181,6 +181,66 @@ regressions (`PRODUCTION` confirmed `false` beforehand).
 
 ---
 
+### ~~HA4-01 — `GameEngineRegistry`/`SinglePlayerMatch`/`RoguelikeMatch`: a Second Engine's Single-Player or Roguelike Orchestrator Can Never Start Its First Game~~
+
+**File:** `contracts/GameEngineRegistry.sol` (`recordGameEngine`, lines 124-129); `contracts/SinglePlayerMatch.sol` (gameId computed at lines 57, 211-212); `contracts/RoguelikeMatch.sol` (gameId computed at lines 52, 215-216) · **Status: found 2026-09-28, during the "full audit" pass, in this session's own new (uncommitted, not yet deployed) engine-registry work — not a pre-existing/live bug.**
+
+`SinglePlayerMatch.NODE_MATCH_ID_OFFSET` (`2**40`) and `RoguelikeMatch.ROGUELIKE_GAME_ID_OFFSET`
+(`2**41`) are fixed constants, identical across every deployment of these contracts. Each
+contract computes its gameId from its **own** storage counter (`nodeMatchCount`/`matchCount`),
+which always starts at 0 on a fresh deploy — so a **second** `SinglePlayerMatch` (or
+`RoguelikeMatch`) instance's very first game computes the exact same gameId as the **first**
+instance's very first game (`OFFSET + 1`, identical either way).
+
+`GameEngineRegistry.recordGameEngine`, which both orchestrators now call unconditionally right
+after `game.startGame(...)` succeeds (added this session), reverts `GameAlreadyRecorded()` the
+moment a gameId it already has an entry for is recorded again:
+```solidity
+if (engineOfGame[_gameId] != address(0)) revert GameAlreadyRecorded();
+```
+Since this call has no `try/catch`, that revert unwinds the entire enclosing transaction —
+including the `game.startGame(...)` call that already succeeded moments earlier in the same
+transaction. **Concretely: the moment a second engine's `SinglePlayerMatch`/`RoguelikeMatch` is
+registered and used, its very first `startNodeMatch`/`enterCombatNode` call reverts, unconditionally,
+every time** — not a rare edge case, the guaranteed first-use outcome. `PvPMatch` is unaffected:
+its gameId is `lobbyId`, sourced from the single **shared** `Lobbies` contract's ever-incrementing
+`lobbyCount`, which stays globally unique across every engine since `Lobbies` itself is never
+re-deployed, only re-pointed at whichever `PvPMatch` is current.
+
+**Why this wasn't caught by the full test suite (811/811 passing) before this audit:** the new
+`test/GameEngineRegistry.test.ts` only exercises a second `PvPMatch`, never a second
+`SinglePlayerMatch`/`RoguelikeMatch` — so the collision path was never on any tested code path.
+
+**Status: Fixed 2026-09-28.** Folded an immutable per-instance `engineIndex` into each
+orchestrator's gameId computation instead of touching `GameEngineRegistry.sol` (kept
+self-contained to the two orchestrators, no new coupling): `gameId = OFFSET + engineIndex *
+ENGINE_ID_BLOCK_SIZE + counter`, with `ENGINE_ID_BLOCK_SIZE = 2**64` — a block per engine large
+enough that no realistic `nodeMatchCount`/`matchCount` could ever grow into the next engine's
+range. `engineIndex` is a new, final constructor parameter on both `SinglePlayerMatch.sol` and
+`RoguelikeMatch.sol`; the current (and, as of this fix, only) deploy passes `0`, which reproduces
+today's exact `OFFSET + counter` numbering unchanged — confirmed by the full test suite (every
+existing hardcoded `NODE_MATCH_ID_OFFSET`/`ROGUELIKE_GAME_ID_OFFSET`-based gameId assertion in
+`test/SinglePlayerMatch.test.ts`, `test/RoguelikeMatch.test.ts`, `test/AIShipConfigs.test.ts`, and
+`test/VariantAITrees.test.ts` still passes unmodified). A future second engine deploys its
+orchestrators with `engineIndex = 1`, `2`, etc.
+
+Bytecode: `SinglePlayerMatch.sol` +148 bytes (15.265/24.576 KiB deployed), `RoguelikeMatch.sol`
++147 bytes (21.862/24.576 KiB deployed, still ~2.1 KB headroom) — both comfortably clear of the
+limit.
+
+**Regression test:** `test/GameEngineRegistry.test.ts`, `"HA4-01: two SinglePlayerMatch instances
+never collide"` — deploys a second `SinglePlayerMatch` (`engineIndex = 1`) reusing every other
+shared contract verbatim (deliberately isolating the test to the gameId-uniqueness mechanism
+itself, not a full second engine stack), starts a real node match on each instance against the
+same campaign node, and confirms both gameIds are distinct and both record correctly in
+`GameEngineRegistry.engineOfGame`. Verified genuine: temporarily reverted the gameId computation
+back to `OFFSET + counter` (no `engineIndex` term), confirmed the test failed with the exact
+predicted `GameAlreadyRecorded()` collision, then restored the real fix from a backup and
+reconfirmed byte-identical. Full suite re-run afterward (`PRODUCTION` confirmed `false`
+beforehand).
+
+---
+
 ### H-08 — `Ships.purchaseWithFlow` Referral Transfer Occurs Before State Finality
 
 **File:** `contracts/Ships.sol`, lines 163–165 · **Full history:** `pre-audit.md`, search `H-08`
@@ -259,6 +319,124 @@ pass creates room — this repo's established pattern for a `Ships.sol` feature 
 place is to extract it into its own standalone contract wired through the existing
 `isAllowedToCreateShips`-style authorized-caller allowlist, rather than trimming unrelated code to
 make space (see e.g. how `FreeShipClaim.sol`/`TutorialClaim.sol` were split out).
+
+---
+
+### ~~HA4-02 — `UTCLotteryHook.resolveDraw` Can Be Permanently Bricked for a Specific Draw by a Hostile Participant Using a Non-Receiving Contract as Their Credited Address~~
+
+**File:** `contracts/UTCLotteryHook.sol:290-298` (`_extractPlayer`), `:371-431` (`resolveDraw`);
+`contracts/Ships.sol:495-524` (`_mintShip`, uses OpenZeppelin `_safeMint`) · **Found 2026-09-28.**
+
+`_extractPlayer` decodes the address credited for a qualifying sell entirely from caller-supplied
+`hookData` (`abi.decode(hookData, (address))`), with only a non-zero check — **no verification
+that this address has any relationship to the actual swap signer.** Any address performing a real
+qualifying sell (≥ `minEntryThresholdWei`, weight capped at `maxWeightPerEntryWei` per the already-fixed
+HA2-06) can attribute that entry's weight to *any* address, including a purpose-built contract that
+always reverts in `onERC721Received`.
+
+Once a draw resolves, the prize mints directly and unconditionally to the picked winner —
+```solidity
+ships.createSpecificShip(winner, _buildPrizeShip(_drawId, t));   // or
+ships.createShips(winner, 1, fallbackVariant, 4, false);
+```
+— both routes go through `Ships._mintShip`'s `_safeMint`, confirmed via direct grep. Neither call
+is wrapped in `try/catch`. Since `randomManager.fulfillRandomRequest(requestId)` (called earlier in
+the same function) reads back an already-revealed, permanently-fixed value, **retrying
+`resolveDraw(_drawId)` later produces the identical winner every time** — if that winner is the
+hostile non-receiving contract, `resolveDraw` for that specific `_drawId` reverts forever, with no
+owner override and no alternate resolution path anywhere in the call chain.
+
+**Concrete attack:** attacker deploys a contract that always reverts on `onERC721Received`,
+performs one real qualifying sell crediting that contract's address via `hookData`, and — if
+selected as winner (bounded odds per HA2-06, but real and repeatable across every future draw at
+will) — permanently denies that draw's prize to every honest participant, for the cost of one
+swap's slippage/fees.
+
+**Why this matters:** the exact "permanently-lockable state via a single failing external call"
+bug class already found and fixed three times elsewhere in this project (HA2-01, HA2-04, HA3-03) —
+and the correct pattern already exists in this same repo for exactly this shape of problem
+(`RoguelikeMatch.onGameEnded`'s and `Tournament.finalize`'s win-effect dispatches both wrap the
+risky external call in `try/catch` for precisely this reason). `resolveDraw` is the one place that
+mints directly, unguarded, to a caller-influenced address.
+
+**Status: Fixed 2026-09-28.** Wrapped both mint calls in `try/catch`; on failure, emits a new
+`PrizeMintFailed(drawId, winner)` event instead of `DrawResolved` — the draw still resolves
+(`drawResolved[_drawId]` was already set `true` earlier in the function, and now nothing after it
+can unwind that). Went one step past the baseline fix direction without the full "separate claim"
+redesign: a **queued curated template is only dequeued on success** (`delete prizeQueue[queueHead];
+queueHead++;` moved inside the `try` block, after the mint succeeds) — a failed mint no longer
+burns it, it stays queued for the next draw. The random 4-star fallback path has no equivalent
+state to preserve, so it's a bare `try/catch` around the same `ships.createShips` call.
+
+Bytecode: `UTCLotteryHook.sol` +156 bytes (11.949/24.576 KiB deployed) — ample headroom.
+
+**Regression test:** `test/UTCLotteryHookSwap.test.ts`, `"resolves a draw instead of permanently
+reverting when the picked winner can't receive the prize NFT (HA4-02)"` — deploys a new
+`MockNonReceivingContract` (`contracts/mocks/MockNonReceivingContract.sol`, reverts in
+`onERC721Received`), attributes two real sellers' qualifying sells to it via `hookData` (both
+sells credit the same address so it's the draw's sole distinct participant — with
+`minParticipants` lowered to 1 — and wins with certainty, not just high probability), and confirms
+`resolveDraw` succeeds, `PrizeMintFailed` fires naming the poison contract, and no `DrawResolved`
+is emitted for that draw. Verified genuine: temporarily reverted both `try/catch` wrappers back to
+bare calls, confirmed the test failed with the exact predicted revert, then restored the real fix
+from a backup and reconfirmed byte-identical. Full suite re-run afterward (`PRODUCTION` confirmed
+`false` beforehand).
+
+---
+
+### ~~HA4-03 — `Lobbies.timeoutJoiner` Lets a Hostile Lobby Creator Repeatedly Penalize Innocent Joiners for Near-Zero, Reusable Cost~~
+
+**File:** `contracts/Lobbies.sol:507-550` · **Found 2026-09-28.**
+
+`timeoutJoiner` only checks that the **joiner** hasn't submitted a fleet
+(`joinerFleetId != 0 → revert`) and that `turnTime` has elapsed since they joined — it never checks
+whether the **creator** (the caller, and the party being protected from an absent counterpart) has
+submitted a fleet either. Contrast with the symmetric escape hatch `quitWithPenalty` (line 661),
+confirmed to correctly require the *penalizing* party (the joiner) has already committed a real
+fleet (`joinerFleetId == 0 → revert NotInLobby`) **and** the party being penalized (the creator)
+has not (`creatorFleetId != 0 → revert FleetAlreadyCreated`) before applying any penalty.
+`timeoutJoiner` has no equivalent "the creator held up their own end" check.
+
+**Concrete attack:** Mallory creates a cheap/free public lobby (`MIN_TIMEOUT` = 5 minutes, the
+minimum allowed `turnTime`; `createLobby` is free up to `freeGamesPerAddress`). Alice joins,
+expecting a real match. Mallory never creates a fleet. After 5 minutes, Mallory calls
+`timeoutJoiner(lobbyId)` — it succeeds, since it only checks Alice's state, not her own. This
+increments Alice's `kickCount` (a penalty meant for players who abandon games) and locks her out of
+creating/joining any lobby for `kickCount * KICK_PENALTY_PER_HOUR` (1 hour, multiplying with every
+additional kick). The lobby resets to `Open`, not deleted, and Mallory's own state is untouched —
+she can repeat this against the next innocent joiner on the same lobby id immediately, indefinitely,
+at gas-only cost. A `reservedJoiner`-targeted variant can escalate one specific victim's lockout
+without bound.
+
+**Why this matters:** a zero/near-zero-cost, repeatable griefing vector against the core
+matchmaking flow — the exact "no profit needed, only needs to cost the attacker nothing" attack
+class this project's own CLAUDE.md standing rule calls out. Undermines "joining an open lobby" as a
+safe action.
+
+**Status: Fixed 2026-09-28.** Implemented exactly the fix direction above: the `kickCount`/
+`lastKickTime` penalty is now conditional on `lobby.players.creatorFleetId != 0`. The lobby-reclaim
+path (reset to `Open`, clear tracking) is unconditional either way — the creator can always
+reclaim their own lobby, they just can't punish the joiner for it unless they held up their own end
+first.
+
+Bytecode: `Lobbies.sol` +61 bytes (15.226/24.576 KiB deployed) — ample headroom.
+
+**Two pre-existing tests needed updating, not just a new one added** — both had (unintentionally)
+encoded the buggy behavior as expected: `"should prevent creating lobby when in timeout"` and
+`"should revert when joining while in timeout"` both timed out a joiner via a creator who never
+created a fleet, then asserted the joiner *was* penalized (`PlayerInTimeout` on their next
+`joinLobby`). Both were about the timeout mechanism generally, not this fairness rule specifically,
+so both were updated to have the creator legitimately commit a fleet first — preserving their
+original intent under the corrected behavior rather than treating them as collateral damage.
+
+**New regression test:** `test/Lobbies.test.ts`, `"should NOT penalize the joiner via timeoutJoiner
+when the creator never created a fleet (HA4-03)"` — reproduces the exact scenario from the finding
+(creator times out a joiner without ever creating a fleet), confirms the lobby still resets to
+`Open`, confirms the joiner's `kickCount` stays `0`, and confirms they can immediately join another
+lobby without hitting `PlayerInTimeout`. Verified genuine: temporarily reverted the fix (penalty
+applied unconditionally again), confirmed the two updated pre-existing tests and the new test all
+correctly reflected the change (new test fails without the fix, as expected), then restored the
+real fix and reconfirmed. Full suite re-run afterward (`PRODUCTION` confirmed `false` beforehand).
 
 ---
 
@@ -431,6 +609,59 @@ match is still active at the current node"` — verified to actually fail withou
 (temporarily reverted, confirmed red, restored) before being trusted; also asserts
 `run.currentNodeId` is unchanged (still the combat node) after the reverted attempt. Full suite:
 658/658 passing.
+
+---
+
+### HA5-01 — `Tournament.claimForfeitWin`/`resolveStalledMatch` Can Award a Walkover (or Let a Third
+Party Sabotage) a Match That's Genuinely In Progress, Not Actually Abandoned
+
+**File:** `contracts/Tournament.sol:561-577` (`claimForfeitWin`), `:588-603` (`resolveStalledMatch`);
+root cause interacts with `assignMatchGame` (`:452-481`) · **Found 2026-09-29.**
+
+Both functions gate purely on `m.gameId == 0` (nothing has been assigned to this *tournament
+match* yet) plus `block.timestamp > m.readyAt + t.config.matchTimeout` (`matchTimeout` is
+creator-configurable but bounded only to `[MIN_MATCH_TIMEOUT, MAX_MATCH_TIMEOUT]` =
+`[1 hour, 1 week]`). Neither checks whether a real game between the two players actually exists,
+is in progress, or has already concluded — there is no on-chain way to tell, because
+`assignMatchGame` is (by this codebase's own documented, tested workflow — see `pre-audit.md`
+T-02's note that "the real, working usage pattern in this codebase is 'play the game first, then
+assign + record it after the fact'") normally called only *after* a match finishes, not when it
+starts. So `m.gameId` reads `0` for the entire real-time duration of an honestly-played match, not
+just for an opponent who genuinely never showed up — `assignMatchGame` requires only
+`gameMetadata.startedAt > m.readyAt`, not that the game has ended, so nothing stops it from being
+called the instant a game starts, but nothing requires that either, and the documented/tested
+pattern doesn't do it.
+
+**Concrete scenario:** Alice and Bob are paired (`readyAt = T0`) with `matchTimeout` left at the
+protocol-enforced minimum, 3600s — an entirely normal creator choice, not an edge case. They pair
+via `Lobbies`, build fleets, and play a real match that takes over an hour of wall-clock time (easy
+for any human-paced, turn-based match with a generous `turnTime`). Bob wins fairly at T0+55min.
+Nobody has called `assignMatchGame` yet — nothing requires it to happen immediately. At T0+61min,
+Alice (the loser) calls `claimForfeitWin`: `m.gameId` is still `0`, the timeout has elapsed, so it
+succeeds — Alice is recorded as the winner. `m.resolved = true` then permanently blocks
+`assignMatchGame` (`GameAlreadyAssigned`... `MatchAlreadyResolved`) forever, so Bob has no way to
+ever correct the record. Alice advances in the bracket and can go on to claim real ETH prize money
+she didn't earn.
+
+`resolveStalledMatch` is worse in one respect: it's fully **permissionless** (callable by anyone,
+not just the two players), so a zero-stake third party can sabotage an ongoing or freshly-finished
+legitimate match purely to disrupt the tournament — satisfying this project's own "assume hostile
+outside actors" rule directly, no profit motive required, only the cost of one transaction once the
+timeout window (as low as 1 hour) has elapsed.
+
+Confirmed via `test/Tournament.test.ts`: every existing `claimForfeitWin`/`resolveStalledMatch` test
+models "the opponent never shows up at all" (no lobby, no game, ever) — there is no test covering "a
+real game exists/concluded but wasn't assigned yet," which is exactly the gap.
+
+**Fix direction (a design decision, not a one-line patch):**
+- Don't award a walkover on ambiguous silence — default to voiding/refunding the match (or requiring
+  a bye-style resolution) when the timeout elapses with no assigned game, removing the incentive to
+  race a false claim against an opponent who's honestly mid-match; and/or
+- Add an explicit "engagement" signal — a permissionless function either player (or anyone) can call,
+  validated against `Lobbies`/`Game` showing a real, correctly-paired, in-progress game started after
+  `readyAt` — that blocks or resets the forfeit/stall timeout once real activity is detected, so the
+  timeout only ever fires for a genuinely absent opponent. Raising `MIN_MATCH_TIMEOUT` alone is only
+  a partial mitigation — a real match can still exceed any fixed floor.
 
 ---
 
@@ -685,7 +916,227 @@ registration/reveal UX cost. No further design work has been done beyond the ske
 
 ---
 
+### HA5-02 — `UTCLotteryHook.resolveDraw`'s Unbounded `drawParticipants` Array Can Be Sybil-Inflated
+to Make a Draw Permanently Gas-Unresolvable
+
+**File:** `contracts/UTCLotteryHook.sol:103` (`drawParticipants` — no size cap), `:304-346`
+(`_recordSell`, pushes any new qualifying seller with no per-draw participant ceiling), `:375-421`
+(`resolveDraw`'s single-transaction loop over the full participant array) · **Found 2026-09-29.**
+
+Any address whose UTC→ETH sell clears `minEntryThresholdWei` (default 0.01 ETH, owner-configurable)
+is pushed into `drawParticipants[currentDrawId]` — once per distinct address — with no maximum on
+how many distinct addresses one draw can accumulate. A draw only becomes eligible to resolve once
+`drawInterval` (default 24h) has elapsed and thresholds are met — until then, the accumulation
+window stays open regardless of participant count. `resolveDraw` then iterates the *entire*
+participant array in one transaction to pick a winner by cumulative weight, with no
+batching/pagination.
+
+An attacker can cheaply add many Sybil participants during the (up to 24-hour) accumulation window:
+each entry only requires one qualifying sell, and the capital is recyclable (buy UTC back, sell
+again from a fresh address — costing only AMM fees + gas per round trip, not the notional amount).
+Pushed far enough (on the order of a few thousand participants, depending on per-iteration gas),
+`resolveDraw`'s loop exceeds the block gas limit and can never succeed for that specific `_drawId` —
+permanently denying every honest participant in that draw their shot at the prize. A queued curated
+`PrizeTemplate`, if any, simply stays queued for a future draw rather than being lost, but that
+specific draw's outcome is dead forever. Matches this project's own "assume hostile, zero/low-profit
+-seeking actors" rule directly — this is pure disruption of other participants' draw, not fund theft,
+and there's no cap or escape hatch anywhere in the current design.
+
+**Fix direction:** cap `drawParticipants[drawId].length` (reject or ignore additions past some
+maximum), and/or make `resolveDraw` resumable/batchable (e.g. a running cumulative-weight
+accumulator updated incrementally as participants are added, rather than recomputed from scratch
+over the full array at resolution time), so resolution cost no longer scales with an
+attacker-inflatable count.
+
+---
+
 ## Low
+
+### ~~HA4-04 — `Tournament.addSponsorPrize` Lets Any Address Claim the Sponsor Slot for Free, Blocking the Real Sponsor~~
+
+**File:** `contracts/Tournament.sol:286-302` · **Found 2026-09-28.**
+
+```solidity
+function addSponsorPrize(uint256 tournamentId) external payable {
+    ...
+    if (t.sponsor == address(0)) {
+        t.sponsor = msg.sender;
+    } else if (t.sponsor != msg.sender) {
+        revert SponsorAlreadySet();
+    }
+    t.sponsorAmount += msg.value;
+    ...
+}
+```
+No `msg.value > 0` requirement before `t.sponsor` is claimed — contrast with `createTournament`,
+which only sets `t.sponsor` when `msg.value > 0`. Any address can call `addSponsorPrize` with 0 ETH
+the instant a tournament is created, permanently claiming the single sponsor slot; `SponsorAlreadySet`
+then blocks every other address — including the tournament's intended real backer — from
+contributing sponsor funds via this function. No entry fees or prize funds already in the pool are
+at risk; this only blocks *additional* sponsor top-ups from anyone but the squatter.
+
+**Fix:** require `msg.value > 0` before assigning `t.sponsor = msg.sender`, matching
+`createTournament`'s existing logic for the same field.
+
+**Status: Fixed 2026-09-29.** Added a new `NoSponsorContribution` error and require
+`msg.value > 0` on the first claim of `t.sponsor`, exactly mirroring `createTournament`'s existing
+gate on the same field:
+
+```solidity
+if (t.sponsor == address(0)) {
+    if (msg.value == 0) revert NoSponsorContribution();
+    t.sponsor = msg.sender;
+} else if (t.sponsor != msg.sender) {
+    revert SponsorAlreadySet();
+}
+```
+
+A real (non-zero) contribution from anyone else still claims the slot normally once it's open, and
+`SponsorAlreadySet` still fires correctly for a zero-value call from a non-owner once a real sponsor
+is set. `Tournament.sol` compiles at 16.676/24.576 KiB deployed — ample headroom, negligible size
+cost. Regression test added to `test/Tournament.test.ts` ("rejects claiming the sponsor slot with a
+zero-value call (HA4-04)"): a zero-value call reverts `NoSponsorContribution` while the slot is
+still open, a real contribution then claims it, and a subsequent zero-value call from someone else
+correctly falls through to `SponsorAlreadySet` instead. Verified genuine: temporarily reverted the
+`msg.value == 0` check in place, reran the test (0 passing, 1 failing, confirming it fails without
+the fix), then restored the real fix from a backup copy and confirmed the restored file was
+byte-identical to the backup via `diff`. Full local run (`Tournament.test.ts` +
+`Fleets.test.ts` + `DroneStorefront.test.ts`): 44/44 passing.
+
+---
+
+### ~~HA4-05 — Roguelike Roster Reservation Has No Duplicate-ShipId Check (Self-Limiting Dead End, Not Exploitable Against Others)~~
+
+**File:** `contracts/RoguelikeMatch.sol:162-190` (`startRun`), `:393-408` (`_reserveRoster`);
+`contracts/RoguelikeResupply.sol:163-215` (`resupplyModifyRoster`); root cause in
+`contracts/Fleets.sol:87-165` (`createFleet` validates duplicate *positions* but never duplicate
+*shipIds* — each id's `inFleet` flag is read fresh per index in the validation loop, but not flipped
+until a separate, later loop, so two occurrences of the same id both pass validation) ·
+**Found 2026-09-28.**
+
+A caller-supplied `_shipIds` array with a repeated id can be accepted into
+`run.rosterShipIds` via the Roguelike "reservation" fleet path (`mapId=0`, never passed through
+`Game.startGame`). **Does not escalate:** any real combat entry (`enterCombatNode` →
+`Game.startGame` → `calculateShipAttributes`) always reverts on the second occurrence of the
+duplicate id, via that function's pre-existing snapshot-once guard (`if (attributes.version != 0)
+revert`) — the same general `Game.sol` guard that protects the ordinary PvP path too. The affected
+run becomes permanently unable to enter combat, but `retreatRun(0)` still works regardless and
+cleanly abandons it — no funds/NFTs at risk, no other player affected. A confusing UX dead end for
+the caller only, not a security vulnerability against a third party.
+
+**Fix direction:** validate shipId uniqueness up front in `startRun`/`resupplyModifyRoster` with a
+clear revert, rather than relying on an incidental revert three calls deep the first time the
+player tries to actually fight. Optionally generalize `Fleets._validateStartingPositions`'s
+existing duplicate-*position* bitset check to also cover duplicate shipIds, as defense-in-depth for
+the shared `createFleet` entry point itself.
+
+**Status: Fixed 2026-09-29.** Fixed at the shared root cause, `Fleets.createFleet` itself, rather
+than in each individual caller — this covers every current caller (Lobbies, SinglePlayerMatch,
+RoguelikeMatch, RoguelikeResupply) and any future one uniformly, not just the Roguelike path this
+finding traced. Added a new `DuplicateShipId` error and an O(n²) in-memory duplicate check over
+`_shipIds`, run once up front before the more expensive per-ship validation loop:
+
+```solidity
+for (uint i = 0; i < _shipIds.length; i++) {
+    for (uint j = i + 1; j < _shipIds.length; j++) {
+        if (_shipIds[i] == _shipIds[j]) revert DuplicateShipId();
+    }
+}
+```
+
+O(n²) is acceptable at this game's realistic fleet sizes (topping out around a dozen ships).
+`Fleets.sol` compiles at 7.652/24.576 KiB deployed — ample headroom. Regression test added to
+`test/Fleets.test.ts` ("rejects a duplicate shipId across two slots in the same fleet (HA4-05)"):
+a `createFleet` call with the same shipId in two starting-position slots reverts `DuplicateShipId`.
+Verified genuine: temporarily removed the duplicate-check loop in place, reran the test (0 passing,
+1 failing, confirming it fails without the fix), then restored the real fix from a backup copy and
+confirmed the restored file was byte-identical to the backup via `diff`.
+
+---
+
+### HA5-03 — `ShipAttributes._calculateMovement` Casts `baseSpeed`/`engineSpeeds` (`uint8`) to `int8`
+With No Range Check, Silently Wrapping Negative
+
+**File:** `contracts/ShipAttributes.sol:245,248` · **Found 2026-09-29.**
+
+```solidity
+int8 baseMovement = int8(variantData.baseSpeed);                    // line 245
+...
+baseMovement += int8(variantData.engineSpeeds[_ship.traits.speed]); // line 248
+```
+
+`VariantAttributeData.baseSpeed` and `.engineSpeeds[]` are declared `uint8` in `Types.sol` (full
+range 0-255) and are owner-supplied verbatim via `setVariantAttributes`, with no upper-bound
+validation in `_validateAttributes` (which only checks array lengths and rank-threshold ordering).
+A same-size `uint8`→`int8` explicit cast in Solidity is a bit-reinterpretation, not a checked
+conversion — it never reverts, it just silently produces a negative value for any input ≥ 128
+(e.g. `200` → `-56`). This is the identical mechanism already found and fixed in
+`EMPResolver.sol`/`ElectricStormResolver.sol` under `HA3-06`, just in a different file/field that
+fix never touched.
+
+**Failure scenario:** the owner (or a careless content-pipeline script) publishes a new attributes
+version with `baseSpeed` or an `engineSpeeds[tier]` entry ≥ 128 — plausible if someone treats the
+field as "0-255, bigger = faster" without knowing about the internal `int8` cast. The result isn't
+a loud revert but a silently wrong, usually near-zero, `movement` for every ship of that
+variant/tier (the function's own floor clamps a negative result to 0), degrading gameplay for an
+entire faction until someone notices and republishes a corrected version. Not attacker-reachable —
+`setVariantAttributes` is `onlyOwner` — but this project's own precedent (`HA3-02`, `HA3-06`) treats
+a careless, non-malicious admin content update as worth closing, not just a malicious owner.
+
+**Fix:** clamp `baseSpeed`/each `engineSpeeds[i]` to `int8`'s max (127), the same way `HA3-06`'s fix
+did for `strength` — either in `_validateAttributes` (reject > 127 outright, consistent with that
+function's existing "reject a malformed table before it goes live" role) or at the two cast sites.
+
+---
+
+### HA5-04 — Several More Void-Returning External Calls Have No Zero-Address/Code-Length Check on
+Their Target (Same Class as `HA4-06`, Different Call Sites)
+
+**Files:**
+- `contracts/ShipPurchaser.sol:38-40` (constructor sets `ships`) → consumed at `:76`
+  (`ships.createShips(...)`, void)
+- `contracts/DroneYard.sol:36-46` (constructor sets `ships`) → consumed at `:239`
+  (`ships.customizeShip(...)`, void)
+- `contracts/FreeShipClaim.sol:39-41` (constructor sets `ships`) → consumed at `:94`
+  (`ships.createShips(...)`, void)
+- `contracts/Ships.sol:615-638` (`setConfig`, sets `universalCredits`) → consumed at `:781`
+  (`universalCredits.mint(...)`, void, inside `shipBreaker`)
+
+**Found 2026-09-29.**
+
+This is the exact mechanism already identified and fixed once in this codebase under `HA4-06`
+(`DroneStorefront.turnInCores` → `droneEnergyCores.burnFrom`), just left unfixed at these four other
+call sites: `IShips.createShips`/`customizeShip` and `IUniversalCredits.mint` are all declared with
+no return value. A call to a void-returning external function against an address with no deployed
+code (a misconfigured/zero/wrong-network address passed to a constructor, or a future re-wiring)
+succeeds silently rather than reverting — there's no return data for the ABI decoder to fail on.
+
+**Failure scenario (per site, if the relevant address were ever misconfigured):**
+- `ShipPurchaser.purchaseWithUC`: `universalCredits.transferFrom` succeeds (real, correctly-wired
+  token) and pulls the buyer's real UTC; the subsequent `ships.createShips` silently no-ops — buyer
+  pays real UTC and receives nothing, with no revert to warn them.
+- `DroneYard.modifyShip`: same shape — the UTC fee is really collected via `transferFrom`, then
+  `ships.customizeShip` silently no-ops, so the paid-for customization never applies.
+- `FreeShipClaim.claimFreeShips`: `lastClaimTimestamp` is already recorded (correct CEI ordering,
+  per the existing `SP-01` fix) before the void `ships.createShips` call; a silent no-op here burns
+  the player's entire 28-day cooldown window for zero ships, with no revert to signal the problem.
+- `Ships.shipBreaker` → `universalCredits.mint`: the most severe instance — the ship(s) are already
+  irreversibly `_burn`'d (state committed earlier in the same loop) before the trailing
+  `universalCredits.mint(msg.sender, totalReward)` call; if `universalCredits` were ever
+  misconfigured, the player's ships are gone permanently with silently zero compensation and no
+  revert.
+
+None of these are reachable today — every constructor is correctly wired per
+`ignition/modules/DeployAndConfig.ts`, and none of the four addresses has a live setter that could
+drift post-deploy except `Ships.setConfig`, which is `onlyOwner`. Same "latent footgun, not a live
+exploit" framing `HA4-06` used before it was fixed.
+
+**Fix:** apply the same pattern `DroneStorefront._setDroneEnergyCoresAddress` already established
+for `HA4-06` — reject `address(0)` and `.code.length == 0` — at each of these four assignment
+points (the three constructors, and inside `Ships.setConfig` for at least `universalCredits`, the
+one actually consumed via a void call).
+
+---
 
 ### L-03 — `Ships.syncShipCosts` Is Fully Permissionless and Can Corrupt Storage for ID 0
 
@@ -931,6 +1382,74 @@ pressure here. Regression tests added to `test/EffectResolverTargetStatus.test.t
 already built for exactly this purpose under SP-02) — a "rejects fled/destroyed friendly target"
 case and an "accepts live friendly target" control for each resolver, reusing `MockGameView`
 rather than a full game. Full suite: 655/655 passing.
+
+---
+
+### ~~HA4-06 — `DroneStorefront.turnInCores` Silently No-Ops If `droneEnergyCores` Is Ever Misconfigured to a Non-Contract Address~~
+
+**File:** `contracts/DroneStorefront.sol:61` (`turnInCores`, calls `droneEnergyCores.burnFrom`) ·
+**Found 2026-09-28.**
+
+`IDroneEnergyCores.burnFrom` has no return value. A call to a void-returning function against an
+address with no bytecode (e.g. an accidentally-unset or typo'd address) **succeeds silently**
+rather than reverting, since there's no return data to fail decoding on. If `droneEnergyCores` were
+ever misconfigured (neither the constructor nor `setDroneEnergyCoresAddress` checks for a
+zero/non-contract address), `turnInCores` would still advance `droneCoreTier[msg.sender]` — which
+`FreeShipClaim` reads directly as a permanent +1-free-ship-per-tier bonus — without any DEC
+actually being burned. **Not reachable via the current deploy path**: the constructor is correctly
+wired to the just-deployed `DroneEnergyCores` address (`ignition/modules/DeployAndConfig.ts:384-392`).
+A latent footgun for any future re-wiring, and the worst kind of failure mode — silent success, not
+a loud revert.
+
+**Fix:** require `_droneEnergyCores != address(0)` (ideally `.code.length > 0`) in both the
+constructor and the setter.
+
+**Status: Fixed 2026-09-29.** Factored both the constructor and the setter through a shared private
+`_setDroneEnergyCoresAddress`, which now rejects both a zero address and any address with no
+deployed code:
+
+```solidity
+function _setDroneEnergyCoresAddress(address _droneEnergyCores) private {
+    if (
+        _droneEnergyCores == address(0) ||
+        _droneEnergyCores.code.length == 0
+    ) revert InvalidDroneEnergyCoresAddress();
+    droneEnergyCores = _droneEnergyCores;
+}
+```
+
+`DroneStorefront.sol` compiles at 1.434/24.576 KiB deployed — ample headroom. Regression test added
+to `test/DroneStorefront.test.ts` ("Should reject a zero or non-contract droneEnergyCores address at
+construction and via the setter (HA4-06)"): both a zero address and a real-but-non-contract EOA
+address are rejected at construction and via the setter, while a real deployed contract is still
+accepted. Verified genuine: temporarily removed the check from `_setDroneEnergyCoresAddress` in
+place, reran the test (0 passing, 1 failing, confirming it fails without the fix), then restored the
+real fix from a backup copy and confirmed the restored file was byte-identical to the backup via
+`diff`.
+
+---
+
+### ~~HA4-07 — `DroneStorefront.turnInCores` External Call Precedes State Write (CEI Ordering)~~
+
+**File:** `contracts/DroneStorefront.sol:61` (same function as HA4-06) · **Found 2026-09-28.**
+
+`burnFrom` (external) executes before `droneCoreTier[msg.sender]` is incremented, with no
+`nonReentrant` guard. **Not currently exploitable**: `DroneEnergyCores` is a stock OpenZeppelin
+`ERC20`/`ERC20Burnable` with no transfer/burn hooks, so there's no live callback surface today —
+this would only become a real reentrancy vector under the same owner-controlled precondition as
+HA4-06 (an intentionally or accidentally non-standard token wired in), already covered by this
+project's accepted I-02 centralization risk. Worth reordering (increment tier, then burn) as free
+defense-in-depth, same spirit as the already-applied `L-02` fix in `pre-audit.md`.
+
+**Status: Fixed 2026-09-29.** Reordered `turnInCores` to checks-effects-interactions: the
+`droneCoreTier[msg.sender]` state write now happens before the external `burnFrom` call, not after.
+Pure defense-in-depth, matching the `HA3-05` precedent in this same document — there is no live
+exploit today (`DroneEnergyCores` is a stock OpenZeppelin `ERC20Burnable` with no hooks, so no
+reentrancy surface currently exists), and no malicious-token test double exists in this project to
+independently exercise the reordering, so no dedicated regression test was added for this finding
+specifically. Confirmed via the existing `turnInCores` test coverage in `test/DroneStorefront.test.ts`
+continuing to pass unchanged with the new ordering (tier progression, exact-amount enforcement, and
+max-tier rejection all still behave identically).
 
 ---
 

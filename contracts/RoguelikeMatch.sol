@@ -16,6 +16,7 @@ import "./RoguelikeNodeMap.sol";
 import "./RoguelikeRun.sol";
 import "./AIBehaviorRegistry.sol";
 import "./IWinEffect.sol";
+import "./IGameEngineRegistry.sol";
 
 // Orchestrates the roguelike campaign mode: a player commits a fleet once
 // (startRun), that roster persists — with accumulated damage — across a
@@ -32,6 +33,10 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     IShips public humanShips;
     Game public game;
     IFleets public fleets;
+    // Optional (2026-09-28): records each new game's engine in a shared
+    // registry for trustless FE lookup — see GameEngineRegistry.sol.
+    // Skipped entirely if unset.
+    IGameEngineRegistry public engineRegistry;
     AIEncounters public aiEncounters;
     IMaps public maps;
     IShipAttributes public shipAttributes;
@@ -40,11 +45,38 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     // Maps each faction (variant) to its own AI decision contract — see
     // AIBehaviorRegistry/IVariantAI.
     AIBehaviorRegistry public aiRegistry;
+    // UA-08 fix (2026-09-29): which aiRegistry was live when each combat
+    // node's game started, read by _decideMove instead of the live
+    // aiRegistry above — so an admin AI balance patch mid-fight can't
+    // change how the opponent thinks partway through a node the human
+    // already committed roster/resources to. See
+    // docs/upgrade-safety-audit-2026-09-29.md UA-08.
+    mapping(uint => address) public aiRegistryAtStart;
+    // UA-11 fix (2026-09-29): campaignAutoHealPercent/isFinalNode/
+    // node win-effects, all pinned at enterCombatNode time and read by
+    // onGameEnded instead of re-deriving them live from current
+    // RoguelikeNodeMap state when the fight concludes — so an admin content
+    // edit mid-fight (adding a child to what was a leaf node, retuning the
+    // heal floor, reconfiguring win effects) can't change what a player who
+    // entered under the old config actually gets on that specific win. See
+    // docs/upgrade-safety-audit-2026-09-29.md UA-11.
+    mapping(uint => uint8) public healPercentAtStart;
+    mapping(uint => bool) public isFinalNodeAtStart;
+    mapping(uint => address[]) private winEffectsAtStart;
 
     // Disjoint from Lobbies' gameId space (small ints) and from
     // SinglePlayerMatch.NODE_MATCH_ID_OFFSET (2**40) — see that constant's
     // own comment for the JS-safe-integer reasoning this mirrors.
     uint public constant ROGUELIKE_GAME_ID_OFFSET = 2 ** 41;
+    // HA4-01 fix (2026-09-28) — same reasoning as
+    // SinglePlayerMatch.ENGINE_ID_BLOCK_SIZE/engineIndex's own comment: a
+    // second RoguelikeMatch instance's matchCount starts fresh at 0, so
+    // without this its first game would collide with the first instance's
+    // first game in the shared GameEngineRegistry.engineOfGame mapping and
+    // revert startRun-adjacent calls unconditionally. Index 0 reproduces
+    // today's exact numbering unchanged.
+    uint public constant ENGINE_ID_BLOCK_SIZE = 2 ** 64;
+    uint public immutable engineIndex;
     uint public matchCount;
 
     mapping(uint gameId => address player) public gameIdToPlayer;
@@ -94,7 +126,8 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         address _shipAttributes,
         address _nodeMap,
         address _runLedger,
-        address _aiRegistry
+        address _aiRegistry,
+        uint _engineIndex
     ) Ownable(msg.sender) {
         aiShips = AIShips(_aiShips);
         humanShips = IShips(_humanShips);
@@ -106,6 +139,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         nodeMap = RoguelikeNodeMap(_nodeMap);
         runLedger = RoguelikeRun(_runLedger);
         aiRegistry = AIBehaviorRegistry(_aiRegistry);
+        engineIndex = _engineIndex;
     }
 
     function setAIShipsAddress(address _aiShips) external onlyOwner {
@@ -118,6 +152,10 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
 
     function setGameAddress(address _game) external onlyOwner {
         game = Game(_game);
+    }
+
+    function setEngineRegistry(address _registry) external onlyOwner {
+        engineRegistry = IGameEngineRegistry(_registry);
     }
 
     function setFleetsAddress(address _fleets) external onlyOwner {
@@ -174,7 +212,8 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             rootNodeId,
             initialCostCap,
             _shipIds,
-            fleetId
+            fleetId,
+            requiredVariant
         );
 
         emit RunStarted(msg.sender, _campaignId, rootNodeId);
@@ -204,7 +243,22 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         fleets.clearFleet(run.reservationFleetId);
 
         matchCount++;
-        gameId = ROGUELIKE_GAME_ID_OFFSET + matchCount;
+        gameId =
+            ROGUELIKE_GAME_ID_OFFSET +
+            engineIndex *
+            ENGINE_ID_BLOCK_SIZE +
+            matchCount;
+        // UA-08 fix: pin this combat node's AI registry for its duration.
+        aiRegistryAtStart[gameId] = address(aiRegistry);
+        // UA-11 fix: pin this combat node's heal floor, final-node status,
+        // and win-effects list, all as of entry — see the fields' own
+        // comment above.
+        healPercentAtStart[gameId] = nodeMap.campaignAutoHealPercent(
+            run.campaignId
+        );
+        isFinalNodeAtStart[gameId] =
+            nodeMap.getChildren(_targetNodeId).length == 0;
+        winEffectsAtStart[gameId] = nodeMap.getNodeWinEffects(_targetNodeId);
 
         uint humanFleetId = fleets.createFleet(
             gameId,
@@ -231,6 +285,9 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             node.mapId,
             node.maxScore
         );
+        if (address(engineRegistry) != address(0)) {
+            engineRegistry.recordGameEngine(gameId, address(game));
+        }
 
         // Seed persisted damage from a previous node, if any (0 = never
         // damaged this run — the fresh 100% calculateShipAttributes just
@@ -455,7 +512,9 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         // not found (destroyed, or individually retreated — either way
         // Game._removeShipFromGame already deleted its Attributes, so it
         // simply isn't found here).
-        uint8 healPercent = nodeMap.campaignAutoHealPercent(run.campaignId);
+        // UA-11 fix: pinned at entry (see healPercentAtStart), not the
+        // live campaign config.
+        uint8 healPercent = healPercentAtStart[_gameId];
         uint[] memory oldRoster = run.rosterShipIds;
         uint[] memory survivors = new uint[](oldRoster.length);
         uint survivorCount;
@@ -477,7 +536,9 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         uint[] memory newRoster = new uint[](survivorCount);
         for (uint i = 0; i < survivorCount; i++) newRoster[i] = survivors[i];
 
-        bool isFinalNode = nodeMap.getChildren(run.currentNodeId).length == 0;
+        // UA-11 fix: pinned at entry (see isFinalNodeAtStart), not the live
+        // node graph.
+        bool isFinalNode = isFinalNodeAtStart[_gameId];
         runLedger.setRoster(player, newRoster);
 
         // Pluggable win effects (bonus currency, extra heal beyond the
@@ -496,9 +557,9 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         // brick every future win at a node that references it — same
         // "one bad entry shouldn't take down the whole batch" reasoning as
         // the try/catch already used above for game.getShipAttributes.
-        address[] memory winEffects = nodeMap.getNodeWinEffects(
-            run.currentNodeId
-        );
+        // UA-11 fix: pinned at entry (see winEffectsAtStart), not the live
+        // node config.
+        address[] memory winEffects = winEffectsAtStart[_gameId];
         for (uint i = 0; i < winEffects.length; i++) {
             try
                 IWinEffect(winEffects[i]).onWin(player, run.currentNodeId)
@@ -668,12 +729,12 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         // Chosen by variant first (each faction's AI is built around its own
         // abilities), then by archetype inside that faction's contract. A
         // variant with no registered AI reverts NoAIForVariant.
+        // UA-08 fix: pinned registry (see aiRegistryAtStart), not the live
+        // aiRegistry field.
         return
-            aiRegistry.aiFor(info.variant).decide(
-                ctx,
-                info.archetype,
-                info.special
-            );
+            AIBehaviorRegistry(aiRegistryAtStart[_gameId])
+                .aiFor(info.variant)
+                .decide(ctx, info.archetype, info.special);
     }
 
     function _findUnmovedShip(

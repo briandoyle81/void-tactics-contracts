@@ -159,6 +159,10 @@ contract UTCLotteryHook is BaseHook, Ownable {
     event DrawStarted(uint256 indexed drawId, uint256 requestId, uint256 totalWeight);
     event DrawResolved(uint256 indexed drawId, address indexed winner);
     event DrawResolvedNoWinner(uint256 indexed drawId);
+    // HA4-02 fix (2026-09-28): emitted instead of DrawResolved when the
+    // picked winner can't actually receive the prize (e.g. a contract that
+    // reverts in onERC721Received) — see resolveDraw's own comment.
+    event PrizeMintFailed(uint256 indexed drawId, address indexed winner);
     event PrizeQueued(uint256 indexed queueIndex);
     event PrizeQueueCleared();
 
@@ -416,18 +420,38 @@ contract UTCLotteryHook is BaseHook, Ownable {
             }
         }
 
+        // HA4-02 fix (2026-09-28): the mint is wrapped in try/catch instead
+        // of called bare. `drawResolved[_drawId] = true` above still isn't
+        // enough on its own — a revert here unwinds the ENTIRE transaction,
+        // including that write — so without this, a picked winner that's a
+        // contract reverting on ERC-721 receipt (trivial and cheap for any
+        // participant to arrange for themselves via `hookData`, see
+        // _extractPlayer) would permanently brick this exact draw forever:
+        // fulfillRandomRequest returns the same fixed value on every retry,
+        // so the same winner gets picked every time. Falling through to
+        // PrizeMintFailed instead lets the draw resolve either way — the
+        // only one who loses out is the winner who made themselves
+        // unable to receive it, not every other honest participant.
+        // A queued curated template is only dequeued on success, so a
+        // failed mint doesn't burn it — it stays queued for the next draw.
         if (queueTail > queueHead) {
             PrizeTemplate memory t = prizeQueue[queueHead];
-            delete prizeQueue[queueHead];
-            queueHead++;
-            ships.createSpecificShip(winner, _buildPrizeShip(_drawId, t));
+            try ships.createSpecificShip(winner, _buildPrizeShip(_drawId, t)) returns (uint) {
+                delete prizeQueue[queueHead];
+                queueHead++;
+                emit DrawResolved(_drawId, winner);
+            } catch {
+                emit PrizeMintFailed(_drawId, winner);
+            }
         } else {
             // Random 4-star fallback — see the PrizeTemplate comment above
             // for exactly why tier 4 + amount 1 produces this.
-            ships.createShips(winner, 1, fallbackVariant, 4, false);
+            try ships.createShips(winner, 1, fallbackVariant, 4, false) {
+                emit DrawResolved(_drawId, winner);
+            } catch {
+                emit PrizeMintFailed(_drawId, winner);
+            }
         }
-
-        emit DrawResolved(_drawId, winner);
     }
 
     // Hand-crafts this draw's prize from a dequeued template, rather than

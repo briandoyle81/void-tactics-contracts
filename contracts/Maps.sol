@@ -4,6 +4,8 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./Types.sol";
+import "./IGameEngineRegistry.sol";
+import "./IGameEndedView.sol";
 
 contract Maps is Ownable {
     using EnumerableSet for EnumerableSet.UintSet;
@@ -83,17 +85,37 @@ contract Maps is Ownable {
     // it never touches createFullPresetMap's/createPresetMap's ABI.
     mapping(uint => string) public mapName;
 
-    // Address of the Game contract that can apply preset maps
-    address public gameAddress;
+    // Game instances allowed to apply preset maps to a game and to read
+    // scoring tiles (applyPresetMapToGame/applyPresetScoringMapToGame/
+    // getScoreAndZeroOut). Was a single `gameAddress` until 2026-09-28 —
+    // widened to an allowlist (mirroring isMapEditor's own shape) so more
+    // than one Game "engine" instance can be trusted at once: maps/preset
+    // data stay shared across every engine, only the gameplay-rules
+    // contracts (Game itself, orchestrators) get redeployed on a rules
+    // change. See the engine-registry plan.
+    mapping(address => bool) public isAllowedGame;
 
     // Addresses allowed to create/edit preset maps (in addition to the owner)
     mapping(address => bool) public isMapEditor;
+
+    // UA-12 fix (2026-09-29): optional (unset falls back to the old,
+    // unguarded behavior — same "unwired = permissive" convention this
+    // codebase already uses elsewhere, e.g. RoguelikeNodeMap.runLedger).
+    // When set, lets setBlockedTile/setImpassableTile/setScoringTile look
+    // up which Game contract a _gameId actually lives on and refuse the
+    // edit if that specific game has already ended — closing the "admin
+    // meant to pass a _mapId but passed a live game's _gameId instead"
+    // footgun for the most consequential case (an ended game has no reason
+    // to ever need a live tile edit). See
+    // docs/upgrade-safety-audit-2026-09-29.md UA-12.
+    IGameEngineRegistry public engineRegistry;
 
     // Custom error for invalid positions
     error InvalidPosition();
     error MapNotFound();
     error NotGameContract();
     error NotMapEditor();
+    error GameAlreadyEnded();
 
     event MapEditorSet(address indexed editor, bool allowed);
     event MapNameSet(uint indexed mapId, string name);
@@ -164,11 +186,30 @@ contract Maps is Ownable {
     }
 
     /**
-     * @dev Set the address of the Game contract
-     * @param _gameAddress The address of the Game contract
+     * @dev Authorize (or revoke) a Game instance to apply preset maps and
+     *      read/zero scoring tiles.
+     * @param _game The Game contract's address
+     * @param _allowed Whether it's authorized
      */
-    function setGameAddress(address _gameAddress) external onlyOwner {
-        gameAddress = _gameAddress;
+    function setIsAllowedGame(address _game, bool _allowed) external onlyOwner {
+        isAllowedGame[_game] = _allowed;
+    }
+
+    function setEngineRegistry(address _engineRegistry) external onlyOwner {
+        engineRegistry = IGameEngineRegistry(_engineRegistry);
+    }
+
+    // UA-12 fix: shared by the three debug tile setters below. Permissive
+    // (returns false, i.e. "not ended") whenever the registry isn't wired,
+    // or this gameId was never recorded in it — never blocks a legitimate
+    // edit just because the trustless lookup itself isn't available.
+    function _gameHasEnded(uint _gameId) private view returns (bool) {
+        if (address(engineRegistry) == address(0)) return false;
+        address engine = engineRegistry.engineOfGame(_gameId);
+        if (engine == address(0)) return false;
+        (GameMetadata memory metadata, ) = IGameEndedView(engine)
+            .getGameMetadataAndTurnState(_gameId);
+        return metadata.ended;
     }
 
     /**
@@ -504,7 +545,7 @@ contract Maps is Ownable {
      * @param _mapId The preset map ID to apply
      */
     function applyPresetMapToGame(uint _gameId, uint _mapId) external {
-        if (msg.sender != gameAddress && msg.sender != owner())
+        if (!isAllowedGame[msg.sender] && msg.sender != owner())
             revert NotGameContract();
         if (_mapId == 0 || _mapId > mapCount) revert MapNotFound();
 
@@ -528,7 +569,7 @@ contract Maps is Ownable {
      * @param _mapId The preset scoring map ID to apply
      */
     function applyPresetScoringMapToGame(uint _gameId, uint _mapId) external {
-        if (msg.sender != gameAddress && msg.sender != owner())
+        if (!isAllowedGame[msg.sender] && msg.sender != owner())
             revert NotGameContract();
         if (_mapId == 0 || _mapId > mapCount) revert MapNotFound();
 
@@ -765,6 +806,7 @@ contract Maps is Ownable {
         if (_row < 0 || _row >= GRID_HEIGHT || _col < 0 || _col >= GRID_WIDTH) {
             revert InvalidPosition();
         }
+        if (_gameHasEnded(_gameId)) revert GameAlreadyEnded();
         uint idx = _bitIndex(_row, _col);
         blockedTilesBitmap[_gameId] = _blocked
             ? _setBit(blockedTilesBitmap[_gameId], idx)
@@ -788,6 +830,7 @@ contract Maps is Ownable {
         if (_row < 0 || _row >= GRID_HEIGHT || _col < 0 || _col >= GRID_WIDTH) {
             revert InvalidPosition();
         }
+        if (_gameHasEnded(_gameId)) revert GameAlreadyEnded();
         uint idx = _bitIndex(_row, _col);
         impassableTilesBitmap[_gameId] = _impassable
             ? _setBit(impassableTilesBitmap[_gameId], idx)
@@ -810,6 +853,7 @@ contract Maps is Ownable {
         if (_row < 0 || _row >= GRID_HEIGHT || _col < 0 || _col >= GRID_WIDTH) {
             revert InvalidPosition();
         }
+        if (_gameHasEnded(_gameId)) revert GameAlreadyEnded();
         scoringTiles[_gameId][_row][_col] = _points;
         uint packed = _packPosition(_row, _col);
         if (_points > 0) {
@@ -887,7 +931,7 @@ contract Maps is Ownable {
         int16 _row,
         int16 _col
     ) public returns (uint8) {
-        if (msg.sender != gameAddress && msg.sender != owner())
+        if (!isAllowedGame[msg.sender] && msg.sender != owner())
             revert NotGameContract();
         uint8 points = scoringTiles[_gameId][_row][_col];
         if (onlyOnceTiles[_gameId][_row][_col]) {

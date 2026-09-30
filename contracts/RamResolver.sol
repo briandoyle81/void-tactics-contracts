@@ -15,8 +15,12 @@ import "./IGameView.sol";
 // IEffectResolver's contract); reachability is already gated to faction 1
 // by Game.factionAbilityResolvers[1] being the only mapping entry pointing
 // here, so this contract doesn't re-check variant itself.
+//
+// Engine-agnostic by construction (2026-09-28) — see EMPResolver's header
+// comment: reads live ship state via IGameView(msg.sender) instead of a
+// stored `game` address, so the same deployed instance works for every
+// future engine with no reconfiguration.
 contract RamResolver is IEffectResolver {
-    IGameView public game;
     address public owner;
 
     // Ram's own range, decoupled from the equipment.special/ShipAttributes
@@ -29,14 +33,8 @@ contract RamResolver is IEffectResolver {
     error InvalidRamTarget();
     error OutOfRange();
 
-    constructor(address _game) {
-        game = IGameView(_game);
+    constructor() {
         owner = msg.sender;
-    }
-
-    function setGameAddress(address _game) external {
-        if (msg.sender != owner) revert NotOwner();
-        game = IGameView(_game);
     }
 
     function setRange(uint8 _range) external {
@@ -52,6 +50,7 @@ contract RamResolver is IEffectResolver {
         int16 actingRow,
         int16 actingCol
     ) external view returns (SpecialEffect[] memory effects) {
+        IGameView game = IGameView(msg.sender);
         ShipPosition memory acting = game.getShipPosition(gameId, shipId);
         ShipPosition memory target = game.getShipPosition(gameId, targetShipId);
         if (acting.shipId == 0 || target.shipId == 0) revert InvalidRamTarget();

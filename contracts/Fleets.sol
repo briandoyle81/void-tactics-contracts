@@ -17,13 +17,18 @@ contract Fleets is Ownable, IFleets {
     // RoguelikeResupply mint) falls back to the historical hardcoded column
     // rule below, unchanged.
     IMaps public maps;
-    // Contracts (e.g. Lobbies, SinglePlayerMatch) authorized to manage
-    // fleets, mirroring Game.isAllowedToStartGames. Widened from a single
-    // lobbiesAddress so more than one orchestrator can create/clear fleets
-    // (Lobbies-free vs-AI matches via SinglePlayerMatch, alongside PvP via
-    // Lobbies).
+    // Contracts (e.g. Lobbies, SinglePlayerMatch, and — since 2026-09-28 —
+    // every Game engine instance) authorized to manage fleets, mirroring
+    // Game.isAllowedToStartGames. Widened from a single lobbiesAddress so
+    // more than one orchestrator can create/clear fleets (Lobbies-free
+    // vs-AI matches via SinglePlayerMatch, alongside PvP via Lobbies).
+    // Game.sol's own direct calls (removeShipFromFleet/clearFleet, for
+    // ship-destruction/game-end cleanup) used to check a separate single
+    // `gameAddress` — folded into this same allowlist instead, so any
+    // number of Game instances (one per gameplay-rules "engine") can be
+    // authorized without a dedicated single-address slot that only ever
+    // fits one of them. See the engine-registry plan.
     mapping(address => bool) public isAllowedToManageFleets;
-    address public gameAddress;
 
     mapping(uint => Fleet) public fleets;
     uint public fleetCount;
@@ -44,6 +49,7 @@ contract Fleets is Ownable, IFleets {
     error ShipNotFound();
     error DuplicatePosition();
     error ArrayLengthMismatch();
+    error DuplicateShipId();
     error InvalidPosition();
     error MixedVariantFleet();
 
@@ -56,10 +62,6 @@ contract Fleets is Ownable, IFleets {
         bool _isAllowed
     ) public onlyOwner {
         isAllowedToManageFleets[_address] = _isAllowed;
-    }
-
-    function setGameAddress(address _gameAddress) public onlyOwner {
-        gameAddress = _gameAddress;
     }
 
     function setShipAttributes(address _shipAttributes) public onlyOwner {
@@ -93,6 +95,21 @@ contract Fleets is Ownable, IFleets {
         // Validate that shipIds and startingPositions arrays have the same length
         if (_shipIds.length != _startingPositions.length)
             revert ArrayLengthMismatch();
+
+        // HA4-05 fix (2026-09-29): reject a duplicate shipId at this one
+        // shared entry point, before the more expensive per-ship validation
+        // below even starts. Game.startGame's own calculateShipAttributes
+        // already rejects a duplicate via its snapshot-once guard, but
+        // RoguelikeMatch's map-agnostic reservation fleets (mapId 0) never
+        // reach that check — a duplicate there silently succeeds here and
+        // only surfaces as a permanent dead end the first time the player
+        // tries to actually enter combat with it. O(n^2) is fine at this
+        // game's realistic fleet sizes (topping out around a dozen ships).
+        for (uint i = 0; i < _shipIds.length; i++) {
+            for (uint j = i + 1; j < _shipIds.length; j++) {
+                if (_shipIds[i] == _shipIds[j]) revert DuplicateShipId();
+            }
+        }
 
         // Split into its own function purely to relieve legacy-codegen
         // stack pressure — createFleet's own frame was already close to its
@@ -223,7 +240,7 @@ contract Fleets is Ownable, IFleets {
     }
 
     function clearFleet(uint _fleetId) external {
-        if (!isAllowedToManageFleets[msg.sender] && msg.sender != gameAddress)
+        if (!isAllowedToManageFleets[msg.sender])
             revert NotAllowedToManageFleets();
 
         Fleet storage fleet = fleets[_fleetId];
@@ -241,7 +258,7 @@ contract Fleets is Ownable, IFleets {
     }
 
     function removeShipFromFleet(uint _fleetId, uint _shipId) external {
-        if (!isAllowedToManageFleets[msg.sender] && msg.sender != gameAddress)
+        if (!isAllowedToManageFleets[msg.sender])
             revert NotAllowedToManageFleets();
 
         Fleet storage fleet = fleets[_fleetId];

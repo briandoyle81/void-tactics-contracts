@@ -319,6 +319,58 @@ describe("SinglePlayerMatch", function () {
     );
   });
 
+  it("keeps an active match's AI on the registry that was live when it started, even if the owner swaps it mid-match (UA-08)", async function () {
+    const {
+      ships,
+      game,
+      maps,
+      nodeMap,
+      singlePlayerMatch,
+      aiEncounters,
+      randomManager,
+      humanShips,
+      humanGame,
+      humanSinglePlayerMatch,
+      singlePlayerMatchOther,
+      human,
+      owner,
+    } = await loadFixture(deploySinglePlayerFixture);
+
+    const mapId = await setupBasicAIEncounter(maps, aiEncounters);
+    const nodeId = await createCampaignNode(nodeMap, mapId);
+    await purchaseAndConstructHumanShip(ships, randomManager, humanShips, human);
+
+    await humanSinglePlayerMatch.write.startNodeMatch([
+      nodeId,
+      [1n],
+      [{ row: 0, col: 0 }],
+    ]);
+    const gameId = NODE_MATCH_ID_OFFSET + 1n;
+
+    await humanGame.write.moveShip(
+      [gameId, 1n, 0, 0, ActionType.Pass, 0n],
+      { account: human.account },
+    );
+
+    // Simulate an admin AI rollout mid-match: swap in a brand-new, EMPTY
+    // registry (no variant registered at all) — a routine "ship an AI
+    // balance patch" action, not a rare migration.
+    const emptyRegistry = await hre.viem.deployContract(
+      "AIBehaviorRegistry",
+      [],
+    );
+    await singlePlayerMatch.write.setAIRegistryAddress(
+      [emptyRegistry.address],
+      { account: owner.account },
+    );
+
+    // The AI's turn in this already-active match must still succeed — if
+    // this were a live read, it would revert NoAIForVariant from the new,
+    // unconfigured registry instead.
+    await expect(singlePlayerMatchOther.write.takeAITurn([gameId])).to.not
+      .be.rejected;
+  });
+
   it("reverts takeAITurn when it isn't the AI's turn", async function () {
     const {
       ships,
@@ -598,16 +650,16 @@ describe("SinglePlayerMatch", function () {
   });
 
   describe("Deploy-seeded starter maps", function () {
-    it("seeds sixty-five starter maps scaling from an easy opener (m01) through a matched-difficulty midpoint (m15) to the hardest finale (f06)", async function () {
+    it("seeds sixty-six starter maps scaling from an easy opener (m01) through a matched-difficulty midpoint (m15) to the hardest finale (f06)", async function () {
       const { maps, aiEncounters } = await loadFixture(deploySinglePlayerFixture);
 
       // 30 campaign maps (ids 1-30), 30 dedicated roguelike maps (ids
       // 31-60 — every roguelike Combat node has its own map since the
       // 2026-09-23 pass, not just the first three missions' variant-1
-      // rosters), plus 5 PvP-only maps (ids 61-65, not attached to any
-      // node). Everything below reads campaign maps by id, so the rest
-      // don't disturb it.
-      expect(await maps.read.mapCount()).to.equal(65n);
+      // rosters), plus 6 PvP-only maps (ids 61-66, not attached to any
+      // node — pvp06 added 2026-09-28). Everything below reads campaign
+      // maps by id, so the rest don't disturb it.
+      expect(await maps.read.mapCount()).to.equal(66n);
 
       // Map 1 (m01, id 1): easiest mission — thematically generated "Open
       // Void" terrain (light cover, long sightlines), one contested
@@ -691,7 +743,7 @@ describe("SinglePlayerMatch", function () {
         "Asteroid Field — Roguelike Approach",
       );
 
-      // PvP (ids 61-65): id 61 is pvp01, the first-ever PvP preset map.
+      // PvP (ids 61-66): id 61 is pvp01, the first-ever PvP preset map.
       expect(await maps.read.mapName([61n])).to.equal(
         "Twin Pillars — Open Contract",
       );

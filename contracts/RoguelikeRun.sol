@@ -36,6 +36,14 @@ struct Run {
     // game apart from a stale/abandoned one calling back late (see
     // docs/pre-audit.md SP-04).
     uint activeGameId;
+    // UA-16 fix (2026-09-29): the campaign's required faction, pinned as of
+    // startRun — RoguelikeResupply.resupplyModifyRoster reads this instead
+    // of re-deriving it live from RoguelikeNodeMap.campaignRequiredVariant,
+    // so tightening/loosening a campaign's requirement mid-run doesn't
+    // change what a run that already started under the old rule enforces
+    // for its own resupply stops. 0 = unrestricted (same convention as the
+    // live source).
+    uint16 requiredVariantAtStart;
 }
 
 // Per-player roguelike run ledger — dumb state only (no Game/Fleets/token
@@ -66,6 +74,16 @@ contract RoguelikeRun is Ownable {
 
     mapping(address => bool) public isAllowedToModifyRuns;
 
+    // UA-05 fix (2026-09-29): how many active runs currently have
+    // currentNodeId == this node, across every player. Lets
+    // RoguelikeNodeMap.removeChild refuse to remove a node's LAST
+    // remaining child while any run is actually standing there right now —
+    // without this, an ordinary content edit (pruning a dead-end branch,
+    // reworking a hub) can silently strand an in-progress run with zero
+    // forward moves and no way back, through no fault of the player. See
+    // docs/upgrade-safety-audit-2026-09-29.md UA-05.
+    mapping(uint => uint) public activeRunsAtNode;
+
     error NotAllowedToModifyRuns();
     error RunAlreadyActive();
 
@@ -93,7 +111,8 @@ contract RoguelikeRun is Ownable {
         uint _rootNodeId,
         uint _initialCostCap,
         uint[] calldata _initialRoster,
-        uint _reservationFleetId
+        uint _reservationFleetId,
+        uint16 _requiredVariant
     ) external onlyAllowed {
         Run storage run = runs[_player];
         if (run.status == RunStatus.Active) revert RunAlreadyActive();
@@ -105,12 +124,19 @@ contract RoguelikeRun is Ownable {
         run.currentCostCap = _initialCostCap;
         run.reservationFleetId = _reservationFleetId;
         run.rosterShipIds = _initialRoster;
+        run.requiredVariantAtStart = _requiredVariant;
+        activeRunsAtNode[_rootNodeId] += 1;
 
         emit RunStarted(_player, _campaignId);
     }
 
     function setCurrentNode(address _player, uint _nodeId) external onlyAllowed {
-        runs[_player].currentNodeId = _nodeId;
+        Run storage run = runs[_player];
+        if (run.currentNodeId != 0) {
+            activeRunsAtNode[run.currentNodeId] -= 1;
+        }
+        activeRunsAtNode[_nodeId] += 1;
+        run.currentNodeId = _nodeId;
     }
 
     function lockNode(address _player, uint _nodeId) external onlyAllowed {
@@ -185,7 +211,11 @@ contract RoguelikeRun is Ownable {
     }
 
     function endRun(address _player, bool _won) external onlyAllowed {
-        runs[_player].status = _won ? RunStatus.Won : RunStatus.Ended;
+        Run storage run = runs[_player];
+        if (run.currentNodeId != 0) {
+            activeRunsAtNode[run.currentNodeId] -= 1;
+        }
+        run.status = _won ? RunStatus.Won : RunStatus.Ended;
         emit RunEnded(_player, _won);
     }
 

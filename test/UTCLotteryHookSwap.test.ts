@@ -767,6 +767,93 @@ describe("UTCLotteryHook — real swap integration", function () {
     expect(await hookAsOwner.read.queueLength()).to.equal(0n);
   });
 
+  it("resolves a draw instead of permanently reverting when the picked winner can't receive the prize NFT (HA4-02)", async function () {
+    // Regression test for docs/audit-2.md HA4-02: _extractPlayer trusts
+    // whatever address hookData names, with no check it's related to the
+    // real swap signer — any seller can credit a contract that reverts on
+    // ERC-721 receipt as the "winner." Before the fix, resolveDraw's mint
+    // call was unguarded, so a picked winner like that would revert the
+    // whole transaction forever (fulfillRandomRequest returns the same
+    // fixed value on every retry, so the same winner is picked every time).
+    const fixture = await loadFixture(deployFixture);
+    const { hook, hookAsOwner, trader, trader2 } = fixture;
+    await setUpPoolAndLiquidity(fixture);
+
+    const poison = await hre.viem.deployContract("MockNonReceivingContract");
+
+    // minParticipants=1 makes the single credited entry the draw's ONLY
+    // participant, so it's picked with certainty — no probabilistic
+    // "which of several participants wins" ambiguity to work around.
+    await hookAsOwner.write.setMinParticipants([1n]);
+    // Same neutralization runFullDrawCycle uses: floors effectiveTotalWeight
+    // to exactly totalWeight, so there's no "no winner" zone to land in.
+    await hookAsOwner.write.setMaxWeightPerEntryWei([
+      await hook.read.minEntryThresholdWei(),
+    ]);
+    await hookAsOwner.write.setMaxWinProbabilityDenominator([1n]);
+
+    // trader sells, but hookData credits `poison` as the player — exactly
+    // the attack _extractPlayer's lack of a signer check allows.
+    const poisonHookData = encodeAbiParameters(
+      [{ type: "address" }],
+      [getAddress(poison.address)],
+    );
+    await fixture.swapRouter.write.swap(
+      [
+        fixture.key,
+        {
+          zeroForOne: false,
+          amountSpecified: -parseEther("10"),
+          sqrtPriceLimitX96: MAX_SQRT_PRICE - 1n,
+        },
+        { takeClaims: false, settleUsingBurn: false },
+        poisonHookData,
+      ],
+      { account: trader.account },
+    );
+    expect(await hook.read.currentDrawId()).to.equal(0n);
+
+    // Any qualifying sell after the interval closes draw 0 and starts draw
+    // 1 — but this triggering sell is itself recorded into draw 0 BEFORE
+    // the draw index advances, so it credits `poison` too (a different real
+    // signer, trader2, but the same attributed player) rather than a second
+    // real address, which would otherwise dilute the single-participant
+    // setup above into a coin flip between poison and a real winner.
+    await hre.network.provider.send("evm_increaseTime", [24 * 60 * 60 + 1]);
+    await hre.network.provider.send("evm_mine");
+    await fixture.swapRouter.write.swap(
+      [
+        fixture.key,
+        {
+          zeroForOne: false,
+          amountSpecified: -parseEther("10"),
+          sqrtPriceLimitX96: MAX_SQRT_PRICE - 1n,
+        },
+        { takeClaims: false, settleUsingBurn: false },
+        poisonHookData,
+      ],
+      { account: trader2.account },
+    );
+    expect(await hook.read.currentDrawId()).to.equal(1n);
+
+    await hre.network.provider.send("evm_mine");
+
+    // Must NOT revert — this is the actual fix under test.
+    await hook.write.resolveDraw([0n]);
+    expect(await hook.read.drawResolved([0n])).to.equal(true);
+
+    const failedEvents = await hook.getEvents.PrizeMintFailed();
+    expect(failedEvents.length).to.equal(1);
+    expect(getAddress(failedEvents[0].args.winner!)).to.equal(
+      getAddress(poison.address),
+    );
+    expect(failedEvents[0].args.drawId).to.equal(0n);
+
+    // No DrawResolved for a draw that failed to mint.
+    const resolvedEvents = await hook.getEvents.DrawResolved();
+    expect(resolvedEvents.find((e) => e.args.drawId === 0n)).to.be.undefined;
+  });
+
   it("falls back to a random 4-star ship when the queue is empty", async function () {
     const fixture = await loadFixture(deployFixture);
     const { ships } = fixture;

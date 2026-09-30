@@ -14,8 +14,15 @@ contract GameResults is Ownable {
     // Total number of games tracked
     uint public totalGamesTracked;
 
-    // Address of the Game contract that can record results
-    address public gameContract;
+    // Contracts allowed to record game results — in practice each is a
+    // PvPMatch instance (PvPMatch.onGameEnded calls recordGameResult, not
+    // Game.sol directly — "gameContract" is a legacy name). Was a single
+    // address until 2026-09-28; widened to an allowlist so a future
+    // gameplay-rules "engine" upgrade's new PvPMatch can be authorized
+    // without displacing the previous one, whose in-flight games still
+    // need to be able to record their results. See the engine-registry
+    // plan.
+    mapping(address => bool) public isAllowedRecorder;
 
     // Tutorial claim contract: may record tutorial win/loss into player stats only
     address public tutorialClaimContract;
@@ -35,7 +42,7 @@ contract GameResults is Ownable {
         uint totalGames
     );
 
-    event GameContractSet(address indexed gameContract);
+    event RecorderSet(address indexed recorder, bool allowed);
 
     event TutorialClaimContractSet(address indexed tutorialClaimContract);
 
@@ -49,12 +56,17 @@ contract GameResults is Ownable {
     constructor() Ownable(msg.sender) {}
 
     /**
-     * @dev Set the Game contract address
-     * @param _gameContract The address of the Game contract
+     * @dev Authorize (or revoke) a contract (in practice, a PvPMatch
+     *      instance) to record game results.
+     * @param _recorder The contract's address
+     * @param _allowed Whether it's authorized
      */
-    function setGameContract(address _gameContract) external onlyOwner {
-        gameContract = _gameContract;
-        emit GameContractSet(_gameContract);
+    function setIsAllowedRecorder(
+        address _recorder,
+        bool _allowed
+    ) external onlyOwner {
+        isAllowedRecorder[_recorder] = _allowed;
+        emit RecorderSet(_recorder, _allowed);
     }
 
     /**
@@ -96,7 +108,7 @@ contract GameResults is Ownable {
         address _winner,
         address _loser
     ) external {
-        if (msg.sender != gameContract) revert NotGameContract();
+        if (!isAllowedRecorder[msg.sender]) revert NotGameContract();
         // Validate inputs
         if (_winner == address(0) || _loser == address(0))
             revert InvalidGameResult();

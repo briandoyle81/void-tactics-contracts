@@ -85,7 +85,6 @@ describe("Special resolvers read the game-pinned attributes version", function (
 
     const gameView = await hre.viem.deployContract("MockGameView", []);
     const resolver = await hre.viem.deployContract(resolverName as any, [
-      gameView.address,
       shipAttributes.address,
       SLOT1,
     ]);
@@ -115,8 +114,21 @@ describe("Special resolvers read the game-pinned attributes version", function (
         attrsAtVersion(version),
       ]);
 
+    // resolver.resolveEffect is invoked through gameView (not directly) so
+    // the resolver sees gameView.address as msg.sender — see resolvers'
+    // engine-agnostic-by-construction comment (2026-09-28): they read live
+    // ship state via IGameView(msg.sender), which would otherwise resolve
+    // to this test's own account instead of the mock.
     const resolve = () =>
-      resolver.read.resolveEffect([GAME_ID, ACTING, VARIANT, TARGET, 0, 0]);
+      gameView.read.callResolveEffect([
+        resolver.address,
+        GAME_ID,
+        ACTING,
+        VARIANT,
+        TARGET,
+        0,
+        0,
+      ]);
 
     return { pinActingShipTo, resolve };
   }

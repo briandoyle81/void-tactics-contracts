@@ -184,9 +184,9 @@ contract RoguelikeResupply is Ownable {
             }
         }
 
-        uint16 requiredVariant = nodeMap.campaignRequiredVariant(
-            run.campaignId
-        );
+        // UA-16 fix (2026-09-29): pinned at startRun (run.requiredVariantAtStart),
+        // not the live campaign config.
+        uint16 requiredVariant = run.requiredVariantAtStart;
         for (uint i = 0; i < _shipIdsToAdd.length; i++) {
             Ship memory ship = humanShips.getShip(_shipIdsToAdd[i]);
             if (ship.owner != msg.sender) revert ShipNotOwned();
