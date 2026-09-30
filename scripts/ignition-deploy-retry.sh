@@ -28,11 +28,15 @@ the next wait would exceed 3 minutes. Every other known-transient error
 (nonce mismatch, IGN411, underpriced gas) keeps retrying at the fixed
 --sleep-seconds interval with no limit, unchanged.
 
-Safety check: for any --network other than "hardhat"/"localhost", this
-script refuses to run at all unless ignition/modules/DeployAndConfig.ts has
-`const PRODUCTION = true;` -- that flag gates real-deploy-only setup (e.g.
-transferring contract ownership away from the deployer), defaults to false
-so test fixtures work, and is easy to forget to flip before a real deploy.
+PRODUCTION flag handling: for any --network other than "hardhat"/"localhost",
+this script sets `const PRODUCTION = true;` in
+ignition/modules/DeployAndConfig.ts before deploying (that flag gates
+real-deploy-only setup, e.g. transferring contract ownership away from the
+deployer, and defaults to false so test fixtures work) and always restores
+it to `const PRODUCTION = false;` on exit -- success, failure, or
+interruption (Ctrl-C) -- via a trap, so it can never be left committed as
+true. It does NOT run the test suite afterward; run `npx hardhat test`
+yourself to confirm PRODUCTION=false didn't leave anything broken.
 EOF
 }
 
@@ -90,22 +94,42 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Safety check: DeployAndConfig.ts's `PRODUCTION` flag gates real-deploy-only
-# setup (e.g. transferring contract ownership away from the deployer) --
-# see its own comment there. It defaults to false so every test fixture can
-# deploy the same module via hre.ignition.deploy(DeployModule) without that
-# gated setup breaking owner-gated test calls. That also means it's easy to
-# forget to flip before a real deploy, silently shipping a "live" contract
-# still owned by the deployer instead of the intended production owner.
-# Refuse to proceed against anything other than the local ephemeral network
-# unless PRODUCTION is explicitly true.
 DEPLOY_MODULE_FILE="ignition/modules/DeployAndConfig.ts"
+
+# Rewrites the `const PRODUCTION = <true|false>;` line in-place. Uses python3
+# (already a dependency of this script's retry-detection logic below) rather
+# than sed, to sidestep BSD-vs-GNU sed -i flag differences across macOS/Linux.
+set_production_flag() {
+  local value="$1" # "true" or "false"
+  python3 -c "
+import pathlib, re, sys
+p = pathlib.Path('$DEPLOY_MODULE_FILE')
+s = p.read_text()
+s2, n = re.subn(r'^const PRODUCTION = (?:true|false);', 'const PRODUCTION = $value;', s, count=1, flags=re.M)
+if n == 0:
+    sys.exit(\"Could not find 'const PRODUCTION = ...;' in $DEPLOY_MODULE_FILE\")
+p.write_text(s2)
+"
+}
+
+# DeployAndConfig.ts's `PRODUCTION` flag gates real-deploy-only setup (e.g.
+# transferring contract ownership away from the deployer) -- see its own
+# comment there. It defaults to false so every test fixture can deploy the
+# same module via hre.ignition.deploy(DeployModule) without that gated setup
+# breaking owner-gated test calls. Flip it to true only for the duration of
+# an actual real-network deploy, and always restore it to false on exit --
+# success, failure, or interruption (Ctrl-C) -- via a trap, so a real deploy
+# can never again leave it committed as true (see CLAUDE.md's documented
+# 2026-08-26 incident: PRODUCTION left true broke every test with no error
+# pointing at the actual cause).
 if [[ "$NETWORK" != "hardhat" && "$NETWORK" != "localhost" ]]; then
-  if ! grep -qE '^const PRODUCTION = true;' "$DEPLOY_MODULE_FILE"; then
-    echo "Refusing to deploy to network '$NETWORK': $DEPLOY_MODULE_FILE has PRODUCTION = false (or unrecognized)." >&2
-    echo "Set 'const PRODUCTION = true;' in $DEPLOY_MODULE_FILE before deploying to a real network, then re-run." >&2
-    exit 3
-  fi
+  echo "Setting PRODUCTION = true in $DEPLOY_MODULE_FILE for this real-network deploy..."
+  set_production_flag true
+  restore_production_flag() {
+    echo "Restoring PRODUCTION = false in $DEPLOY_MODULE_FILE..."
+    set_production_flag false
+  }
+  trap restore_production_flag EXIT
 fi
 
 # Deploy a single module with an automatic retry loop on transient errors.
