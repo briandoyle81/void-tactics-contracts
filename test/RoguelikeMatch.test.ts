@@ -911,6 +911,63 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       expect(attrsNextNode.hullPoints).to.equal(expectedPersisted);
     });
 
+    it("carries a disabled (0 HP) survivor forward at 1 HP under a 0% floor, not as the 0 = full-HP sentinel", async function () {
+      const { deployed, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
+        await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, game } =
+        deployed;
+      const { campaignId, rootNodeId, mapId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const nextNode = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode, false]);
+      // No auto-heal floor configured (defaults to 0%).
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+      const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
+      const aiShipId = AI_SHIP_ID_OFFSET + 1n;
+
+      await humanGame.write.moveShip([
+        gameId,
+        1n,
+        0,
+        0,
+        ActionType.Pass,
+        0n,
+      ]);
+      // Human ship disabled (0 HP, still on the board), then the AI
+      // surrenders — the human wins with a disabled survivor.
+      await setShipHullPointsToZero(game.address, gameId, 1n);
+      await setShipHullPointsToZero(game.address, gameId, aiShipId);
+      await otherRoguelikeMatch.write.takeAITurn([gameId]);
+
+      const gameData = (await game.read.getGame([gameId])) as GameDataView;
+      expect(gameData.metadata.ended).to.equal(true);
+      expect(gameData.metadata.winner.toLowerCase()).to.equal(
+        human.account.address.toLowerCase(),
+      );
+      expect(
+        await deployed.roguelikeRun.read.getShipHP([human.account.address, 1n]),
+      ).to.equal(1);
+
+      await humanRoguelikeMatch.write.enterCombatNode([
+        nextNode,
+        [{ row: 0, col: 0 }],
+      ]);
+      const attrsNext = await game.read.getShipAttributes([
+        ROGUELIKE_GAME_ID_OFFSET + 2n,
+        1n,
+      ]);
+      expect(attrsNext.hullPoints).to.equal(1);
+    });
+
     it("ends the run as Won and permanently releases the roster at a childless (final) node", async function () {
       const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
         await loadFixture(deployFixture);

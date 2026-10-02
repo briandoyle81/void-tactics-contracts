@@ -528,6 +528,11 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
                     ? attrs.hullPoints
                     : floor;
                 if (healed > attrs.maxHullPoints) healed = attrs.maxHullPoints;
+                // A disabled (0 HP) ship still on the board at a win, under
+                // a 0% floor, would otherwise store 0 — RoguelikeRun's
+                // "never damaged = full HP" sentinel — and silently re-enter
+                // the next node fully healed. Carry it forward at 1 HP.
+                if (healed == 0) healed = 1;
                 runLedger.setShipHP(player, shipId, uint8(healed));
                 survivors[survivorCount] = shipId;
                 survivorCount++;

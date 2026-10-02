@@ -1885,6 +1885,91 @@ const DeployModule = buildModule("DeployModule", (m) => {
     roguelikeEdgeCalls.push(call);
   });
 
+  // ---- Node titles/descriptions + roguelike win effects ------------------
+  // Optional seed fields (2026-10-02), written by the frontend's mission seed
+  // export (void-tactics-fe app/utils/missionSeedExport.ts): `title`/
+  // `description` on campaign and roguelike nodes, `winEffects` (catalog
+  // keys, run in order) on roguelike nodes. Nodes without them are skipped,
+  // so seed files without these fields deploy exactly as before.
+  //
+  // NodeContentRegistry doesn't check node existence, but each batch still
+  // waits for its graph's node loop so it lands after the ids it names are
+  // assigned. Batched in small chunks: every title/description is fresh
+  // string storage, and one call for a whole ~35-node graph would be a very
+  // large single transaction.
+  const NODE_CONTENT_CHUNK_SIZE = 10;
+  const nodeContentCalls: ReturnType<typeof m.call>[] = [];
+  const seedNodeContent = (
+    isRoguelike: boolean,
+    nodes: { key: string; title?: string; description?: string }[],
+    idByKey: Record<string, bigint>,
+    nodeCallByKey: Record<string, ReturnType<typeof m.call>>,
+  ) => {
+    const withContent = nodes.filter((n) => n.title != null);
+    for (let i = 0; i < withContent.length; i += NODE_CONTENT_CHUNK_SIZE) {
+      const chunk = withContent.slice(i, i + NODE_CONTENT_CHUNK_SIZE);
+      nodeContentCalls.push(
+        m.call(
+          nodeContentRegistry,
+          "setNodeContentBatch",
+          [
+            chunk.map(() => isRoguelike),
+            chunk.map((n) => idByKey[n.key]),
+            chunk.map((n) => n.title ?? ""),
+            chunk.map((n) => n.description ?? ""),
+          ],
+          {
+            id: `Seed${isRoguelike ? "Roguelike" : "Campaign"}NodeContent${i / NODE_CONTENT_CHUNK_SIZE + 1}`,
+            after: chunk.map((n) => nodeCallByKey[n.key]),
+          },
+        ),
+      );
+    }
+  };
+  seedNodeContent(
+    false,
+    starterContent.campaignNodes as { key: string; title?: string; description?: string }[],
+    nodeIds,
+    nodeCalls,
+  );
+  seedNodeContent(true, roguelikeContent.nodes, roguelikeNodeIds, roguelikeNodeCalls);
+
+  // Catalog keys match the frontend's WIN_EFFECT_CATALOG (app/hooks/useWinEffects.ts).
+  const WIN_EFFECTS_BY_KEY: Record<
+    string,
+    | typeof decBonusWinEffect
+    | typeof healAboveFloorWinEffect
+    | typeof shipGrantWinEffect
+  > = {
+    DEC_BONUS_WIN_EFFECT: decBonusWinEffect,
+    HEAL_ABOVE_FLOOR_WIN_EFFECT: healAboveFloorWinEffect,
+    SHIP_GRANT_WIN_EFFECT: shipGrantWinEffect,
+  };
+  const roguelikeWinEffectCalls: ReturnType<typeof m.call>[] = [];
+  roguelikeContent.nodes.forEach((node: any) => {
+    const effectKeys: string[] = node.winEffects ?? [];
+    if (effectKeys.length === 0) return;
+    const effects = effectKeys.map((k) => {
+      const effect = WIN_EFFECTS_BY_KEY[k];
+      if (!effect) {
+        throw new Error(`Roguelike node "${node.key}" lists unknown win effect "${k}"`);
+      }
+      return effect;
+    });
+    const capitalizedKey = `${node.key[0].toUpperCase()}${node.key.slice(1)}`;
+    roguelikeWinEffectCalls.push(
+      m.call(
+        roguelikeNodeMap,
+        "setNodeWinEffects",
+        [roguelikeNodeIds[node.key], effects],
+        {
+          id: `SetRoguelike${capitalizedKey}WinEffects`,
+          after: [roguelikeNodeCalls[node.key]],
+        },
+      ),
+    );
+  });
+
   // Shattered Hive Campaign medal: soulbound, awarded via player-initiated
   // claimMedal() once the campaign's true final node (f06 — the end of the
   // reconverged m/s/f storyline, not d06's dead-end branch; see
@@ -2577,6 +2662,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
         setRoguelikeRootCall,
         setRoguelikeRunLedgerCall,
         ...roguelikeEdgeCalls,
+        ...roguelikeWinEffectCalls,
       ],
     });
 
@@ -2591,7 +2677,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
 
     m.call(nodeContentRegistry, "transferOwnership", [MAP_EDITOR], {
       id: "TransferNodeContentRegistryOwnership",
-      after: [allowNodeContentEditorCall],
+      after: [allowNodeContentEditorCall, ...nodeContentCalls],
     });
 
     m.call(roguelikeMatch, "transferOwnership", [MAP_EDITOR], {
