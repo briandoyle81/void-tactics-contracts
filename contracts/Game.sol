@@ -70,9 +70,10 @@ contract Game is Ownable {
     // SpecialEffectsLib's hull-delta application has no per-mode context
     // to key a narrower cap off of. Damage is unaffected; a ship already
     // above this ceiling when it's lowered is left alone, not healed down
-    // to it (see SpecialEffectsLib._applyHullDelta). Defaults to 100 (no
-    // cap beyond the existing max-HP ceiling — unchanged prior behavior).
-    uint8 public healCapPercent = 100;
+    // to it (see SpecialEffectsLib._applyHullDelta). Defaults to 80
+    // (2026-10-05 design decision: no heal can raise a ship above 80% of
+    // max — matched by the roguelike's campaign auto-heal floor, also 80).
+    uint8 public healCapPercent = 80;
 
     mapping(uint => GameData) games;
     uint public gameCount;
@@ -84,11 +85,15 @@ contract Game is Ownable {
     int16 public constant GRID_WIDTH = 17; // Number of columns
     int16 public constant GRID_HEIGHT = 11; // Number of rows
 
+    // creator/joiner indexed (2026-10-08) so a client can discover its own
+    // games with a topic-filtered log query/subscription; lobbyId gave up
+    // its index for them (3-indexed-topic limit) — a node-match gameId has
+    // no lobby anyway, and a PvP gameId == its lobbyId.
     event GameStarted(
         uint indexed gameId,
-        uint indexed lobbyId,
-        address creator,
-        address joiner
+        uint lobbyId,
+        address indexed creator,
+        address indexed joiner
     );
 
     event GameUpdate(uint indexed gameId);

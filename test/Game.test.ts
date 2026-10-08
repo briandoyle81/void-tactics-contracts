@@ -6289,7 +6289,7 @@ describe("Game", function () {
         creatorGame.write.setHealCapPercent([50]),
       ).to.be.rejected;
 
-      expect(await game.read.healCapPercent()).to.equal(100);
+      expect(await game.read.healCapPercent()).to.equal(80);
     });
 
     it("keeps an active game's heal cap pinned to whatever was live at startGame, even if the owner lowers it mid-game (UA-06)", async function () {
@@ -6363,8 +6363,8 @@ describe("Game", function () {
       await ships.write.constructShip([2n], { account: creator.account });
       await ships.write.constructShip([6n], { account: joiner.account });
 
-      // Game starts with the default 100% cap still live.
-      expect(await game.read.healCapPercent()).to.equal(100);
+      // Game starts with the default 80% cap still live.
+      expect(await game.read.healCapPercent()).to.equal(80);
       await creatorLobbies.write.createLobby([
         1000n,
         300n,
@@ -6399,8 +6399,8 @@ describe("Game", function () {
 
       // RepairDrones' fixed strength (40) heals the ship in full, uncapped
       // by the new 1% value — proving this game's heal cap stayed pinned
-      // to the 100% that was live when it started, not the value the owner
-      // changed mid-game.
+      // to the 80% that was live when it started (40 is under 80% of max),
+      // not the value the owner changed mid-game.
       const ship2AttrsAfter = await game.read.getShipAttributes([1n, 2n]);
       expect(ship2AttrsAfter.hullPoints).to.equal(40);
     });

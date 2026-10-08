@@ -79,12 +79,6 @@ contract Maps is Ownable {
     // editable afterward — see Types.sol's MapMode for what enforces this.
     mapping(uint => MapMode) public mapMode;
 
-    // presetMapId => a human-readable/thematic name. Purely descriptive —
-    // no on-chain logic reads this; it exists for FE display. Additive: set
-    // via setMapName after creation, never a creation-function parameter, so
-    // it never touches createFullPresetMap's/createPresetMap's ABI.
-    mapping(uint => string) public mapName;
-
     // Game instances allowed to apply preset maps to a game and to read
     // scoring tiles (applyPresetMapToGame/applyPresetScoringMapToGame/
     // getScoreAndZeroOut). Was a single `gameAddress` until 2026-09-28 —
@@ -118,7 +112,6 @@ contract Maps is Ownable {
     error GameAlreadyEnded();
 
     event MapEditorSet(address indexed editor, bool allowed);
-    event MapNameSet(uint indexed mapId, string name);
     event DeploymentZoneSet(uint indexed mapId, bool isCreator);
 
     constructor() Ownable(msg.sender) {}
@@ -232,20 +225,6 @@ contract Maps is Ownable {
     function setMapMode(uint _mapId, MapMode _mode) external onlyMapEditor {
         if (_mapId == 0 || _mapId > mapCount) revert MapNotFound();
         mapMode[_mapId] = _mode;
-    }
-
-    /**
-     * @dev Set (or change) a preset map's display name. Purely descriptive.
-     * @param _mapId The map ID to name
-     * @param _name The name to display for this map
-     */
-    function setMapName(
-        uint _mapId,
-        string calldata _name
-    ) external onlyMapEditor {
-        if (_mapId == 0 || _mapId > mapCount) revert MapNotFound();
-        mapName[_mapId] = _name;
-        emit MapNameSet(_mapId, _name);
     }
 
     /**

@@ -86,7 +86,10 @@ function mergeSimilarColors(centroids, weights, threshold) {
   return items.map((it) => it.color);
 }
 
-function buildPalette(imageData, k, iterations = 10) {
+// mergeThreshold defaults to MERGE_THRESHOLD (tuned for this project's ship
+// pixel art); image-to-svg.js exposes it as --merge, since photo-like art
+// needs a lower value to keep its subtler tones apart.
+function buildPalette(imageData, k, iterations = 10, mergeThreshold = MERGE_THRESHOLD) {
   const { data } = imageData;
   const pixels = [];
   for (let i = 0; i < data.length; i += 4) {
@@ -149,7 +152,7 @@ function buildPalette(imageData, k, iterations = 10) {
   }
   const rounded = centroids.map((c) => c.map(Math.round));
   const weights = finalSums.map((s) => s[3]);
-  return mergeSimilarColors(rounded, weights, MERGE_THRESHOLD);
+  return mergeSimilarColors(rounded, weights, mergeThreshold);
 }
 
 function nearestPaletteIdx(r, g, b, palette) {
@@ -185,4 +188,4 @@ function quantize(imageData, palette) {
   return { data: out, width, height };
 }
 
-module.exports = { buildPalette, quantize };
+module.exports = { buildPalette, quantize, MERGE_THRESHOLD };

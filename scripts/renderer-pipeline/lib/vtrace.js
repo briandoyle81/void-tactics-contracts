@@ -229,9 +229,12 @@ function brighten([r, g, b], percent) {
 // `brightness` (percent, default 0/off) linearly brightens the final fill
 // colors only -- see brighten() -- letting a whole run be lightened
 // without touching clustering, ordering, or geometry at all.
+//
+// `merge` (optional) overrides lib/palette.js's MERGE_THRESHOLD for this
+// call; omitted, the PSD pipeline's behavior is unchanged.
 async function vectorizeLayerFragment(layer, config) {
-  const { k, epsilon = 0, brightness = 0 } = config;
-  const palette = buildPalette(layer, k);
+  const { k, epsilon = 0, brightness = 0, merge } = config;
+  const palette = buildPalette(layer, k, undefined, merge);
   const quantized = quantize(layer, palette);
   const { ordered, stackIndex, width, height } = orderPaletteByArea(quantized, palette);
 

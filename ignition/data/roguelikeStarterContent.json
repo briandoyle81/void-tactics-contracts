@@ -1,7 +1,7 @@
 {
   "campaign": {
     "initialCostCap": 500,
-    "autoHealPercent": 25,
+    "autoHealPercent": 80,
     "requiredVariant": 1
   },
   "root": "m01",

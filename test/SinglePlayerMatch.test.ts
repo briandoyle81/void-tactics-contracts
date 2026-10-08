@@ -404,6 +404,139 @@ describe("SinglePlayerMatch", function () {
     ).to.be.rejectedWith("NotAITurn");
   });
 
+  describe("takeAITurns (batched AI turns)", function () {
+    // One human ship vs three AI ships: once the human's only ship has
+    // moved, the turn stays with the AI until all three of its ships have
+    // moved too — the one case where batching actually saves transactions.
+    async function startOneVsThree() {
+      const f = await loadFixture(deploySinglePlayerFixture);
+      const mapId = await setupBasicAIEncounter(f.maps, f.aiEncounters);
+      const configId = await f.aiEncounters.read.aiShipConfigCount();
+      await f.aiEncounters.write.setMapPlacement([mapId, 4, 16, configId]);
+      await f.aiEncounters.write.setMapPlacement([mapId, 8, 16, configId]);
+      const nodeId = await createCampaignNode(f.nodeMap, mapId);
+      await purchaseAndConstructHumanShip(
+        f.ships,
+        f.randomManager,
+        f.humanShips,
+        f.human,
+      );
+      await f.humanSinglePlayerMatch.write.startNodeMatch([
+        nodeId,
+        [1n],
+        [{ row: 0, col: 0 }],
+      ]);
+      const gameId = NODE_MATCH_ID_OFFSET + 1n;
+      await f.humanGame.write.moveShip(
+        [gameId, 1n, 0, 0, ActionType.Pass, 0n],
+        { account: f.human.account },
+      );
+      return { ...f, gameId };
+    }
+
+    async function aiTurnsIn(f: any, hash: `0x${string}`) {
+      const receipt = await f.publicClient.waitForTransactionReceipt({ hash });
+      return parseEventLogs({
+        abi: f.singlePlayerMatch.abi,
+        logs: receipt.logs,
+        eventName: "AITurnTaken",
+      });
+    }
+
+    it("moves every AI ship the turn stays with the AI for in one transaction, then stops once it's the human's turn", async function () {
+      const f = await startOneVsThree();
+
+      const hash = await f.singlePlayerMatchOther.write.takeAITurns([
+        f.gameId,
+        20n,
+      ]);
+      const turns = await aiTurnsIn(f, hash);
+
+      // All three AI ships moved in this single call (round 1's tail).
+      // Exact count past that depends on who opens round 2 and on combat
+      // RNG, so it's only bounded, not pinned.
+      expect(turns.length).to.be.at.least(3);
+      expect(turns.length).to.be.lessThan(20);
+
+      const g = (await f.game.read.getGame([f.gameId])) as GameDataView;
+      if (!g.metadata.ended) {
+        expect(g.turnState.currentTurn.toLowerCase()).to.equal(
+          f.human.account.address.toLowerCase(),
+        );
+      }
+    });
+
+    it("never moves more than _maxMoves ships", async function () {
+      const f = await startOneVsThree();
+
+      const hash = await f.singlePlayerMatchOther.write.takeAITurns([
+        f.gameId,
+        2n,
+      ]);
+      expect((await aiTurnsIn(f, hash)).length).to.equal(2);
+
+      // The third AI ship is still unmoved, so the turn is still the AI's.
+      const g = (await f.game.read.getGame([f.gameId])) as GameDataView;
+      expect(g.turnState.currentTurn.toLowerCase()).to.equal(
+        f.singlePlayerMatch.address.toLowerCase(),
+      );
+    });
+
+    it("reverts when it isn't the AI's turn, like takeAITurn", async function () {
+      const f = await loadFixture(deploySinglePlayerFixture);
+      const mapId = await setupBasicAIEncounter(f.maps, f.aiEncounters);
+      const nodeId = await createCampaignNode(f.nodeMap, mapId);
+      await purchaseAndConstructHumanShip(
+        f.ships,
+        f.randomManager,
+        f.humanShips,
+        f.human,
+      );
+      await f.humanSinglePlayerMatch.write.startNodeMatch([
+        nodeId,
+        [1n],
+        [{ row: 0, col: 0 }],
+      ]);
+
+      await expect(
+        f.singlePlayerMatchOther.write.takeAITurns([
+          NODE_MATCH_ID_OFFSET + 1n,
+          5n,
+        ]),
+      ).to.be.rejectedWith("NotAITurn");
+    });
+  });
+
+  it("indexes GameStarted by creator and joiner so a player can find their own games by topic", async function () {
+    const f = await loadFixture(deploySinglePlayerFixture);
+    const mapId = await setupBasicAIEncounter(f.maps, f.aiEncounters);
+    const nodeId = await createCampaignNode(f.nodeMap, mapId);
+    await purchaseAndConstructHumanShip(
+      f.ships,
+      f.randomManager,
+      f.humanShips,
+      f.human,
+    );
+    await f.humanSinglePlayerMatch.write.startNodeMatch([
+      nodeId,
+      [1n],
+      [{ row: 0, col: 0 }],
+    ]);
+
+    const mine = await f.game.getEvents.GameStarted(
+      { creator: f.human.account.address },
+      { fromBlock: 0n },
+    );
+    expect(mine.length).to.equal(1);
+    expect(mine[0].args.gameId).to.equal(NODE_MATCH_ID_OFFSET + 1n);
+
+    const notMine = await f.game.getEvents.GameStarted(
+      { creator: f.other.account.address },
+      { fromBlock: 0n },
+    );
+    expect(notMine.length).to.equal(0);
+  });
+
   it("reverts startNodeMatch when the node does not exist", async function () {
     const { humanSinglePlayerMatch } = await loadFixture(
       deploySinglePlayerFixture,
@@ -710,43 +843,30 @@ describe("SinglePlayerMatch", function () {
       }
     });
 
-    // DeployAndConfig.ts's setMapName/setCreatorZone/setJoinerZone loop
+    // DeployAndConfig.ts's setCreatorZone/setJoinerZone loop
     // (added alongside the 2026-09-23 map-redesign pass) had no test
     // coverage at all until now — every other map test here only checked
     // Maps.sol's functions in isolation, never that the deploy module's own
     // per-map wiring actually ran against real seeded content. Found via a
     // full-repo audit (2026-09-25) and confirmed against the live Base
     // Sepolia deploy before writing this.
-    it("wires a real display name and custom deployment zone onto deploy-seeded maps, across all three map id bands", async function () {
+    it("wires a custom deployment zone onto deploy-seeded maps, across all three map id bands", async function () {
       const { maps } = await loadFixture(deploySinglePlayerFixture);
 
       // Campaign (ids 1-30): m01 uses the default (vertical) zone shape --
       // an unset zone reads back as an empty array, not the default
       // rectangle itself (see isValidDeploymentTile's fallback).
-      expect(await maps.read.mapName([1n])).to.equal("Open Void — Sector 1");
       expect(await maps.read.getCreatorZonePositions([1n])).to.deep.equal([]);
       expect(await maps.read.getJoinerZonePositions([1n])).to.deep.equal([]);
 
       // m02 uses a custom (diagonal) zone shape -- both sides should come
       // back with real, non-empty tile sets.
-      expect(await maps.read.mapName([2n])).to.equal(
-        "Asteroid Field — Sector 2",
-      );
       const m02Creator = await maps.read.getCreatorZonePositions([2n]);
       const m02Joiner = await maps.read.getJoinerZonePositions([2n]);
       expect(m02Creator.length).to.be.greaterThan(0);
       expect(m02Joiner.length).to.be.greaterThan(0);
 
-      // Roguelike (ids 31-60): id 31 is rlM01, dedicated content with its
-      // own hand-tuned name (not shared with any campaign map's name).
-      expect(await maps.read.mapName([31n])).to.equal(
-        "Asteroid Field — Roguelike Approach",
-      );
-
       // PvP (ids 61-66): id 61 is pvp01, the first-ever PvP preset map.
-      expect(await maps.read.mapName([61n])).to.equal(
-        "Twin Pillars — Open Contract",
-      );
       expect(await maps.read.mapMode([61n])).to.equal(0); // MapMode.PvP
     });
 

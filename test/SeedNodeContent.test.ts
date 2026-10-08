@@ -3,52 +3,22 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpe
 import hre from "hardhat";
 import { getAddress } from "viem";
 import DeployModule from "../ignition/modules/DeployAndConfig";
-import starterContent from "../ignition/data/singlePlayerStarterContent.json";
 import roguelikeStarterContent from "../ignition/data/roguelikeStarterContent.json";
 
-// Data-driven check of DeployAndConfig.ts's optional node seed fields
-// (2026-10-02): every node that carries `title`/`description` in the seed
-// files gets that content in NodeContentRegistry, every roguelike node gets
-// exactly its `winEffects` list, and nodes without them get nothing. Passes
-// trivially on seed files with none of these fields; meaningful once the
-// frontend's mission seed export writes them.
+// Data-driven check of DeployAndConfig.ts's optional `winEffects` node seed
+// field (2026-10-02): every roguelike node gets exactly its `winEffects`
+// list, and nodes without one get nothing. (Node titles/descriptions used to
+// be seeded into NodeContentRegistry and checked here too; that contract was
+// removed 2026-10-08 — they're frontend-only display data now.)
 type SeedNode = {
   key: string;
-  title?: string;
-  description?: string;
   winEffects?: string[];
 };
 
-describe("Seeded node content and win effects", function () {
+describe("Seeded roguelike node win effects", function () {
   async function deployFixture() {
     return hre.ignition.deploy(DeployModule);
   }
-
-  it("seeds campaign node titles/descriptions from the seed file", async function () {
-    const { nodeContentRegistry } = await loadFixture(deployFixture);
-    const nodes = starterContent.campaignNodes as SeedNode[];
-    for (const [i, node] of nodes.entries()) {
-      const [title, description] = await nodeContentRegistry.read.getNodeContent([
-        false,
-        BigInt(i + 1),
-      ]);
-      expect(title, node.key).to.equal(node.title ?? "");
-      expect(description, node.key).to.equal(node.description ?? "");
-    }
-  });
-
-  it("seeds roguelike node titles/descriptions from the seed file", async function () {
-    const { nodeContentRegistry } = await loadFixture(deployFixture);
-    const nodes = roguelikeStarterContent.nodes as SeedNode[];
-    for (const [i, node] of nodes.entries()) {
-      const [title, description] = await nodeContentRegistry.read.getNodeContent([
-        true,
-        BigInt(i + 1),
-      ]);
-      expect(title, node.key).to.equal(node.title ?? "");
-      expect(description, node.key).to.equal(node.description ?? "");
-    }
-  });
 
   it("seeds roguelike node win effects in order from the seed file", async function () {
     const deployed = await loadFixture(deployFixture);

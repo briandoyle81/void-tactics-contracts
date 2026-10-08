@@ -10,6 +10,7 @@ import {
   tupleToShip,
 } from "./types";
 import DeployModule from "../ignition/modules/DeployAndConfig";
+import roguelikeStarterContent from "../ignition/data/roguelikeStarterContent.json";
 import {
   setShipPosition,
   setShipHullPointsToZero,
@@ -425,6 +426,141 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       await expect(
         humanRoguelikeMatch.write.startRun([campaignId, [2n]]),
       ).to.be.rejectedWith("RunAlreadyActive");
+    });
+  });
+
+  describe("GameLens aggregate views", function () {
+    it("pages a player's owned ships, clamped to their count", async function () {
+      const { deployed, human } = await loadFixture(deployFixture);
+      const { ships, randomManager, gameLens } = deployed;
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      const owner = human.account.address;
+      const total = await ships.read.shipsOwnedCount([owner]);
+      expect(total).to.equal(5n);
+
+      const [firstTwo, t1] = await gameLens.read.getShipsOwned([owner, 0n, 2n]);
+      expect(t1).to.equal(total);
+      expect(firstTwo.map((s: any) => s.id)).to.deep.equal([
+        await ships.read.shipIdOwnedAt([owner, 0n]),
+        await ships.read.shipIdOwnedAt([owner, 1n]),
+      ]);
+
+      const [tail] = await gameLens.read.getShipsOwned([owner, 4n, 10n]);
+      expect(tail.length).to.equal(1);
+      const [past] = await gameLens.read.getShipsOwned([owner, 5n, 1n]);
+      expect(past.length).to.equal(0);
+      // _offset + _limit overflowing must clamp, not revert.
+      const [all] = await gameLens.read.getShipsOwned([owner, 1n, 2n ** 256n - 1n]);
+      expect(all.length).to.equal(4);
+    });
+
+    it("returns each reachable node exactly once, root first, through a diamond and a cycle", async function () {
+      const { deployed } = await loadFixture(deployFixture);
+      const { maps, aiEncounters, roguelikeNodeMap, gameLens } = deployed;
+      const { campaignId, rootNodeId, mapId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const a = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      const b = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      const c = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      // Created but never linked — must not appear.
+      await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, a, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, b, false]);
+      await roguelikeNodeMap.write.addChild([a, c, false]);
+      await roguelikeNodeMap.write.addChild([b, c, false]); // diamond
+      await roguelikeNodeMap.write.addChild([c, a, true]); // cycle
+
+      const graph = await gameLens.read.getCampaignGraph([campaignId]);
+      const ids = graph.map((n: any) => n.id);
+      expect(ids[0]).to.equal(rootNodeId);
+      expect([...ids].sort()).to.deep.equal([rootNodeId, a, b, c].sort());
+      expect(graph[0].children.map((e: any) => e.childId)).to.deep.equal([a, b]);
+
+      expect(await gameLens.read.getCampaignGraph([999n])).to.deep.equal([]);
+    });
+
+    it("walks the whole deploy-seeded roguelike campaign", async function () {
+      const { deployed } = await loadFixture(deployFixture);
+      const { roguelikeNodeMap, gameLens } = deployed;
+      const graph = await gameLens.read.getCampaignGraph([1n]);
+      const ids = graph.map((n: any) => n.id);
+
+      expect(ids[0]).to.equal(await roguelikeNodeMap.read.campaignRootNode([1n]));
+      expect(new Set(ids).size).to.equal(ids.length);
+      expect(ids.length).to.equal(roguelikeStarterContent.nodes.length);
+      const edgeCount = graph.reduce((n: number, node: any) => n + node.children.length, 0);
+      expect(edgeCount).to.equal(roguelikeStarterContent.edges.length);
+      for (const node of graph) expect(node.campaignId).to.equal(1n);
+    });
+
+    it("returns a player's run, roster HP and per-node lock/defeat flags in one call", async function () {
+      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
+        await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, roguelikeRun, randomManager, game, gameLens } =
+        deployed;
+      const player = human.account.address;
+
+      // No run yet: zeroed run, nothing else.
+      const empty = await gameLens.read.getRunView([player]);
+      expect(empty.run.status).to.equal(0);
+      expect(empty.rosterHP).to.deep.equal([]);
+      expect(empty.nodeIds).to.deep.equal([]);
+
+      const { campaignId, rootNodeId, mapId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const childA = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      const childB = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      // childA needs a child so winning it doesn't end the run as Won.
+      const grandchild = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childA, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childB, false]);
+      await roguelikeNodeMap.write.addChild([childA, grandchild, false]);
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        childA,
+        [{ row: 0, col: 0 }],
+      ]);
+      await winCombatNode(
+        game,
+        humanGame,
+        otherRoguelikeMatch,
+        owner,
+        human,
+        ROGUELIKE_GAME_ID_OFFSET + 1n,
+        1n,
+      );
+
+      const v = await gameLens.read.getRunView([player]);
+      expect(v.run.status).to.equal(1); // Active
+      expect(v.run.campaignId).to.equal(campaignId);
+      expect(v.run.rosterShipIds).to.deep.equal([1n]);
+      expect(v.rosterHP).to.deep.equal([
+        await roguelikeRun.read.getShipHP([player, 1n]),
+      ]);
+
+      const graph = await gameLens.read.getCampaignGraph([campaignId]);
+      expect(v.nodeIds).to.deep.equal(graph.map((n: any) => n.id));
+      for (const [i, id] of v.nodeIds.entries()) {
+        expect(v.nodeLocked[i], `locked ${id}`).to.equal(
+          await roguelikeRun.read.isNodeLocked([player, id]),
+        );
+        expect(v.nodeDefeated[i], `defeated ${id}`).to.equal(
+          await roguelikeRun.read.isNodeDefeated([player, id]),
+        );
+      }
+      // Spot-check the flags actually vary, so the loop above isn't
+      // comparing all-false against all-false.
+      expect(v.nodeLocked[v.nodeIds.indexOf(childB)]).to.equal(true);
+      expect(v.nodeDefeated[v.nodeIds.indexOf(childA)]).to.equal(true);
+      expect(v.nodeDefeated[v.nodeIds.indexOf(grandchild)]).to.equal(false);
     });
   });
 

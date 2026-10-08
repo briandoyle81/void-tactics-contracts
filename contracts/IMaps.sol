@@ -131,10 +131,6 @@ interface IMaps {
 
     function mapMode(uint _mapId) external view returns (MapMode);
 
-    function mapName(uint _mapId) external view returns (string memory);
-
-    function setMapName(uint _mapId, string calldata _name) external;
-
     // Deployment zones
     function setCreatorZone(
         uint _mapId,

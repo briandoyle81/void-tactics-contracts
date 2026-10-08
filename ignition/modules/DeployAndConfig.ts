@@ -543,14 +543,14 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // via the additive permission grants below.
   const roguelikeNodeMap = m.contract("RoguelikeNodeMap", [maps]);
 
-  // Permanent on-chain title/description storage for campaign and
-  // roguelike nodes — additive, standalone (doesn't touch NodeMap/
-  // RoguelikeNodeMap's structs), keyed by (isRoguelike, nodeId) since
-  // those two contracts each run their own global node id counter. See the
-  // contract's header comment for the full pull/edit/publish rationale.
-  const nodeContentRegistry = m.contract("NodeContentRegistry");
-
   const roguelikeRun = m.contract("RoguelikeRun");
+  // Stateless read-only aggregate views for the frontend (see GameLens.sol)
+  // — no wiring/permissions needed, and safe to redeploy on its own.
+  const gameLens = m.contract("GameLens", [
+    ships,
+    roguelikeRun,
+    roguelikeNodeMap,
+  ]);
   // Central variant -> AI-contract lookup shared by SinglePlayerMatch and
   // RoguelikeMatch (see AIBehaviorRegistry.sol). Each faction's AI contract
   // is deployed and registered further down, next to that faction's
@@ -741,17 +741,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
     "setNodeEditor",
     [MAP_EDITOR, true],
     { id: "AllowRoguelikeNodeEditor" },
-  );
-
-  // Reuse the same map-editor wallet as the node-content-registry publisher
-  // — lets MAP_EDITOR publish content manually in addition to whatever
-  // backend signer (NODE_CONTENT_PUBLISHER_PRIVATE_KEY, granted separately
-  // once provisioned) drives the batched frontend publish flow.
-  const allowNodeContentEditorCall = m.call(
-    nodeContentRegistry,
-    "setNodeEditor",
-    [MAP_EDITOR, true],
-    { id: "AllowNodeContentEditor" },
   );
 
   const tutorialClaim = m.contract("TutorialClaim", [ships, gameResults]);
@@ -1553,9 +1542,9 @@ const DeployModule = buildModule("DeployModule", (m) => {
     mapIds[map.key] = mapId;
   });
 
-  // Name + custom deployment-zone shape, per map (2026-09-23 pass). Both are
-  // additive setters on an already-created map (Maps.sol's setMapName/
-  // setCreatorZone/setJoinerZone), not creation params, so each only needs
+  // Custom deployment-zone shape, per map (2026-09-23 pass). Additive
+  // setters on an already-created map (Maps.sol's setCreatorZone/
+  // setJoinerZone), not creation params, so each only needs
   // `after: [its own map's creation call]` — none of them create a new map,
   // so unlike the loop above they carry no risk to the "id is array
   // position" guess and can run in any order relative to each other. An
@@ -1564,12 +1553,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // rather than sent as a no-op empty-array write.
   allMaps.forEach((map) => {
     const capitalizedKey = `${map.key[0].toUpperCase()}${map.key.slice(1)}`;
-    if (map.name) {
-      m.call(maps, "setMapName", [mapIds[map.key], map.name], {
-        id: `Name${capitalizedKey}Map`,
-        after: [mapCalls[map.key]],
-      });
-    }
     if (map.creatorZone?.length) {
       m.call(maps, "setCreatorZone", [mapIds[map.key], map.creatorZone], {
         id: `SetCreatorZone${capitalizedKey}`,
@@ -1885,54 +1868,14 @@ const DeployModule = buildModule("DeployModule", (m) => {
     roguelikeEdgeCalls.push(call);
   });
 
-  // ---- Node titles/descriptions + roguelike win effects ------------------
-  // Optional seed fields (2026-10-02), written by the frontend's mission seed
-  // export (void-tactics-fe app/utils/missionSeedExport.ts): `title`/
-  // `description` on campaign and roguelike nodes, `winEffects` (catalog
-  // keys, run in order) on roguelike nodes. Nodes without them are skipped,
-  // so seed files without these fields deploy exactly as before.
-  //
-  // NodeContentRegistry doesn't check node existence, but each batch still
-  // waits for its graph's node loop so it lands after the ids it names are
-  // assigned. Batched in small chunks: every title/description is fresh
-  // string storage, and one call for a whole ~35-node graph would be a very
-  // large single transaction.
-  const NODE_CONTENT_CHUNK_SIZE = 10;
-  const nodeContentCalls: ReturnType<typeof m.call>[] = [];
-  const seedNodeContent = (
-    isRoguelike: boolean,
-    nodes: { key: string; title?: string; description?: string }[],
-    idByKey: Record<string, bigint>,
-    nodeCallByKey: Record<string, ReturnType<typeof m.call>>,
-  ) => {
-    const withContent = nodes.filter((n) => n.title != null);
-    for (let i = 0; i < withContent.length; i += NODE_CONTENT_CHUNK_SIZE) {
-      const chunk = withContent.slice(i, i + NODE_CONTENT_CHUNK_SIZE);
-      nodeContentCalls.push(
-        m.call(
-          nodeContentRegistry,
-          "setNodeContentBatch",
-          [
-            chunk.map(() => isRoguelike),
-            chunk.map((n) => idByKey[n.key]),
-            chunk.map((n) => n.title ?? ""),
-            chunk.map((n) => n.description ?? ""),
-          ],
-          {
-            id: `Seed${isRoguelike ? "Roguelike" : "Campaign"}NodeContent${i / NODE_CONTENT_CHUNK_SIZE + 1}`,
-            after: chunk.map((n) => nodeCallByKey[n.key]),
-          },
-        ),
-      );
-    }
-  };
-  seedNodeContent(
-    false,
-    starterContent.campaignNodes as { key: string; title?: string; description?: string }[],
-    nodeIds,
-    nodeCalls,
-  );
-  seedNodeContent(true, roguelikeContent.nodes, roguelikeNodeIds, roguelikeNodeCalls);
+  // ---- Roguelike win effects ---------------------------------------------
+  // Optional seed field (2026-10-02), written by the frontend's mission seed
+  // export (void-tactics-fe app/utils/missionSeedExport.ts): `winEffects`
+  // (catalog keys, run in order) on roguelike nodes. Nodes without it are
+  // skipped, so seed files without this field deploy exactly as before.
+  // Map names and node titles/descriptions are frontend-only display data
+  // (removed from the contracts 2026-10-08) — the seed files may still
+  // carry them, but nothing here writes them on-chain.
 
   // Catalog keys match the frontend's WIN_EFFECT_CATALOG (app/hooks/useWinEffects.ts).
   const WIN_EFFECTS_BY_KEY: Record<
@@ -2675,11 +2618,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
       ],
     });
 
-    m.call(nodeContentRegistry, "transferOwnership", [MAP_EDITOR], {
-      id: "TransferNodeContentRegistryOwnership",
-      after: [allowNodeContentEditorCall, ...nodeContentCalls],
-    });
-
     m.call(roguelikeMatch, "transferOwnership", [MAP_EDITOR], {
       id: "TransferRoguelikeMatchOwnership",
       after: [setRoguelikeMatchEngineRegistryCall],
@@ -2827,6 +2765,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
 
   return {
     randomManager,
+    gameLens,
     renderSpecial1,
     renderSpecial2,
     renderSpecial3,
@@ -2903,7 +2842,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
     lobbies,
     nodeMap,
     roguelikeNodeMap,
-    nodeContentRegistry,
     roguelikeRun,
     aiBehaviorRegistry,
     variant1AI,

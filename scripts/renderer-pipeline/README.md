@@ -1,4 +1,4 @@
-# Renderer pipeline (written 2026-08-15, updated 2026-08-18)
+# Renderer pipeline (written 2026-08-15, updated 2026-08-18 and 2026-10-05)
 
 Automates turning a Photoshop file into a fully on-chain SVG rendering
 pipeline, matching the shape of the existing hand-built variant-1 pipeline
@@ -59,7 +59,84 @@ another variant from scratch:
 5. Run `npx hardhat test`, including `test/RendererV2.test.ts` and
    `test/RendererSizes.test.ts`.
 
+## Single image (added 2026-10-05)
+
+`image-to-svg.js` converts one raster image to a standalone SVG with the same
+tracer the PSD pipeline uses (`lib/vtrace.js`). It needs no manifest or PSD
+and writes no Solidity. The `.svg` is written next to the source, with the same
+basename (`art/ship.png` -> `art/ship.svg`), overwriting any existing file of
+that name. It refuses to run on an `.svg` input, since that would overwrite the
+input itself.
+
+```
+node scripts/renderer-pipeline/image-to-svg.js <image> [--portrait] [--colors=N] [--simplify=EPSILON] [--brightness=PERCENT] [--merge=DISTANCE]
+```
+
+- **`--portrait`**: the least detail that still reads as the same person
+  (`--merge=45 --simplify=3`). Use it for character art. Explicit flags still
+  override it, e.g. `--portrait --merge=40` for a cleaner face. It was chosen
+  from a sweep on a 256x256 portrait (2026-10-05):
+
+  | Settings | Size | Result |
+  |---|---|---|
+  | merge 40, simplify 3 | 46 KB | cleanest face |
+  | **merge 45, simplify 3 (`--portrait`)** | **41 KB** | features and expression intact |
+  | merge 50, simplify 3 | 35 KB | recognizable; color smears start on the face |
+  | merge 55, simplify 3-4 | 29-30 KB | blotchy; facial shading lost |
+  | merge 65 (default), simplify 0 | 33 KB | face merges into the background |
+
+  Two limits showed up in the sweep:
+  - **Simplify:** above about 4, faces fracture into shards and files get
+    *larger* (overlapping simplified shapes).
+  - **Where the bytes go:** most of what's left is hair texture and
+    background, so removing the background from the source first is the
+    biggest further saving.
+
+- **Formats:** anything node-canvas `loadImage` reads (PNG, JPEG, GIF's first
+  frame, ...). Any image size works, and the SVG's `viewBox` matches the image.
+- **`--colors`** (default 80): the k-means palette ceiling. `lib/palette.js` merges
+  near-duplicate clusters, so the real color count self-limits. Lower it to
+  force a flatter, more posterized look.
+- **`--simplify`** (default 0): the Douglas-Peucker tolerance in source pixels,
+  the same `epsilon` `check-sizes.js` searches over. Raise it for a smaller file
+  with coarser outlines (try 0.5-4).
+- **`--brightness`** (default 0): a percent gain on the output fill colors only,
+  the same as `check-sizes.js --brightness`.
+- **`--merge`** (default 65, `lib/palette.js`'s `MERGE_THRESHOLD`): palette
+  colors closer than this RGB distance are merged. The default suits flat
+  pixel art, but on **photos and painted portraits** it collapses the image to
+  a handful of tones. For those, use about 35 (good detail at moderate size)
+  or 20 (closest to the source, roughly 2.5x larger). Measured on a 256x256
+  portrait (2026-10-05):
+
+  | `--merge` | Colors | Size (simplify 0 / 1) |
+  |---|---|---|
+  | 65 (default) | 6 | 33 KB / 29 KB |
+  | 35 | 19 | 193 KB / 168 KB |
+  | 20 | 45 | 460 KB / 395 KB |
+
+  The PSD pipeline (`check-sizes.js`) doesn't pass this, so it always uses the
+  default.
+- **The output look:** the tracer is tuned for this project's pixel art. Output
+  is straight-edged polygons (no curves), and pixels are snapped to fully opaque
+  or fully transparent at 50% alpha. A fully opaque image (e.g. a JPEG) traces
+  its background as the bottom shape. There is no byte-budget search here; use
+  `check-sizes.js` when a result has to fit in a contract.
+- **From code:**
+  `require("./scripts/renderer-pipeline/image-to-svg").imageToSvg(path, { portrait, colors, simplify, brightness, merge, outPath })`
+  resolves to `{ outPath, width, height, bytes }`. `outPath` (code only)
+  overrides the next-to-the-source default, e.g. for writing several
+  variants into one folder.
+
 ## How it works
+
+**Current state, in brief:** each layer is reduced to a palette
+(`lib/palette.js`). Each palette color is traced with **potrace**, using
+cumulative "stack" masks (`lib/vtrace.js`), and simplified with
+Douglas-Peucker at a tunable `epsilon`. The bullets below record how the
+pipeline got there. The `lib/vtrace.js` bullet's Rounds 2-6 describe the
+earlier **vtracer** design, which is superseded. See "Round 7 onward" below
+for the current tracer.
 
 - `lib/psd.js` -- reads the PSD (`ag-psd` + `canvas`), composites each named
   layer onto the full 256x256 canvas at its absolute position (matching the
@@ -70,14 +147,18 @@ another variant from scratch:
   fight per-pixel shading noise in the source art, but blurring before
   quantizing smeared away real linework (panel seams, rivets) along with
   the noise, producing visibly mushy output. That whole approach was
-  replaced with vtracer (see below), which clusters by color similarity
-  across the image rather than spatial blur, so it preserves edges instead
-  of eroding them.
+  replaced first with vtracer and now with palette quantization plus potrace
+  (see "Round 7 onward"). Both cluster by color similarity across the image
+  rather than by spatial blur, so they preserve edges instead of eroding
+  them.
 - `lib/palette.js` -- reduces a layer to a small palette (farthest-point
   -seeded k-means -- see below for why) and quantizes each pixel to its
   single nearest palette color, with no dithering.
-- `lib/vtrace.js` -- traces the whole already-quantized layer to SVG in
-  **one** call via `@neplex/vectorizer` (a native/napi binding of vtracer),
+- `lib/vtrace.js` -- **currently** traces each palette color's cumulative
+  mask with potrace (see "Round 7 onward"). What follows is the original
+  vtracer design, kept as history: it traced the whole already-quantized
+  layer to SVG in **one** call via `@neplex/vectorizer` (a native/napi
+  binding of vtracer; still listed in `package.json` but no longer used),
   with `mode: Polygon` (guarantees straight-line-only output, `M`/`L`/`Z`,
   matching every existing deployed leaf contract -- verified: zero curve
   commands in any of them) and `hierarchical: Cutout` (partitions the
@@ -235,7 +316,8 @@ another variant from scratch:
   bytecode sizes from the Hardhat artifacts, and binary-searches
   `lib/tiers.js`'s `BANDS` per leaf for the most detail that still fits
   (falling through to a coarser band -- fewer palette colors -- only when
-  the current one's most aggressive `filterSpeckle` setting doesn't) before
+  the current one's most aggressive `epsilon` setting doesn't; this was
+  `filterSpeckle` in the vtracer era) before
   giving up and flagging it -- mirroring, automated, the manual "Shrink X"
   commits variant 1's leaves needed by hand. All leaves currently searching
   share one compile per round (a round probes one candidate per active

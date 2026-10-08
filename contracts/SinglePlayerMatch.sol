@@ -351,16 +351,49 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // unmoved ships once the other side runs out), the turn stays with the
     // AI after this call returns — the caller is expected to call
     // takeAITurn again, once per remaining AI ship, exactly like the human
-    // fires one moveShip transaction per ship. This keeps every call's gas
+    // fires one moveShip transaction per ship (or use takeAITurns below to
+    // move that whole tail in one transaction). This keeps every call's gas
     // cost to "decide and move one ship" instead of scaling with fleet size.
     //
     // Decision-making is delegated to the ship's own faction's AI contract
     // (looked up by variant in aiRegistry, see _decideMove below), which
     // picks a decision tree from the ship's cached archetype.
     function takeAITurn(uint _gameId) external {
+        _takeOneAITurn(_gameId, true);
+    }
+
+    // Batched form of takeAITurn: keeps moving AI ships for as long as the
+    // turn stays with the AI, up to _maxMoves (a caller-chosen gas bound).
+    // Turn order alternates ship-by-ship (Game._switchTurnIfOtherPlayerHasShips),
+    // so this only moves more than one ship when the human has no unmoved
+    // ships left this round — in every other case it's equivalent to a
+    // single takeAITurn. Stops early (without reverting) once the turn
+    // leaves the AI, the game ends, or a ship's move and its Pass fallback
+    // both fail (so a stuck ship can't burn the whole _maxMoves budget
+    // retrying itself). Only the first iteration reverts on "not the AI's
+    // turn"/"game ended", exactly like takeAITurn.
+    function takeAITurns(uint _gameId, uint _maxMoves) external {
+        for (uint i = 0; i < _maxMoves; i++) {
+            if (!_takeOneAITurn(_gameId, i == 0)) return;
+        }
+    }
+
+    // Returns whether a ship actually moved (i.e. whether another call
+    // might still have something to do). _strict: revert instead of
+    // returning false when it isn't the AI's turn / the game has ended.
+    function _takeOneAITurn(
+        uint _gameId,
+        bool _strict
+    ) internal returns (bool) {
         GameDataView memory g = game.getGame(_gameId);
-        if (g.metadata.ended) revert GameEnded();
-        if (g.turnState.currentTurn != address(this)) revert NotAITurn();
+        if (g.metadata.ended) {
+            if (_strict) revert GameEnded();
+            return false;
+        }
+        if (g.turnState.currentTurn != address(this)) {
+            if (_strict) revert NotAITurn();
+            return false;
+        }
 
         // If every one of the AI's remaining ships is at 0 HP (destroyed in
         // combat but still mid the 3-round reactor-critical grace period —
@@ -376,13 +409,13 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         // so it's equally entitled to call forceEndSession.
         if (!_hasAnyLiveShip(g)) {
             game.forceEndSession(_gameId, g.metadata.creator, address(this));
-            return;
+            return false;
         }
 
         uint shipId = _findUnmovedShip(g);
-        if (shipId == 0) return;
+        if (shipId == 0) return false;
 
-        _takeShipTurn(_gameId, g, shipId);
+        return _takeShipTurn(_gameId, g, shipId);
     }
 
     function _hasAnyLiveShip(
@@ -403,7 +436,7 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         uint _gameId,
         GameDataView memory g,
         uint _shipId
-    ) internal {
+    ) internal returns (bool) {
         AIBehavior.Decision memory d = _decideMove(_gameId, g, _shipId);
 
         // Defense in depth: a heuristic bug or an edge case the rules
@@ -420,6 +453,7 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
             )
         {
             emit AITurnTaken(_gameId, _shipId, d.action, d.actionTarget);
+            return true;
         } catch {
             (Position memory myPos, bool found) = AIBehavior.findPosition(
                 g,
@@ -437,9 +471,11 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
                     )
                 {
                     emit AITurnTaken(_gameId, _shipId, ActionType.Pass, 0);
+                    return true;
                 } catch {}
             }
         }
+        return false;
     }
 
     function _decideMove(
