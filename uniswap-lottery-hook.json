@@ -1,5 +1,5 @@
 {
-  "address": "0x2Fb8225E3c01CcAc9Fd1a208F673129eBd012040",
+  "address": "0x589c9d27CF8fF351cbfda3180e7c500dB807e040",
   "abi": [
     {
       "inputs": [
@@ -207,6 +207,25 @@
         }
       ],
       "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "drawId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "winner",
+          "type": "address"
+        }
+      ],
+      "name": "PrizeMintFailed",
       "type": "event"
     },
     {
@@ -1891,12 +1910,12 @@
       "type": "function"
     }
   ],
-  "poolId": "0x4967d38c0b338284bb4663f253d511a229ede49a0b0ce8f383776a1c8f55d478",
+  "poolId": "0x390eb6e4a565d6b388b2a35c7db884d67cbfed60e330f0972a99ee052644cbfb",
   "poolKey": {
     "currency0": "0x0000000000000000000000000000000000000000",
-    "currency1": "0x4c663b594bbC7C12363c288c844f4093dFEDE1F6",
+    "currency1": "0x4D7421593720E65bfd9120c1073E353E145c3C31",
     "fee": 3000,
     "tickSpacing": 60,
-    "hooks": "0x2Fb8225E3c01CcAc9Fd1a208F673129eBd012040"
+    "hooks": "0x589c9d27CF8fF351cbfda3180e7c500dB807e040"
   }
 }
