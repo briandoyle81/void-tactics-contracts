@@ -77,6 +77,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     maps: any,
     aiEncounters: any,
     variant = 1,
+    archetype = 0, // Grunt
   ) {
     await maps.write.createPresetMap([[], MapMode.Both]);
     const mapId = await maps.read.mapCount();
@@ -108,7 +109,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       "AI Ship",
       defaultEquipment,
       defaultTraits,
-      0, // Grunt
+      archetype,
     ]);
     const configId = await aiEncounters.read.aiShipConfigCount();
     await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -172,8 +173,14 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     aiEncounters: any,
     costCap = 2000n,
     variant = 1,
+    archetype = 0,
   ) {
-    const mapId = await setupBasicAIEncounter(maps, aiEncounters, variant);
+    const mapId = await setupBasicAIEncounter(
+      maps,
+      aiEncounters,
+      variant,
+      archetype,
+    );
     await roguelikeNodeMap.write.createCampaign();
     const campaignId = await roguelikeNodeMap.read.campaignCount();
     const rootNodeId = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
@@ -1241,6 +1248,324 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       // Proves the 90% floor that was live at entry applied, not the 1%
       // the admin changed it to mid-fight.
       expect(persistedHP).to.equal(expectedPersisted);
+    });
+  });
+
+  describe("Combat nodes: fled ships (rammed or retreated) rejoin on a win", function () {
+    // Any two of the human's ships sharing a variant (Fleets rejects a
+    // mixed-variant fleet). Variants are random, so pick at runtime.
+    async function pickSameVariantPair(ships: any, ids: bigint[]) {
+      const variants = new Map<number, bigint[]>();
+      for (const id of ids) {
+        const v = Number((await ships.read.getShip([id])).traits.variant);
+        const group = variants.get(v) ?? [];
+        group.push(id);
+        if (group.length === 2) return group as [bigint, bigint];
+        variants.set(v, group);
+      }
+      throw new Error("no same-variant pair");
+    }
+
+    // Starts a run with [kept, fled] at a root combat node (80% heal floor,
+    // with a following combat node so the win re-reserves the roster).
+    async function startTwoShipRun(
+      deployed: any,
+      human: any,
+      humanRoguelikeMatch: any,
+      opts: { archetype?: number; costCap?: bigint; tier1?: boolean } = {},
+    ) {
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
+        deployed;
+      const { campaignId, rootNodeId, mapId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+        opts.costCap ?? 2000n,
+        1,
+        opts.archetype ?? 0,
+      );
+      const nextNode = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode, false]);
+      await roguelikeNodeMap.write.setCampaignAutoHealPercent([campaignId, 80]);
+
+      let shipCount = 5;
+      if (opts.tier1) {
+        // Tier 1 (11 ships) clears Ships' 10-purchase transfer gate.
+        await ships.write.purchaseWithFlow(
+          [human.account.address, 1n, human.account.address, 1],
+          { value: parseEther("9.99") },
+        );
+        shipCount = 11;
+        for (let i = 1; i <= shipCount; i++) {
+          const ship = tupleToShip(
+            (await ships.read.ships([BigInt(i)])) as ShipTuple,
+          );
+          await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+        }
+        await ships.write.constructAllMyShips({ account: human.account });
+      } else {
+        await purchaseAndConstructHumanShips(ships, randomManager, human);
+      }
+      const [kept, fled] = await pickSameVariantPair(
+        ships,
+        Array.from({ length: shipCount }, (_, i) => BigInt(i + 1)),
+      );
+
+      await humanRoguelikeMatch.write.startRun([campaignId, [kept, fled]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [
+          { row: 0, col: 0 },
+          { row: 1, col: 0 },
+        ],
+      ]);
+      return { kept, fled, nextNode, gameId: ROGUELIKE_GAME_ID_OFFSET + 1n };
+    }
+
+    // The AI surrenders on its turn once it has no live ship left.
+    async function aiSurrenders(
+      game: any,
+      otherRoguelikeMatch: any,
+      gameId: bigint,
+    ) {
+      await setShipHullPointsToZero(
+        game.address,
+        gameId,
+        AI_SHIP_ID_OFFSET + 1n,
+      );
+      await otherRoguelikeMatch.write.takeAITurn([gameId]);
+      const gameData = (await game.read.getGame([gameId])) as GameDataView;
+      expect(gameData.metadata.ended).to.equal(true);
+    }
+
+    it("keeps a retreated ship in the roster at the 80% heal floor and brings it into the next node", async function () {
+      const { deployed, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
+        await loadFixture(deployFixture);
+      const { game, ships } = deployed;
+      const { kept, fled, nextNode, gameId } = await startTwoShipRun(
+        deployed,
+        human,
+        humanRoguelikeMatch,
+      );
+
+      await humanGame.write.moveShip([
+        gameId,
+        fled,
+        0,
+        0,
+        ActionType.Retreat,
+        0n,
+      ]);
+      expect((await game.read.getShipPosition([gameId, fled])).status).to.equal(2);
+      await aiSurrenders(game, otherRoguelikeMatch, gameId);
+
+      const run = await deployed.roguelikeRun.read.getRun([
+        human.account.address,
+      ]);
+      expect(run.rosterShipIds.map(String)).to.deep.equal([
+        String(kept),
+        String(fled),
+      ]);
+      expect((await ships.read.getShip([fled])).shipData.inFleet).to.equal(true);
+
+      const maxHP = Number(
+        (await deployed.shipAttributes.read.calculateShipAttributesById([fled]))
+          .maxHullPoints,
+      );
+      const expected = Math.floor((maxHP * 80) / 100);
+      expect(
+        await deployed.roguelikeRun.read.getShipHP([human.account.address, fled]),
+      ).to.equal(expected);
+
+      await humanRoguelikeMatch.write.enterCombatNode([
+        nextNode,
+        [
+          { row: 0, col: 0 },
+          { row: 1, col: 0 },
+        ],
+      ]);
+      const attrsNext = await game.read.getShipAttributes([
+        ROGUELIKE_GAME_ID_OFFSET + 2n,
+        fled,
+      ]);
+      expect(attrsNext.hullPoints).to.equal(expected);
+    });
+
+    it("keeps a ship rammed off the board by an AI Rammer in the roster at the 80% heal floor", async function () {
+      const { deployed, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
+        await loadFixture(deployFixture);
+      const { game } = deployed;
+      const { kept, fled, gameId } = await startTwoShipRun(
+        deployed,
+        human,
+        humanRoguelikeMatch,
+        { archetype: 5 }, // Rammer
+      );
+
+      // Downed human ship right next to the AI at (0, 16).
+      await setShipPosition(game.address, gameId, fled, 0, 15);
+      await setShipHullPointsToZero(game.address, gameId, fled);
+      await humanGame.write.moveShip([
+        gameId,
+        kept,
+        0,
+        0,
+        ActionType.Pass,
+        0n,
+      ]);
+      await otherRoguelikeMatch.write.takeAITurn([gameId]);
+
+      const lastMove = (await game.read.getGame([gameId])) as GameDataView;
+      expect(lastMove.lastMove.actionType).to.equal(ActionType.FactionAbility);
+      expect(lastMove.lastMove.targetShipId).to.equal(fled);
+      expect((await game.read.getShipPosition([gameId, fled])).status).to.equal(2);
+
+      await aiSurrenders(game, otherRoguelikeMatch, gameId);
+
+      const run = await deployed.roguelikeRun.read.getRun([
+        human.account.address,
+      ]);
+      expect(run.rosterShipIds.map(String)).to.deep.equal([
+        String(kept),
+        String(fled),
+      ]);
+      const maxHP = Number(
+        (await deployed.shipAttributes.read.calculateShipAttributesById([fled]))
+          .maxHullPoints,
+      );
+      expect(
+        await deployed.roguelikeRun.read.getShipHP([human.account.address, fled]),
+      ).to.equal(Math.floor((maxHP * 80) / 100));
+    });
+
+    it("drops a retreated ship that was transferred away mid-match, without reverting the win", async function () {
+      const {
+        deployed,
+        human,
+        other,
+        humanRoguelikeMatch,
+        otherRoguelikeMatch,
+        humanGame,
+      } = await loadFixture(deployFixture);
+      const { game, ships } = deployed;
+      const { kept, fled, gameId } = await startTwoShipRun(
+        deployed,
+        human,
+        humanRoguelikeMatch,
+        { tier1: true },
+      );
+      await ships.write.purchaseWithFlow(
+        [other.account.address, 1n, other.account.address, 1],
+        { value: parseEther("9.99"), account: other.account },
+      );
+
+      await humanGame.write.moveShip([
+        gameId,
+        fled,
+        0,
+        0,
+        ActionType.Retreat,
+        0n,
+      ]);
+      // Released from the combat fleet by the retreat, so it's transferable.
+      await ships.write.transferFrom(
+        [human.account.address, other.account.address, fled],
+        { account: human.account },
+      );
+      await aiSurrenders(game, otherRoguelikeMatch, gameId);
+
+      const run = await deployed.roguelikeRun.read.getRun([
+        human.account.address,
+      ]);
+      expect(run.rosterShipIds.map(String)).to.deep.equal([String(kept)]);
+      expect(run.reservationFleetId).to.not.equal(0n);
+      expect((await ships.read.getShip([kept])).shipData.inFleet).to.equal(true);
+      expect((await ships.read.getShip([fled])).shipData.inFleet).to.equal(false);
+    });
+
+    it("falls back to on-board survivors only when a rejoiner no longer fits the cost cap", async function () {
+      const {
+        deployed,
+        owner,
+        human,
+        humanRoguelikeMatch,
+        otherRoguelikeMatch,
+        humanGame,
+      } = await loadFixture(deployFixture);
+      const { game, ships } = deployed;
+
+      // Cap set to exactly the two ships' combined cost, so any increase
+      // to the rejoiner's cost pushes the re-reservation over it.
+      const probe = await startTwoShipRun(deployed, human, humanRoguelikeMatch);
+      const exactCap =
+        BigInt((await ships.read.getShip([probe.kept])).shipData.cost) +
+        BigInt((await ships.read.getShip([probe.fled])).shipData.cost);
+      await humanRoguelikeMatch.write.retreatRun([probe.gameId]);
+
+      // New run on a fresh campaign with the exact cap (ships are free
+      // again after the forfeit above).
+      const { roguelikeNodeMap, maps, aiEncounters } = deployed;
+      const mapId = await setupBasicAIEncounter(maps, aiEncounters);
+      await roguelikeNodeMap.write.createCampaign();
+      const campaignId = await roguelikeNodeMap.read.campaignCount();
+      const root = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      const next = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.setCampaignRoot([campaignId, root]);
+      await roguelikeNodeMap.write.setCampaignInitialCostCap([
+        campaignId,
+        exactCap,
+      ]);
+      await roguelikeNodeMap.write.addChild([root, next, false]);
+      await roguelikeNodeMap.write.setCampaignAutoHealPercent([campaignId, 80]);
+      await humanRoguelikeMatch.write.startRun([
+        campaignId,
+        [probe.kept, probe.fled],
+      ]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        root,
+        [
+          { row: 0, col: 0 },
+          { row: 1, col: 0 },
+        ],
+      ]);
+      const gameId = ROGUELIKE_GAME_ID_OFFSET + 2n;
+
+      await humanGame.write.moveShip([
+        gameId,
+        probe.fled,
+        0,
+        0,
+        ActionType.Retreat,
+        0n,
+      ]);
+      // Unlocked by the retreat — upgrade its equipment so its cost rises.
+      await ships.write.setIsAllowedToCreateShips([owner.account.address, true]);
+      const fledShip = await ships.read.getShip([probe.fled]);
+      const costBefore = fledShip.shipData.cost;
+      await ships.write.customizeShip([
+        probe.fled,
+        {
+          ...fledShip,
+          equipment: {
+            ...fledShip.equipment,
+            armor: fledShip.equipment.armor === 3 ? 2 : 3,
+            shields: fledShip.equipment.shields === 3 ? 2 : 3,
+          },
+        },
+      ]);
+      expect(
+        Number((await ships.read.getShip([probe.fled])).shipData.cost),
+      ).to.be.greaterThan(Number(costBefore));
+
+      await aiSurrenders(game, otherRoguelikeMatch, gameId);
+
+      const run = await deployed.roguelikeRun.read.getRun([
+        human.account.address,
+      ]);
+      expect(run.rosterShipIds.map(String)).to.deep.equal([String(probe.kept)]);
+      expect(
+        (await ships.read.getShip([probe.kept])).shipData.inFleet,
+      ).to.equal(true);
     });
   });
 

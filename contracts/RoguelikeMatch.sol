@@ -440,16 +440,125 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         uint[] memory _shipIds,
         uint _costCap
     ) internal returns (uint fleetId) {
-        Position[] memory positions = new Position[](_shipIds.length);
-        for (uint i = 0; i < _shipIds.length; i++) {
+        // mapId 0: this fleet is map-agnostic (synthetic, see the doc
+        // comment above), so Fleets falls back to its default column rule.
+        fleetId = fleets.createFleet(
+            0,
+            _player,
+            _shipIds,
+            _rosterPositions(_shipIds.length),
+            _costCap,
+            true,
+            0
+        );
+    }
+
+    function _rosterPositions(
+        uint _count
+    ) internal pure returns (Position[] memory positions) {
+        positions = new Position[](_count);
+        for (uint i = 0; i < _count; i++) {
             positions[i] = Position({
                 row: int16(int(i / 4)),
                 col: int16(int(i % 4))
             });
         }
-        // mapId 0: this fleet is map-agnostic (synthetic, see the doc
-        // comment above), so Fleets falls back to its default column rule.
-        fleetId = fleets.createFleet(0, _player, _shipIds, positions, _costCap, true, 0);
+    }
+
+    // Post-win roster + stored HP (auto-heal floor applied). A ship that's
+    // no longer on the board has no Attributes left to read
+    // (Game._removeShipFromGame deletes them): a destroyed one is dropped,
+    // but a fled one (rammed or retreated) rejoins the roster at the heal
+    // floor — its HP at the moment it left is gone with its Attributes, so
+    // it's treated as 0 and the floor applies, against its live max (the
+    // same max the next node's Game will compute). On-board survivors come
+    // first in the returned roster, rejoiners after, so onGameEnded's
+    // reservation fallback can drop rejoiners by truncating to
+    // `survivorCount`. Split out of onGameEnded for stack depth.
+    function _postWinRoster(
+        uint _gameId,
+        address _player,
+        uint[] memory _oldRoster
+    ) internal returns (uint[] memory roster, uint survivorCount) {
+        roster = new uint[](_oldRoster.length);
+        uint[] memory rejoiners = new uint[](_oldRoster.length);
+        uint rejoinerCount;
+        for (uint i = 0; i < _oldRoster.length; i++) {
+            uint shipId = _oldRoster[i];
+            try game.getShipAttributes(_gameId, shipId) returns (
+                Attributes memory attrs
+            ) {
+                _storeHealedHP(
+                    _gameId,
+                    _player,
+                    shipId,
+                    attrs.hullPoints,
+                    attrs.maxHullPoints
+                );
+                roster[survivorCount] = shipId;
+                survivorCount++;
+            } catch {
+                if (!_canRejoin(_gameId, _player, shipId)) continue;
+                _storeHealedHP(
+                    _gameId,
+                    _player,
+                    shipId,
+                    0,
+                    shipAttributes.calculateShipAttributesById(shipId).maxHullPoints
+                );
+                rejoiners[rejoinerCount] = shipId;
+                rejoinerCount++;
+            }
+        }
+        for (uint i = 0; i < rejoinerCount; i++) {
+            roster[survivorCount + i] = rejoiners[i];
+        }
+        uint total = survivorCount + rejoinerCount;
+        assembly {
+            mstore(roster, total)
+        }
+    }
+
+    function _storeHealedHP(
+        uint _gameId,
+        address _player,
+        uint _shipId,
+        uint8 _hullPoints,
+        uint8 _maxHullPoints
+    ) internal {
+        // UA-11 fix: pinned at entry (see healPercentAtStart), not the
+        // live campaign config.
+        uint16 floor = (uint16(_maxHullPoints) * healPercentAtStart[_gameId]) /
+            100;
+        uint16 healed = _hullPoints > floor ? _hullPoints : floor;
+        if (healed > _maxHullPoints) healed = _maxHullPoints;
+        // A disabled (0 HP) ship still on the board at a win, under a 0%
+        // floor, would otherwise store 0 — RoguelikeRun's "never damaged =
+        // full HP" sentinel — and silently re-enter the next node fully
+        // healed. Carry it forward at 1 HP. Same for a rejoiner under a 0%
+        // floor.
+        if (healed == 0) healed = 1;
+        runLedger.setShipHP(_player, _shipId, uint8(healed));
+    }
+
+    // A ship that left the board mid-fight (status 2 = fled: rammed by the
+    // AI, or retreated by the player) rejoins the roster on a win — but
+    // Game._removeShipFromGame already released it from the combat fleet,
+    // so it was unlocked (transferable/modifiable/fleetable elsewhere) for
+    // the rest of the match. Only take it back if it's still the player's,
+    // still free, and still alive. A cost change (modified mid-match) isn't
+    // checked here — the reservation in onGameEnded catches that instead.
+    function _canRejoin(
+        uint _gameId,
+        address _player,
+        uint _shipId
+    ) internal view returns (bool) {
+        if (game.getShipPosition(_gameId, _shipId).status != 2) return false;
+        Ship memory ship = humanShips.getShip(_shipId);
+        return
+            ship.owner == _player &&
+            !ship.shipData.inFleet &&
+            ship.shipData.timestampDestroyed == 0;
     }
 
     // ---- IGameOrchestrator ----
@@ -508,38 +617,11 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             .getGameMetadataAndTurnState(_gameId);
         fleets.clearFleet(gameMetadata.creatorFleetId);
 
-        // Capture survivors' HP (auto-heal floor applied), drop anything
-        // not found (destroyed, or individually retreated — either way
-        // Game._removeShipFromGame already deleted its Attributes, so it
-        // simply isn't found here).
-        // UA-11 fix: pinned at entry (see healPercentAtStart), not the
-        // live campaign config.
-        uint8 healPercent = healPercentAtStart[_gameId];
-        uint[] memory oldRoster = run.rosterShipIds;
-        uint[] memory survivors = new uint[](oldRoster.length);
-        uint survivorCount;
-        for (uint i = 0; i < oldRoster.length; i++) {
-            uint shipId = oldRoster[i];
-            try game.getShipAttributes(_gameId, shipId) returns (
-                Attributes memory attrs
-            ) {
-                uint16 floor = (uint16(attrs.maxHullPoints) * healPercent) / 100;
-                uint16 healed = attrs.hullPoints > floor
-                    ? attrs.hullPoints
-                    : floor;
-                if (healed > attrs.maxHullPoints) healed = attrs.maxHullPoints;
-                // A disabled (0 HP) ship still on the board at a win, under
-                // a 0% floor, would otherwise store 0 — RoguelikeRun's
-                // "never damaged = full HP" sentinel — and silently re-enter
-                // the next node fully healed. Carry it forward at 1 HP.
-                if (healed == 0) healed = 1;
-                runLedger.setShipHP(player, shipId, uint8(healed));
-                survivors[survivorCount] = shipId;
-                survivorCount++;
-            } catch {}
-        }
-        uint[] memory newRoster = new uint[](survivorCount);
-        for (uint i = 0; i < survivorCount; i++) newRoster[i] = survivors[i];
+        (uint[] memory newRoster, uint survivorCount) = _postWinRoster(
+            _gameId,
+            player,
+            run.rosterShipIds
+        );
 
         // UA-11 fix: pinned at entry (see isFinalNodeAtStart), not the live
         // node graph.
@@ -576,7 +658,32 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         if (isFinalNode) {
             runLedger.endRun(player, true);
         } else {
-            uint newFleetId = _reserveRoster(player, newRoster, run.currentCostCap);
+            // A rejoiner was unlocked for the rest of the match (see
+            // _canRejoin), so it could have been modified into a cost that
+            // breaks the cap — and this runs inside Game._endGame's
+            // unguarded callback, where a revert would block the winning
+            // move itself. Fall back to on-board survivors only (the
+            // pre-rejoin behavior) rather than ever reverting here.
+            uint newFleetId;
+            try
+                fleets.createFleet(
+                    0,
+                    player,
+                    newRoster,
+                    _rosterPositions(newRoster.length),
+                    run.currentCostCap,
+                    true,
+                    0
+                )
+            returns (uint fleetId) {
+                newFleetId = fleetId;
+            } catch {
+                assembly {
+                    mstore(newRoster, survivorCount)
+                }
+                runLedger.setRoster(player, newRoster);
+                newFleetId = _reserveRoster(player, newRoster, run.currentCostCap);
+            }
             runLedger.setReservationFleetId(player, newFleetId);
         }
     }

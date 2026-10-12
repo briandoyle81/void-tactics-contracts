@@ -79,7 +79,8 @@ contract HealAboveFloorWinEffect is Ownable, IWinEffect {
 
     function onWin(address _player, uint) external override onlyAllowed {
         // Reads the roster AFTER RoguelikeMatch.onGameEnded has already
-        // called runLedger.setRoster with survivors-only, and AFTER its
+        // called runLedger.setRoster with survivors plus rejoining fled
+        // ships (destroyed ones dropped), and AFTER its
         // own floor-heal step has already written a real (non-zero)
         // stored HP for each of them — see RoguelikeMatch.sol's dispatch
         // site comment.
