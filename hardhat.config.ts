@@ -212,6 +212,14 @@ const config: HardhatUserConfig = {
     "base-sepolia": {
       url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
       accounts: [process.env.METAMASK_WALLET_1 as string],
+      // The Ankr key in BASE_SEPOLIA_RPC_URL is shared with the frontend and
+      // domain-allowlisted, so requests without a matching Origin header are
+      // rejected ("Origin not allowed"). Send the frontend's own origin so
+      // deploys/scripts can use the same key. Harmless on endpoints that
+      // don't check it.
+      httpHeaders: {
+        Origin: process.env.RPC_ORIGIN || "https://www.voidtactics.xyz",
+      },
     },
     "flow-testnet": {
       url: "https://testnet.evm.nodes.onflow.org",

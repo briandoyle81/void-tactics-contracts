@@ -1,6 +1,6 @@
 {
   "campaign": {
-    "initialCostCap": 500,
+    "initialCostCap": 600,
     "autoHealPercent": 80,
     "requiredVariant": 1
   },
@@ -14,7 +14,7 @@
       "maxScore": 15,
       "creatorGoesFirst": true,
       "title": "A Strange Encounter",
-      "description": "Admiral, Central has asked us to investigate something strange.  It seems there are a small number of ships way out in the eastern quadrant that aren't broadcasting a corporate IFF, which means they can't legally claim any resource sites.\n\nThey've asked any Consortium ships in the area to check it out.  You're closest, but several of our rivals are right behind you.  Reinforcements are on the way, but won't arrive for some time.  You'll rendezvous with them later at a supply station in this sector.\n\nYou'll have to do this in one shot.  If you make a tactical retreat, someone else will take point and we'll miss out on this one.  Take the ships you have, investigate the site, and secure it.  If the unknown fleet contests the issue, you know what to do."
+      "description": "Admiral, Central has detected a small fleet in the eastern quadrant operating without corporate IFF. That means they have no legal claim to any resource sites.\n\nAll nearby Consortium ships have been ordered to investigate. You're closest, but our rivals aren't far behind. Reinforcements won't arrive in time, so you'll rendezvous with them later at a sector supply station.\n\nYou have one shot at this. Retreat, and someone else takes point. Take your ships, investigate, and secure the site. If the unknown fleet resists, you know what to do."
     },
     {
       "key": "m02",

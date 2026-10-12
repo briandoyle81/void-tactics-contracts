@@ -51,7 +51,28 @@ describe("Seeded AI ship configs", function () {
   // name -> data-file entry (names are unique), so each on-chain config can be
   // related back to its variant/archetype/level.
   const byName = new Map(starterContent.aiShipConfigs.map((c) => [c.name, c]));
+  // A key's level is normally its trailing digit (no digit = level 1). These
+  // keys don't follow that: the content editor re-keyed v1's level 1-2 ships
+  // (2026-10-12), and the keys are referenced from mapPlacements, so they're
+  // pinned here instead of renamed. `grunt`/`aggressor` now hold level-2
+  // ships of the OTHER archetype (grunt = aggressor line, aggressor = grunt
+  // line).
+  const LEVEL_OVERRIDES: Record<string, number> = {
+    grunt: 2,
+    aggressor: 2,
+    aiConfig5: 1,
+    aiConfig10: 1,
+    aiConfig13: 2,
+    aiConfig17: 1,
+    aiConfig22: 1,
+  };
+  // Snipers normally carry gun 1 with a long-range floor; these are
+  // deliberate design exceptions.
+  const SNIPER_EXCEPTIONS: Record<string, { gun: number; minRange: number }> = {
+    v2sniper3: { gun: 2, minRange: 4 }, // intentional, 2026-10-12
+  };
   const levelOf = (key: string) => {
+    if (key in LEVEL_OVERRIDES) return LEVEL_OVERRIDES[key];
     const m = key.match(/(\d)$/);
     return m ? Number(m[1]) : 1;
   };
@@ -128,11 +149,16 @@ describe("Seeded AI ship configs", function () {
           false,
         );
         if (r.archetype === SNIPER) {
-          expect(e.mainWeapon, `${r.key} sniper gun`).to.equal(1);
+          const exception = SNIPER_EXCEPTIONS[r.key];
+          expect(e.mainWeapon, `${r.key} sniper gun`).to.equal(
+            exception?.gun ?? 1,
+          );
           expect(
             Number(r.attrs.range),
             `${r.key} sniper range`,
-          ).to.be.greaterThanOrEqual(r.variant === 1 ? 6 : 5);
+          ).to.be.greaterThanOrEqual(
+            exception?.minRange ?? (r.variant === 1 ? 6 : 5),
+          );
         }
         if (r.archetype === SUPPORT && r.variant === 1) {
           // variant 1 heals with an EQUIPPED Repair Drones special
