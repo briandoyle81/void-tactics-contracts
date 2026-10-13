@@ -20,6 +20,35 @@ This extends to the assets themselves. Every ship's art is generated and stored 
 
 This is the practical difference between a game that is _on-chain_ and one that merely _uses_ a chain. Void Tactics is designed so that the community can own and extend it long after any single team has moved on.
 
+## Fully On-Chain Rendering Pipeline
+
+Every constructed ship's artwork is assembled in an `eth_call` from SVG fragments stored in contract bytecode. `tokenURI` returns a `data:application/json;base64,...` document whose `image` is a `data:image/svg+xml;base64,...` SVG built on the spot. No off-chain renderer, image server or metadata host is involved.
+
+**On-chain side.** The pieces form a tree:
+
+- **`RenderMetadata`** builds the JSON metadata (name, traits, equipment, status) and picks a faction-specific image renderer. Variant 1 uses `ImageRenderer`; variant 2 uses `ImageRendererV2`.
+- **The image renderer** stacks five layers in draw order: special, aft, weapon, body (base hull plus armor or shields), and fore. Each layer comes from a **combiner** contract.
+- **Each combiner** dispatches on the ship's traits to a **leaf** contract. Each leaf holds the straight-line `<path>` geometry for one trait value as `PART_n`/`COLOR_n` string constants, with absolute coordinates on a 256×256 canvas.
+- **Colors are stored as HSL.** "Shiny" ships are recolored at render time through `blendHSL` in `RenderUtils`, so a rare palette costs no extra stored art.
+- **Scale and size limits.** About 50 renderer contracts across `contracts/Renderers/` and `contracts/RenderersV2/`. Each leaf is sized to fit under the 24 KiB EIP-170 limit on its own; the limit is never bypassed.
+
+**Off-chain authoring (`scripts/renderer-pipeline/`).** This toolchain turns an artist's layered Photoshop file into those leaf and combiner contracts:
+
+1. **Extract** (`lib/psd.js`). Composite each named PSD layer (one per trait or equipment value) onto the full canvas, then threshold its alpha to a clean edge.
+2. **Quantize** (`lib/palette.js`). Reduce each layer to a small palette using farthest-point-seeded k-means, with no dithering, so linework survives.
+3. **Trace** (`lib/vtrace.js`). Trace each palette color's cumulative mask with potrace, then simplify with Douglas-Peucker at a tunable `epsilon`. The output contains only `M`/`L`/`Z` commands, with no curves.
+4. **Fit to size** (`check-sizes.js`). Emit the HSL-chunked Solidity leaves, compile them, and step through simplification tiers until every leaf fits its byte budget. A leaf that still doesn't fit is reported for the artist to simplify; it is never left broken.
+5. **Codegen** (`gen-combiners.js`). Generate the five combiners and the top-level `ImageRendererV2` from the manifest. `DeployAndConfig.ts` then deploys and wires the whole tree.
+
+Variant 2's entire art set was produced this way from `manifest.variant2.json`. `test/RendererV2.test.ts` and `test/RendererSizes.test.ts` check the output.
+
+**During this hackathon:**
+- The variant 2 special-slot renderers were remapped to slots 1–3 to match the attribute refactor.
+- `image-to-svg.js` was added. It is a standalone single-image mode of the same tracer (with a `--portrait` preset), used for character portrait art.
+- The palette and tracer were tuned.
+
+**One exception:** the two placeholder images, for a ship that is not yet constructed and for a destroyed ship, are still IPFS links. Every live ship's art is fully on-chain.
+
 ## What's New (Colosseum 9/14-10/12)
 
 Between 2026-09-14 and 2026-10-12 the contracts received about 20 commits (~17.6k lines added across contracts, deploy modules, scripts and docs), and Base Sepolia got several full redeploys. The work focused on making the single-player roguelike campaign deep enough to play for real, and on making the whole system safe to operate live.
