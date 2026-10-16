@@ -7,7 +7,9 @@ import {
   zeroAddress,
   encodeAbiParameters,
   toFunctionSelector,
+  keccak256,
 } from "viem";
+import { installHistoryContract, recordBlockHash } from "./fixtures/eip2935";
 import DeployModule from "../ignition/modules/DeployAndConfig";
 import { mineHookAddress, HOOK_FLAGS } from "../scripts/hookMiner";
 
@@ -88,7 +90,6 @@ describe("UTCLotteryHook — real swap integration", function () {
       constructorArgs: [
         poolManager.address,
         ships.address,
-        randomManager.address,
         universalCredits.address,
         ownerClient.account.address,
       ],
@@ -102,6 +103,14 @@ describe("UTCLotteryHook — real swap integration", function () {
     );
 
     await shipsAsOwner.write.setIsAllowedToCreateShips([hookAddress, true]);
+    // Same as scripts/deployUTCLotteryPool.ts Step 13b: lottery prizes
+    // bypass VariantPurchaseGate so any winner can receive any variant.
+    const gateAsOwner = await hre.viem.getContractAt(
+      "VariantPurchaseGate",
+      deployed.variantPurchaseGate.address,
+      { client: { wallet: ownerClient } },
+    );
+    await gateAsOwner.write.setExemptMinter([hookAddress, true]);
 
     // Fund LP + trader with real UTC, temporarily authorizing the owner to
     // mint it directly rather than routing through ShipPurchaser.
@@ -139,6 +148,8 @@ describe("UTCLotteryHook — real swap integration", function () {
 
     return {
       ownerClient,
+      shipsAsOwner,
+      gateAsOwner,
       lp,
       trader,
       trader2,
@@ -726,7 +737,7 @@ describe("UTCLotteryHook — real swap integration", function () {
     // met) triggers the draw start.
     await sellAs(trader);
     expect(await hook.read.currentDrawId()).to.equal(1n);
-    expect(await hook.read.drawRandomRequestId([0n])).to.not.equal(0n);
+    expect(await hook.read.drawCloseBlock([0n])).to.not.equal(0n);
 
     // RandomManager needs a genuinely new prevrandao epoch since the
     // request's commit block before it can be revealed.
@@ -767,7 +778,7 @@ describe("UTCLotteryHook — real swap integration", function () {
     expect(await hookAsOwner.read.queueLength()).to.equal(0n);
   });
 
-  it("resolves a draw instead of permanently reverting when the picked winner can't receive the prize NFT (HA4-02)", async function () {
+  it("delivers the prize to a winner contract that rejects ERC-721 receipt (HA4-02, HA6-04)", async function () {
     // Regression test for docs/audit-2.md HA4-02: _extractPlayer trusts
     // whatever address hookData names, with no check it's related to the
     // real swap signer — any seller can credit a contract that reverts on
@@ -775,8 +786,11 @@ describe("UTCLotteryHook — real swap integration", function () {
     // call was unguarded, so a picked winner like that would revert the
     // whole transaction forever (fulfillRandomRequest returns the same
     // fixed value on every retry, so the same winner is picked every time).
+    // Since docs/audit-3.md HA6-04, Ships mints with _mint (no
+    // onERC721Received call), so such a winner now simply receives the
+    // prize and the draw resolves normally.
     const fixture = await loadFixture(deployFixture);
-    const { hook, hookAsOwner, trader, trader2 } = fixture;
+    const { hook, hookAsOwner, trader, trader2, ships } = fixture;
     await setUpPoolAndLiquidity(fixture);
 
     const poison = await hre.viem.deployContract("MockNonReceivingContract");
@@ -842,16 +856,115 @@ describe("UTCLotteryHook — real swap integration", function () {
     await hook.write.resolveDraw([0n]);
     expect(await hook.read.drawResolved([0n])).to.equal(true);
 
-    const failedEvents = await hook.getEvents.PrizeMintFailed();
-    expect(failedEvents.length).to.equal(1);
-    expect(getAddress(failedEvents[0].args.winner!)).to.equal(
+    const resolvedEvents = await hook.getEvents.DrawResolved();
+    const resolved = resolvedEvents.find((e) => e.args.drawId === 0n);
+    expect(resolved).to.not.be.undefined;
+    expect(getAddress(resolved!.args.winner!)).to.equal(
       getAddress(poison.address),
     );
-    expect(failedEvents[0].args.drawId).to.equal(0n);
+    expect(
+      (await ships.read.getShipIdsOwned([poison.address])).length,
+    ).to.equal(1);
+  });
 
-    // No DrawResolved for a draw that failed to mint.
-    const resolvedEvents = await hook.getEvents.DrawResolved();
-    expect(resolvedEvents.find((e) => e.args.drawId === 0n)).to.be.undefined;
+  it("a failed prize mint reverts resolveDraw and leaves the draw open for retry (HA6-06)", async function () {
+    // Regression test for docs/audit-3.md HA6-06: the prize mint used to be
+    // wrapped in try/catch after drawResolved was set, so any mint failure
+    // (a paused Ships here; a caller starving the mint of gas in the attack)
+    // finalized the draw with the winner getting nothing. Now the failure
+    // reverts the whole call and the draw can be resolved once it's fixed.
+    const fixture = await loadFixture(deployFixture);
+    const { hook, hookAsOwner, ships, shipsAsOwner, trader, trader2, trader3 } =
+      fixture;
+    await setUpPoolAndLiquidity(fixture);
+    const sellers = [trader, trader2, trader3];
+    const sellAs = makeSellAs(fixture);
+
+    // Same deterministic no-phantom-zone setup as runFullDrawCycle.
+    await hookAsOwner.write.setMaxWeightPerEntryWei([
+      await hook.read.minEntryThresholdWei(),
+    ]);
+    await hookAsOwner.write.setMaxWinProbabilityDenominator([1n]);
+    for (const seller of sellers) {
+      await sellAs(seller);
+    }
+    const before = await Promise.all(
+      sellers.map((s) => ships.read.getShipIdsOwned([s.account.address])),
+    );
+    await hre.network.provider.send("evm_increaseTime", [24 * 60 * 60 + 1]);
+    await hre.network.provider.send("evm_mine");
+    await sellAs(trader);
+    expect(await hook.read.currentDrawId()).to.equal(1n);
+    await hre.network.provider.send("evm_mine");
+
+    await shipsAsOwner.write.setPaused([true]);
+    await expect(hook.write.resolveDraw([0n])).to.be.rejectedWith(
+      "MintPaused",
+    );
+    expect(await hook.read.drawResolved([0n])).to.equal(false);
+
+    await shipsAsOwner.write.setPaused([false]);
+    await hook.write.resolveDraw([0n]);
+    expect(await hook.read.drawResolved([0n])).to.equal(true);
+
+    const after = await Promise.all(
+      sellers.map((s) => ships.read.getShipIdsOwned([s.account.address])),
+    );
+    const winners = after.filter((a, i) => a.length > before[i].length);
+    expect(winners.length).to.equal(1);
+    const resolved = (await hook.getEvents.DrawResolved()).find(
+      (e) => e.args.drawId === 0n,
+    );
+    expect(resolved).to.not.be.undefined;
+  });
+
+  it("any winner receives a purchase-gated prize variant, medal or not (HA6-06)", async function () {
+    const fixture = await loadFixture(deployFixture);
+    const { hook, hookAsOwner, ships, gateAsOwner, trader, trader2, trader3 } =
+      fixture;
+    await setUpPoolAndLiquidity(fixture);
+    const sellers = [trader, trader2, trader3];
+    const sellAs = makeSellAs(fixture);
+
+    // Variant 2 is gated on the Shattered Hive medal, which none of the
+    // sellers hold. Make it the fallback prize.
+    await hookAsOwner.write.setFallbackVariant([2]);
+
+    await hookAsOwner.write.setMaxWeightPerEntryWei([
+      await hook.read.minEntryThresholdWei(),
+    ]);
+    await hookAsOwner.write.setMaxWinProbabilityDenominator([1n]);
+    for (const seller of sellers) {
+      await sellAs(seller);
+    }
+    const before = await Promise.all(
+      sellers.map((s) => ships.read.getShipIdsOwned([s.account.address])),
+    );
+    await hre.network.provider.send("evm_increaseTime", [24 * 60 * 60 + 1]);
+    await hre.network.provider.send("evm_mine");
+    await sellAs(trader);
+    await hre.network.provider.send("evm_mine");
+
+    // Control: without the hook's exemption the gate blocks the prize, and
+    // the draw stays open rather than burning it.
+    const hookAddress = hook.address;
+    await gateAsOwner.write.setExemptMinter([hookAddress, false]);
+    await expect(hook.write.resolveDraw([0n])).to.be.rejectedWith(
+      "GateRequirementNotMet",
+    );
+    expect(await hook.read.drawResolved([0n])).to.equal(false);
+
+    await gateAsOwner.write.setExemptMinter([hookAddress, true]);
+    await hook.write.resolveDraw([0n]);
+
+    const after = await Promise.all(
+      sellers.map((s) => ships.read.getShipIdsOwned([s.account.address])),
+    );
+    const winnerIdx = after.findIndex((a, i) => a.length > before[i].length);
+    expect(winnerIdx).to.not.equal(-1);
+    const prizeId = after[winnerIdx][after[winnerIdx].length - 1];
+    const prize = await ships.read.getShip([prizeId]);
+    expect(prize.traits.variant).to.equal(2);
   });
 
   it("falls back to a random 4-star ship when the queue is empty", async function () {
@@ -873,6 +986,334 @@ describe("UTCLotteryHook — real swap integration", function () {
     expect(prizeShip.shipData.shipsDestroyed).to.equal(300);
     expect(prizeShip.shipData.constructed).to.equal(false);
     expect(prizeShip.name).to.equal("");
+  });
+
+  describe("close-block randomness and automatic resolution (HA6-05/HA6-07)", function () {
+    // Three sellers enter draw 0, then 24h passes; the next qualifying
+    // sell closes it. Cap == min entry and denominator 1 remove the no-winner
+    // zone, so every resolution has a winner.
+    async function prepareClosableDraw() {
+      const fixture = await loadFixture(deployFixture);
+      const { hook, hookAsOwner, trader, trader2, trader3 } = fixture;
+      await setUpPoolAndLiquidity(fixture);
+      await hookAsOwner.write.setMaxWeightPerEntryWei([
+        await hook.read.minEntryThresholdWei(),
+      ]);
+      await hookAsOwner.write.setMaxWinProbabilityDenominator([1n]);
+      const sellAs = makeSellAs(fixture);
+      for (const seller of [trader, trader2, trader3]) {
+        await sellAs(seller);
+      }
+      await hre.network.provider.send("evm_increaseTime", [24 * 60 * 60 + 1]);
+      await hre.network.provider.send("evm_mine");
+      return fixture;
+    }
+
+    // A qualifying sell with an explicit gas limit (skips estimation, which
+    // would otherwise size the tx without room for the auto-resolve).
+    async function sellWithGas(
+      fixture: Awaited<ReturnType<typeof deployFixture>>,
+      seller: { account: any },
+      gas: bigint,
+    ) {
+      const { swapRouter, key } = fixture;
+      return swapRouter.write.swap(
+        [
+          key,
+          {
+            zeroForOne: false,
+            amountSpecified: -parseEther("10"),
+            sqrtPriceLimitX96: MAX_SQRT_PRICE - 1n,
+          },
+          { takeClaims: false, settleUsingBurn: false },
+          encodeAbiParameters(
+            [{ type: "address" }],
+            [getAddress(seller.account.address)],
+          ),
+        ],
+        { account: seller.account, gas },
+      );
+    }
+
+    it("picks the winner from the close block's hash, with the pick's denominator snapshotted at close", async function () {
+      const fixture = await prepareClosableDraw();
+      const { hook, hookAsOwner, ships, trader } = fixture;
+      await makeSellAs(fixture)(trader); // closes draw 0
+      const closeBlock = await hook.read.drawCloseBlock([0n]);
+      expect(closeBlock).to.not.equal(0n);
+      const snapshot = await hook.read.drawEffectiveTotalWeight([0n]);
+      expect(snapshot).to.equal(await hook.read.totalWeightInDraw([0n]));
+
+      // Owner changes after close (when the close hash is already public)
+      // must not affect this draw.
+      await hookAsOwner.write.setMaxWinProbabilityDenominator([10n]);
+      await hookAsOwner.write.setMaxWeightPerEntryWei([parseEther("1")]);
+
+      const publicClient = await hre.viem.getPublicClient();
+      const { hash } = await publicClient.getBlock({ blockNumber: closeBlock });
+      const target =
+        BigInt(
+          keccak256(
+            encodeAbiParameters(
+              [{ type: "bytes32" }, { type: "uint256" }],
+              [hash!, 0n],
+            ),
+          ),
+        ) % snapshot;
+      let expected: `0x${string}` | undefined;
+      let cumulative = 0n;
+      for (let i = 0n; i < 3n; i++) {
+        const p = await hook.read.drawParticipants([0n, i]);
+        cumulative += await hook.read.weightInDraw([0n, p]);
+        if (expected === undefined && target < cumulative) expected = p;
+      }
+
+      await hook.write.resolveDraw([0n]);
+      const resolved = (await hook.getEvents.DrawResolved()).find(
+        (e) => e.args.drawId === 0n,
+      );
+      expect(getAddress(resolved!.args.winner!)).to.equal(getAddress(expected!));
+      expect(
+        (await ships.read.getShipIdsOwned([expected!])).length,
+      ).to.be.greaterThan(0);
+    });
+
+    it("can't be resolved in the block that closes it", async function () {
+      const fixture = await prepareClosableDraw();
+      const { hook, trader, trader2 } = fixture;
+      const publicClient = await hre.viem.getPublicClient();
+
+      // Close and attempt resolution in the same block.
+      await hre.network.provider.send("evm_setAutomine", [false]);
+      try {
+        const closeTx = await sellWithGas(fixture, trader, 3_000_000n);
+        const hookAsTrader2 = await hre.viem.getContractAt(
+          "UTCLotteryHook",
+          hook.address,
+          { client: { wallet: trader2 } },
+        );
+        const resolveTx = await hookAsTrader2.write.resolveDraw([0n], {
+          gas: 3_000_000n,
+        });
+        await hre.network.provider.send("evm_mine");
+        const closeReceipt = await publicClient.getTransactionReceipt({ hash: closeTx });
+        const resolveReceipt = await publicClient.getTransactionReceipt({ hash: resolveTx });
+        expect(closeReceipt.blockNumber).to.equal(resolveReceipt.blockNumber);
+        expect(closeReceipt.status).to.equal("success");
+        expect(resolveReceipt.status).to.equal("reverted");
+      } finally {
+        await hre.network.provider.send("evm_setAutomine", [true]);
+      }
+      expect(await hook.read.drawCloseBlock([0n])).to.not.equal(0n);
+      expect(await hook.read.drawResolved([0n])).to.equal(false);
+
+      // Any later block resolves it.
+      await hook.write.resolveDraw([0n]);
+      expect(await hook.read.drawResolved([0n])).to.equal(true);
+    });
+
+    it("the next swap in a later block resolves the draw automatically", async function () {
+      const fixture = await prepareClosableDraw();
+      const { hook, trader, trader2 } = fixture;
+      await makeSellAs(fixture)(trader); // closes draw 0
+      expect(await hook.read.drawResolved([0n])).to.equal(false);
+
+      await sellWithGas(fixture, trader2, 5_000_000n);
+      expect(await hook.read.drawResolved([0n])).to.equal(true);
+      expect(await hook.read.nextDrawToResolve()).to.equal(1n);
+      const resolved = (await hook.getEvents.DrawResolved()).find(
+        (e) => e.args.drawId === 0n,
+      );
+      expect(resolved).to.not.be.undefined;
+    });
+
+    it("a failing automatic resolution never reverts the swap; the draw stays pending", async function () {
+      const fixture = await prepareClosableDraw();
+      const { hook, shipsAsOwner, trader, trader2 } = fixture;
+      await makeSellAs(fixture)(trader); // closes draw 0
+
+      await shipsAsOwner.write.setPaused([true]);
+      await sellWithGas(fixture, trader2, 5_000_000n); // must not revert
+      expect(await hook.read.drawResolved([0n])).to.equal(false);
+
+      await shipsAsOwner.write.setPaused([false]);
+      await sellWithGas(fixture, trader2, 5_000_000n);
+      expect(await hook.read.drawResolved([0n])).to.equal(true);
+    });
+
+    it("skips automatic resolution on a swap with less than autoResolveMinGas left", async function () {
+      const fixture = await prepareClosableDraw();
+      const { hook, trader, trader2 } = fixture;
+      await makeSellAs(fixture)(trader); // closes draw 0
+
+      await sellWithGas(fixture, trader2, 700_000n);
+      expect(await hook.read.drawResolved([0n])).to.equal(false);
+    });
+
+    it("re-targets a draw left unresolved past the 256-block blockhash window", async function () {
+      const fixture = await prepareClosableDraw();
+      const { hook, trader } = fixture;
+      await makeSellAs(fixture)(trader); // closes draw 0
+      const originalCloseBlock = await hook.read.drawCloseBlock([0n]);
+
+      await hre.network.provider.send("hardhat_mine", ["0x12c"]); // 300 blocks
+      await hook.write.resolveDraw([0n]);
+      expect(await hook.read.drawResolved([0n])).to.equal(false);
+      const retargeted = await hook.read.drawCloseBlock([0n]);
+      expect(retargeted > originalCloseBlock).to.equal(true);
+      const events = await hook.getEvents.DrawRetargeted();
+      expect(events.find((e) => e.args.drawId === 0n)).to.not.be.undefined;
+
+      await hook.write.resolveDraw([0n]);
+      expect(await hook.read.drawResolved([0n])).to.equal(true);
+    });
+
+    // 2026-10-16: with a working EIP-2935 history contract (as on Base) the
+    // close block's hash stays readable for 8191 blocks (BlockHashLib).
+    it("with EIP-2935, resolves a draw left unresolved past 256 blocks without re-targeting", async function () {
+      const fixture = await prepareClosableDraw();
+      const { hook, trader } = fixture;
+      await installHistoryContract();
+      await makeSellAs(fixture)(trader); // closes draw 0
+      const closeBlock = await hook.read.drawCloseBlock([0n]);
+      await recordBlockHash(closeBlock);
+
+      await hre.network.provider.send("hardhat_mine", ["0x12c"]); // 300 blocks
+      await hook.write.resolveDraw([0n]);
+      expect(await hook.read.drawResolved([0n])).to.equal(true);
+      expect(await hook.read.drawCloseBlock([0n])).to.equal(closeBlock);
+      const retargets = await hook.getEvents.DrawRetargeted();
+      expect(retargets.find((e) => e.args.drawId === 0n)).to.be.undefined;
+    });
+  });
+
+  describe("ticket segments and binary-search winner (HA5-02)", function () {
+    // Sell `amount` UTC as `seller`, crediting `credited` via hookData.
+    async function sellFor(
+      fixture: Awaited<ReturnType<typeof deployFixture>>,
+      seller: { account: any },
+      credited: `0x${string}`,
+      amount: bigint,
+    ) {
+      const { swapRouter, key } = fixture;
+      await swapRouter.write.swap(
+        [
+          key,
+          {
+            zeroForOne: false,
+            amountSpecified: -amount,
+            sqrtPriceLimitX96: MAX_SQRT_PRICE - 1n,
+          },
+          { takeClaims: false, settleUsingBurn: false },
+          encodeAbiParameters([{ type: "address" }], [getAddress(credited)]),
+        ],
+        { account: seller.account },
+      );
+    }
+
+    function addr(i: number): `0x${string}` {
+      return getAddress(`0x${(0x1000 + i).toString(16).padStart(40, "0")}`);
+    }
+
+    it("splits a raised weight into an extra segment, and the winner matches an off-chain search over segments", async function () {
+      const fixture = await loadFixture(deployFixture);
+      const { hook, hookAsOwner, trader } = fixture;
+      await setUpPoolAndLiquidity(fixture);
+      // No floor (denominator 0), so every draw has a winner; threshold
+      // 1 wei so small sells qualify in this shallow test pool.
+      await hookAsOwner.write.setMaxWinProbabilityDenominator([0n]);
+      await hookAsOwner.write.setMinEntryThresholdWei([1n]);
+
+      await sellFor(fixture, trader, addr(1), parseEther("0.001"));
+      await sellFor(fixture, trader, addr(2), parseEther("0.001"));
+      await sellFor(fixture, trader, addr(1), parseEther("0.01")); // raises addr(1)
+      await sellFor(fixture, trader, addr(3), parseEther("0.001"));
+
+      const count = await hook.read.drawSegmentCount([0n]);
+      expect(count).to.equal(4n);
+      const segments: { owner: string; end: bigint }[] = [];
+      for (let i = 0n; i < count; i++) {
+        const [owner, end] = await hook.read.getDrawSegment([0n, i]);
+        segments.push({ owner: getAddress(owner), end });
+      }
+      // Each address's segment sizes sum to its weight; ends are increasing
+      // and the last equals the total.
+      const sums = new Map<string, bigint>();
+      let prev = 0n;
+      for (const seg of segments) {
+        expect(seg.end > prev).to.equal(true);
+        sums.set(seg.owner, (sums.get(seg.owner) ?? 0n) + (seg.end - prev));
+        prev = seg.end;
+      }
+      expect(prev).to.equal(await hook.read.totalWeightInDraw([0n]));
+      for (const a of [addr(1), addr(2), addr(3)]) {
+        expect(sums.get(a)).to.equal(await hook.read.weightInDraw([0n, a]));
+      }
+
+      // Close (past drawInterval) and resolve; check the winner.
+      await hre.network.provider.send("evm_increaseTime", [24 * 60 * 60 + 1]);
+      await hre.network.provider.send("evm_mine");
+      await sellFor(fixture, trader, addr(3), parseEther("0.0001"));
+      const closeBlock = await hook.read.drawCloseBlock([0n]);
+      expect(closeBlock).to.not.equal(0n);
+      // The closing sell landed in draw 0 only if it raised addr(3)'s weight;
+      // re-read segments so the expectation uses the final state.
+      const finalCount = await hook.read.drawSegmentCount([0n]);
+      const ends: bigint[] = [];
+      const owners: string[] = [];
+      for (let i = 0n; i < finalCount; i++) {
+        const [owner, end] = await hook.read.getDrawSegment([0n, i]);
+        owners.push(getAddress(owner));
+        ends.push(end);
+      }
+      const publicClient = await hre.viem.getPublicClient();
+      const { hash } = await publicClient.getBlock({ blockNumber: closeBlock });
+      const target =
+        BigInt(
+          keccak256(
+            encodeAbiParameters(
+              [{ type: "bytes32" }, { type: "uint256" }],
+              [hash!, 0n],
+            ),
+          ),
+        ) % (await hook.read.drawEffectiveTotalWeight([0n]));
+      const expected = owners[ends.findIndex((e) => target < e)];
+
+      await hook.write.resolveDraw([0n]);
+      const resolved = (await hook.getEvents.DrawResolved()).find(
+        (e) => e.args.drawId === 0n,
+      );
+      expect(getAddress(resolved!.args.winner!)).to.equal(expected);
+    });
+
+    it("resolves a draw with hundreds of participants without the gas cost growing with participant count", async function () {
+      this.timeout(600_000);
+      const fixture = await loadFixture(deployFixture);
+      const { hook, hookAsOwner, trader } = fixture;
+      await setUpPoolAndLiquidity(fixture);
+      await hookAsOwner.write.setMaxWinProbabilityDenominator([0n]);
+      await hookAsOwner.write.setMinEntryThresholdWei([1n]);
+
+      const N = 300;
+      for (let i = 0; i < N; i++) {
+        await sellFor(fixture, trader, addr(i), parseEther("0.0001"));
+      }
+      expect(await hook.read.drawSegmentCount([0n])).to.equal(BigInt(N));
+
+      await hre.network.provider.send("evm_increaseTime", [24 * 60 * 60 + 1]);
+      await hre.network.provider.send("evm_mine");
+      await sellFor(fixture, trader, addr(0), parseEther("0.0001"));
+      expect(await hook.read.drawCloseBlock([0n])).to.not.equal(0n);
+
+      const txHash = await hook.write.resolveDraw([0n]);
+      const publicClient = await hre.viem.getPublicClient();
+      const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+      expect(receipt.status).to.equal("success");
+      // The old per-participant loop alone would cost well over 1M gas here
+      // (two cold storage reads per participant); binary search stays near
+      // the cost of a 3-participant draw.
+      expect(receipt.gasUsed < 700_000n).to.equal(true);
+    });
   });
 
   describe("prize queue", function () {

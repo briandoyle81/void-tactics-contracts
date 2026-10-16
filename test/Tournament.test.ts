@@ -391,6 +391,35 @@ describe("Tournament", function () {
   });
 
   describe("Bracket seeding & byes", function () {
+    it("allows a reroll as soon as the shuffle request expires, even before the reveal deadline (HA6-19)", async function () {
+      const { asOwner, asAlice, asBob, asCarol, now } = await loadFixture(
+        deployTournamentFixture
+      );
+      await asOwner.write.createTournament([defaultConfig(now)]);
+      await asAlice.write.register([1n, 0n, 1n, EMPTY_PROOF], {
+        value: parseEther("1"),
+      });
+      await asBob.write.register([1n, 0n, 2n, EMPTY_PROOF], {
+        value: parseEther("1"),
+      });
+      await increaseTime(3601);
+      await asOwner.write.start([1n]);
+
+      // 300 blocks: past the 256-block blockhash window, but hardhat_mine
+      // only advances time 1s per block, so still inside the 10-minute
+      // SHUFFLE_REVEAL_WINDOW.
+      await hre.network.provider.send("hardhat_mine", ["0x12c"]);
+      await expect(asOwner.write.buildBracket([1n])).to.be.rejectedWith(
+        "RequestExpired"
+      );
+
+      // Previously this gap had no way forward until the deadline passed.
+      await asCarol.write.rerollBracketShuffle([1n]);
+      await hre.network.provider.send("evm_mine");
+      await asOwner.write.buildBracket([1n]);
+      expect((await asOwner.read.getBracket([1n])).length).to.equal(1);
+    });
+
     it("pads to a power of two and auto-advances byes to top seeds", async function () {
       const { asOwner, asAlice, asBob, asCarol, alice, bob, carol, now } =
         await loadFixture(deployTournamentFixture);
@@ -955,6 +984,15 @@ describe("Tournament", function () {
   });
 
   describe("Forfeit timeout (T-05)", function () {
+    it("rejects createTournament with maxPlayers above MAX_PLAYERS (HA6-17)", async function () {
+      const { asOwner, now } = await loadFixture(deployTournamentFixture);
+      expect(await asOwner.read.MAX_PLAYERS()).to.equal(128);
+      await expect(
+        asOwner.write.createTournament([defaultConfig(now, { maxPlayers: 129 })])
+      ).to.be.rejectedWith("InvalidConfig");
+      await asOwner.write.createTournament([defaultConfig(now, { maxPlayers: 128 })]);
+    });
+
     it("rejects createTournament with a matchTimeout outside [MIN, MAX]", async function () {
       const { asOwner, now } = await loadFixture(deployTournamentFixture);
       await expect(
@@ -1100,7 +1138,7 @@ describe("Tournament", function () {
       ).to.be.rejectedWith("MatchTimeoutNotReached");
     });
 
-    it("rejects resolveStalledMatch once a game has already been assigned", async function () {
+    it("rejects resolveStalledMatch on an assigned game until its turn timeout plus matchTimeout has passed", async function () {
       const { deployed, asOwner, asAlice, asBob, alice, bob, now } =
         await loadFixture(deployTournamentFixture);
       await asOwner.write.createTournament([
@@ -1119,11 +1157,52 @@ describe("Tournament", function () {
       // claimForfeitWin test above for the same reasoning).
       const gameId = await createRealGameBetween(deployed, alice, bob);
       await asBob.write.assignMatchGame([1n, 0n, gameId]);
+      // Past matchTimeout from readyAt, but not past the game's turn
+      // timeout (300s) + matchTimeout (3600s) — the waiting player still
+      // has their grace period to end the game normally.
       await increaseTime(3601);
 
       await expect(
         asOwner.write.resolveStalledMatch([1n, 0n])
-      ).to.be.rejectedWith("GameAlreadyAssigned");
+      ).to.be.rejectedWith("GameNotStalled");
+    });
+
+    it("resolves an assigned game both players abandoned against the player whose turn it was (HA6-08)", async function () {
+      const { deployed, asOwner, asAlice, asBob, asCarol, alice, bob, now } =
+        await loadFixture(deployTournamentFixture);
+      await asOwner.write.createTournament([
+        defaultConfig(now, { maxPlayers: 2 }),
+      ]);
+      await asAlice.write.register([1n, 0n, 1n, EMPTY_PROOF], {
+        value: parseEther("1"),
+      });
+      await asBob.write.register([1n, 0n, 2n, EMPTY_PROOF], {
+        value: parseEther("1"),
+      });
+      await asOwner.write.start([1n]);
+      await hre.network.provider.send("evm_mine");
+      await asOwner.write.buildBracket([1n]);
+      const gameId = await createRealGameBetween(deployed, alice, bob);
+      await asBob.write.assignMatchGame([1n, 0n, gameId]);
+
+      const [, turnState] = await deployed.game.read.getGameMetadataAndTurnState([
+        gameId,
+      ]);
+      const stalledPlayer = turnState.currentTurn.toLowerCase();
+      const expectedWinner =
+        stalledPlayer === alice.account.address.toLowerCase()
+          ? bob.account.address.toLowerCase()
+          : alice.account.address.toLowerCase();
+
+      // Neither player moves, times out, or flees. Past turn timeout (300s)
+      // + matchTimeout (3600s), an uninvolved third party unfreezes it.
+      await increaseTime(300 + 3600 + 1);
+      await asCarol.write.resolveStalledMatch([1n, 0n]);
+
+      const bracket = await asOwner.read.getBracket([1n]);
+      expect(bracket[0].resolved).to.be.true;
+      expect(bracket[0].winner.toLowerCase()).to.equal(expectedWinner);
+      await asOwner.write.finalize([1n]);
     });
 
     it("rejects resolveStalledMatch once the match is already resolved", async function () {
@@ -1252,161 +1331,11 @@ describe("Tournament", function () {
   });
 
   describe("Win effects", function () {
-    // Runs a real 2-player tournament through to a resolved final (bob wins
-    // by alice fleeing, same flow as the "End-to-end" describe block above)
-    // so `finalize` has a real champion to dispatch win effects for.
-    async function runTournamentToChampion(
-      fx: Awaited<ReturnType<typeof deployTournamentFixture>>,
-    ) {
-      const { deployed, asOwner, asAlice, asBob, alice, bob, now } = fx;
-      const ships = deployed.ships;
-      const pvpMatch = deployed.pvpMatch;
-      const gameResults = deployed.gameResults;
-      const randomManager = deployed.randomManager;
-      const lobbies = deployed.lobbies;
-
-      await asOwner.write.createTournament([
-        defaultConfig(now, { maxPlayers: 2 }),
-      ]);
-      await asAlice.write.register([1n, 0n, 1n, EMPTY_PROOF], {
-        value: parseEther("1"),
-      });
-      await asBob.write.register([1n, 0n, 2n, EMPTY_PROOF], {
-        value: parseEther("1"),
-      });
-      await asOwner.write.start([1n]);
-      await hre.network.provider.send("evm_mine");
-      await asOwner.write.buildBracket([1n]);
-
-      await ships.write.purchaseWithFlow(
-        [alice.account.address, 0, bob.account.address, 1],
-        { value: parseEther("4.99") },
-      );
-      await ships.write.purchaseWithFlow(
-        [bob.account.address, 0, alice.account.address, 1],
-        { value: parseEther("4.99") },
-      );
-      for (let i = 1; i <= 10; i++) {
-        const shipTuple = (await ships.read.ships([BigInt(i)])) as ShipTuple;
-        const ship = tupleToShip(shipTuple);
-        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
-      }
-      await ships.write.constructAllMyShips({ account: alice.account });
-      await ships.write.constructAllMyShips({ account: bob.account });
-
-      await lobbies.write.createLobbyForAddresses([
-        alice.account.address,
-        bob.account.address,
-        1000n,
-        300n,
-        0n,
-        100n,
-      ]);
-      const lobbyId = 1n;
-      await lobbies.write.createFleet(
-        [lobbyId, [1n], generateStartingPositions([1n], true)],
-        { account: alice.account },
-      );
-      await lobbies.write.createFleet(
-        [lobbyId, [6n], generateStartingPositions([6n], false)],
-        { account: bob.account },
-      );
-      await pvpMatch.write.flee([lobbyId], { account: alice.account });
-      expect(await gameResults.read.isGameResultRecorded([lobbyId])).to.be.true;
-
-      await asOwner.write.assignMatchGame([1n, 0n, lobbyId]);
-      await asOwner.write.recordResult([1n, 0n, `0x${"ab".repeat(32)}`]);
-
-      return { tournamentId: 1n, champion: bob, runnerUp: alice };
-    }
-
-    it("has an empty win-effect list by default and setWinEffects is owner-only", async function () {
-      const fx = await loadFixture(deployTournamentFixture);
-      const { deployed, asAlice } = fx;
-
-      expect(await deployed.tournament.read.getWinEffects()).to.deep.equal([]);
-
-      await expect(
-        asAlice.write.setWinEffects([[deployed.decBonusWinEffect.address]]),
-      ).to.be.rejected;
-    });
-
-    it("mints the configured DEC bonus to the champion only, not the runner-up, on finalize", async function () {
-      const fx = await loadFixture(deployTournamentFixture);
-      const { deployed, asOwner } = fx;
-
-      await deployed.tournament.write.setWinEffects([
-        [deployed.decBonusWinEffect.address],
-      ]);
-      const { tournamentId, champion, runnerUp } =
-        await runTournamentToChampion(fx);
-
-      const championDecBefore = await deployed.droneEnergyCores.read.balanceOf([
-        champion.account.address,
-      ]);
-      const runnerUpDecBefore = await deployed.droneEnergyCores.read.balanceOf([
-        runnerUp.account.address,
-      ]);
-
-      await asOwner.write.finalize([tournamentId]);
-
-      const bonusAmount = await deployed.decBonusWinEffect.read.bonusAmount();
-      expect(
-        (await deployed.droneEnergyCores.read.balanceOf([
-          champion.account.address,
-        ])) - championDecBefore,
-      ).to.equal(bonusAmount);
-      expect(
-        await deployed.droneEnergyCores.read.balanceOf([
-          runnerUp.account.address,
-        ]),
-      ).to.equal(runnerUpDecBefore); // unchanged — no effect for the runner-up
-    });
-
-    it("still finalizes (prizes distributed) when a configured win effect reverts", async function () {
-      const fx = await loadFixture(deployTournamentFixture);
-      const { deployed, asOwner, asBob } = fx;
-
-      const brokenEffect = await hre.viem.deployContract(
-        "MockAlwaysRevertsWinEffect",
-        [],
-      );
-      await deployed.tournament.write.setWinEffects([
-        [deployed.decBonusWinEffect.address, brokenEffect.address],
-      ]);
-      const { tournamentId, champion } = await runTournamentToChampion(fx);
-
-      const decBefore = await deployed.droneEnergyCores.read.balanceOf([
-        champion.account.address,
-      ]);
-      const finalizeHash = await asOwner.write.finalize([tournamentId]);
-      const receipt = await fx.publicClient.waitForTransactionReceipt({
-        hash: finalizeHash,
-      });
-
-      // Finalize wasn't bricked: prizes distributed, claimable.
-      const championWinnings = await asOwner.read.winningsOf([
-        tournamentId,
-        champion.account.address,
-      ]);
-      expect(championWinnings > 0n).to.be.true;
-      await asBob.write.claim([tournamentId]);
-
-      // The working effect before the broken one still fired.
-      const decAfter = await deployed.droneEnergyCores.read.balanceOf([
-        champion.account.address,
-      ]);
-      const bonusAmount = await deployed.decBonusWinEffect.read.bonusAmount();
-      expect(decAfter - decBefore).to.equal(bonusAmount);
-
-      const events = await deployed.tournament.getEvents.WinEffectFailed(
-        undefined,
-        { fromBlock: receipt.blockNumber, toBlock: receipt.blockNumber },
-      );
-      expect(events).to.have.length(1);
-      expect(events[0].args.resolver?.toLowerCase()).to.equal(
-        brokenEffect.address.toLowerCase(),
-      );
+    it("has none: tournaments are PvP and win effects are PvE-only (HA6-27)", async function () {
+      const artifact = await hre.artifacts.readArtifact("Tournament");
+      const names = artifact.abi.map((i: any) => i.name);
+      expect(names).to.not.include("setWinEffects");
+      expect(names).to.not.include("getWinEffects");
     });
   });
 });

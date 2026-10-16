@@ -128,6 +128,40 @@ node scripts/renderer-pipeline/image-to-svg.js <image> [--portrait] [--colors=N]
   overrides the next-to-the-source default, e.g. for writing several
   variants into one folder.
 
+## Static art as leaf contracts (added 2026-10-16)
+
+`svg-to-leaves.js` turns one standalone SVG (e.g. an `image-to-svg.js` output)
+into ordered `IReturnSVG` leaf contracts:
+- **Encoding:** the whole SVG is stored **already base64-encoded**, with inline
+  `style="fill:..."` rewritten as `fill` attributes.
+- **Splitting:** the text is cut into pieces of at most `--budget` characters
+  (default 23000, which keeps each leaf under the 24KB cap).
+- **Joining:** `ImageRenderer*` joins the pieces in one allocation behind
+  `data:image/svg+xml;base64,`.
+
+```
+node scripts/renderer-pipeline/svg-to-leaves.js <in.svg> <outDir> <NamePattern{n}> [--budget=CHARS]
+```
+
+**Why pre-encode:** OpenZeppelin's `Base64` costs about 78 gas per byte, and
+repeated `string.concat` copies quadratically. With on-chain encoding, a 237KB
+image pushed one `tokenURI` read to about 86M gas, past common `eth_call` caps.
+`RenderMetadata` still base64-encodes the whole JSON, image included, so image
+size still matters. Keep each image to roughly 100KB or less. The 71KB v2
+unconstructed image reads at about 11M gas.
+
+**Current art:**
+
+| Image | Leaves | Source |
+|---|---|---|
+| Destroyed (explosion) | `contracts/Renderers/RenderExplosion{n}.sol`, `contracts/RenderersV2/RenderExplosion{n}V2.sol` | `*-explosion-256px-portrait.svg` |
+| Unconstructed | `RenderUnconstructed{n}` / `RenderUnconstructed{n}V2` (same folders) | `v*-unconstructed-256px-merge35.svg` (`--portrait --merge=35 --simplify=1` on a 256px downscale) |
+
+The leaf addresses go, in order, into `ImageRenderer*`'s `_destroyedParts` /
+`_unconstructedParts` constructor arguments (see `DeployAndConfig.ts`).
+`gen-combiners.js` generates `ImageRendererV2` with both arguments. If a
+regenerated leaf count changes, update the deploy module's arrays to match.
+
 ## How it works
 
 **Current state, in brief:** each layer is reduced to a palette

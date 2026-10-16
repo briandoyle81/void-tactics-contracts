@@ -64,4 +64,68 @@ describe("SelfieCheckEligibilityProvider", function () {
       asOther.write.setNullifierCheckEnabled([false]),
     ).to.be.rejectedWith("OwnableUnauthorizedAccount");
   });
+
+  describe("nullifier binding, renewal and release (HA6-14)", function () {
+    const N = `0x${"ab".repeat(32)}` as `0x${string}`;
+    const DAY = 24 * 60 * 60;
+
+    async function withVerifier() {
+      const f = await loadFixture(deployFixture);
+      await f.provider.write.setAuthorizedVerifier([f.verifier.account.address, true]);
+      const asVerifier = await hre.viem.getContractAt(
+        "SelfieCheckEligibilityProvider",
+        f.provider.address,
+        { client: { wallet: f.verifier } },
+      );
+      return { ...f, asVerifier };
+    }
+
+    it("lets the same wallet renew its verification with its own nullifier", async function () {
+      const { provider, asVerifier, other } = await withVerifier();
+      const player = other.account.address;
+      await asVerifier.write.markVerified([player, N]);
+      const first = await provider.read.verifiedUntil([player]);
+
+      await hre.network.provider.send("evm_increaseTime", [91 * DAY]);
+      await hre.network.provider.send("evm_mine");
+      expect(await provider.read.isEligible([player])).to.equal(false);
+
+      // Used to revert NullifierAlreadyUsed, locking the player out forever.
+      await asVerifier.write.markVerified([player, N]);
+      expect((await provider.read.verifiedUntil([player])) > first).to.equal(true);
+      expect(await provider.read.isEligible([player])).to.equal(true);
+    });
+
+    it("still rejects the same human verifying a second wallet", async function () {
+      const { asVerifier, other, owner } = await withVerifier();
+      await asVerifier.write.markVerified([other.account.address, N]);
+      await expect(
+        asVerifier.write.markVerified([owner.account.address, N]),
+      ).to.be.rejectedWith("NullifierAlreadyUsed");
+    });
+
+    it("owner can release a nullifier for a wallet move, ending the old wallet's eligibility", async function () {
+      const { provider, asVerifier, other, owner } = await withVerifier();
+      const oldWallet = other.account.address;
+      const newWallet = owner.account.address;
+      await asVerifier.write.markVerified([oldWallet, N]);
+
+      const asOther = await hre.viem.getContractAt(
+        "SelfieCheckEligibilityProvider",
+        provider.address,
+        { client: { wallet: other } },
+      );
+      await expect(asOther.write.releaseNullifier([N])).to.be.rejected;
+
+      await provider.write.releaseNullifier([N]);
+      expect(await provider.read.isEligible([oldWallet])).to.equal(false);
+      expect(await provider.read.usedNullifiers([N])).to.equal(false);
+
+      await asVerifier.write.markVerified([newWallet, N]);
+      expect(await provider.read.isEligible([newWallet])).to.equal(true);
+      expect(
+        (await provider.read.nullifierOwner([N])).toLowerCase(),
+      ).to.equal(newWallet.toLowerCase());
+    });
+  });
 });

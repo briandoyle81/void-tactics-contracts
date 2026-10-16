@@ -29,6 +29,12 @@ contract SelfieCheckEligibilityProvider is IEligibilityProvider, Ownable {
     // from being credited as newly-verified more than once across wallets.
     mapping(bytes32 => bool) public usedNullifiers;
 
+    // World ID nullifier -> the wallet it's bound to. A Selfie Check
+    // nullifier is stable per human, so this is what lets the SAME wallet
+    // renew its 90-day verification (docs/audit-3.md HA6-14) while a
+    // different wallet presenting the same human is still rejected.
+    mapping(bytes32 => address) public nullifierOwner;
+
     // Per-player expiry of their Selfie Check verification.
     mapping(address => uint256) public verifiedUntil;
 
@@ -47,6 +53,7 @@ contract SelfieCheckEligibilityProvider is IEligibilityProvider, Ownable {
     );
     event AuthorizedVerifierSet(address indexed verifier, bool isAuthorized);
     event NullifierCheckEnabledSet(bool enabled);
+    event NullifierReleased(bytes32 indexed nullifierHash, address indexed previousOwner);
 
     error NotAuthorizedVerifier(address caller);
     error NullifierAlreadyUsed(bytes32 nullifierHash);
@@ -75,14 +82,31 @@ contract SelfieCheckEligibilityProvider is IEligibilityProvider, Ownable {
             revert NotAuthorizedVerifier(msg.sender);
         }
         if (nullifierCheckEnabled) {
-            if (usedNullifiers[_nullifierHash]) {
+            address boundTo = nullifierOwner[_nullifierHash];
+            if (boundTo == address(0)) {
+                nullifierOwner[_nullifierHash] = _player;
+                usedNullifiers[_nullifierHash] = true;
+            } else if (boundTo != _player) {
                 revert NullifierAlreadyUsed(_nullifierHash);
             }
-            usedNullifiers[_nullifierHash] = true;
+            // boundTo == _player: a renewal — refresh the window below.
         }
 
         verifiedUntil[_player] = block.timestamp + VERIFICATION_VALIDITY_PERIOD;
         emit PlayerVerified(_player, _nullifierHash, verifiedUntil[_player]);
+    }
+
+    // For a real human who moved to a new wallet: frees their nullifier so
+    // the new wallet can be verified, and immediately ends the old wallet's
+    // verification so one human never backs two eligible wallets at once.
+    function releaseNullifier(bytes32 _nullifierHash) external onlyOwner {
+        address previousOwner = nullifierOwner[_nullifierHash];
+        if (previousOwner != address(0)) {
+            verifiedUntil[previousOwner] = 0;
+        }
+        delete nullifierOwner[_nullifierHash];
+        usedNullifiers[_nullifierHash] = false;
+        emit NullifierReleased(_nullifierHash, previousOwner);
     }
 
     function isEligible(address _player) external view returns (bool) {

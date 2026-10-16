@@ -33,12 +33,6 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // Maps each faction (variant) to its own AI decision contract — see
     // AIBehaviorRegistry/IVariantAI. Set via setAIRegistryAddress.
     AIBehaviorRegistry public aiRegistry;
-    // UA-08 fix (2026-09-29): which aiRegistry was live when each node
-    // match started, read by _decideMove instead of the live aiRegistry
-    // above — so an admin AI balance patch mid-match can't change how the
-    // opponent thinks partway through a fight the human already committed
-    // to. See docs/upgrade-safety-audit-2026-09-29.md UA-08.
-    mapping(uint => address) public aiRegistryAtStart;
     IUniversalCredits public universalCredits;
     NodeMap public nodeMap;
     IFleets public fleets;
@@ -96,10 +90,17 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         uint16 variant;
         Special special;
         MainWeapon mainWeapon;
+        // The AI contract this ship plays with, pinned at mint
+        // (docs/audit-3.md HA6-18): pinning only the registry address left
+        // its contents mutable via setVariantAI, so a mid-match AI patch
+        // still changed the opponent. Packs into the same slot.
+        IVariantAI ai;
     }
     mapping(uint => AIShipInfo) public aiShipInfo;
 
     error NotGame();
+    error NotYourGame();
+    error EngineAlreadyLive();
     error GameEnded();
     error NotAITurn();
     error NoAIPlacementsConfigured();
@@ -112,6 +113,7 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         uint indexed nodeId,
         address indexed human
     );
+    event AIDecisionFailed(uint indexed gameId, uint shipId);
     event AITurnTaken(
         uint indexed gameId,
         uint shipId,
@@ -139,6 +141,16 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         fleets = IFleets(_fleets);
     }
 
+    // docs/audit-3.md HA6-13 (same rule as PvPMatch's UA-02 fix): once a
+    // match has started, the dependencies live matchs rely on can't be
+    // repointed — a swap would orphan in-flight state (a game that can never
+    // call back, fleets or a run ledger the old state lives in, an AI pool
+    // whose ids don't match). A new engine is deployed fresh instead and
+    // registered via GameEngineRegistry.
+    function _requireNotLive() internal view {
+        if (nodeMatchCount > 0) revert EngineAlreadyLive();
+    }
+
     function setLobbiesAddress(address _lobbies) external onlyOwner {
         lobbies = Lobbies(_lobbies);
     }
@@ -147,10 +159,12 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // swapped in without redeploying this contract — see Game.setAddresses
     // for why this matters.
     function setShipsAddress(address _ships) external onlyOwner {
+        _requireNotLive();
         ships = AIShips(_ships);
     }
 
     function setGameAddress(address _game) external onlyOwner {
+        _requireNotLive();
         game = Game(_game);
     }
 
@@ -163,6 +177,7 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     }
 
     function setMapsAddress(address _maps) external onlyOwner {
+        _requireNotLive();
         maps = IMaps(_maps);
     }
 
@@ -177,6 +192,7 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     }
 
     function setNodeMapAddress(address _nodeMap) external onlyOwner {
+        _requireNotLive();
         nodeMap = NodeMap(_nodeMap);
     }
 
@@ -238,8 +254,6 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
             engineIndex *
             ENGINE_ID_BLOCK_SIZE +
             nodeMatchCount;
-        // UA-08 fix: pin this match's AI registry for its whole duration.
-        aiRegistryAtStart[gameId] = address(aiRegistry);
 
         uint humanFleetId = fleets.createFleet(
             gameId,
@@ -318,7 +332,10 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
                 archetype: config.archetype,
                 variant: config.traits.variant,
                 special: config.equipment.special,
-                mainWeapon: config.equipment.mainWeapon
+                mainWeapon: config.equipment.mainWeapon,
+                // Reverts NoAIForVariant at match start if the variant has
+                // no AI — failing loudly up front instead of mid-match.
+                ai: aiRegistry.aiFor(config.traits.variant)
             });
         }
         gameIdToAiShipIds[_gameId] = shipIds;
@@ -358,6 +375,14 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // Decision-making is delegated to the ship's own faction's AI contract
     // (looked up by variant in aiRegistry, see _decideMove below), which
     // picks a decision tree from the ship's cached archetype.
+    // docs/audit-3.md HA6-12: the human can always end their own match, as
+    // a loss, so their ships are never stuck in a game that can't progress
+    // (e.g. the AI unable to move). Same as RoguelikeMatch.retreatRun(gameId).
+    function forfeit(uint _gameId) external {
+        if (gameIdToHuman[_gameId] != msg.sender) revert NotYourGame();
+        game.forceEndSession(_gameId, address(this), msg.sender);
+    }
+
     function takeAITurn(uint _gameId) external {
         _takeOneAITurn(_gameId, true);
     }
@@ -437,7 +462,14 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         GameDataView memory g,
         uint _shipId
     ) internal returns (bool) {
-        AIBehavior.Decision memory d = _decideMove(_gameId, g, _shipId);
+        (AIBehavior.Decision memory d, bool decided) = _decideMove(
+            _gameId,
+            g,
+            _shipId
+        );
+        // HA6-12: _decideMove fell back to Pass; surface it so a broken AI
+        // fails loudly instead of silently passing forever.
+        if (!decided) emit AIDecisionFailed(_gameId, _shipId);
 
         // Defense in depth: a heuristic bug or an edge case the rules
         // didn't anticipate should degrade to "this ship does nothing this
@@ -482,7 +514,7 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         uint _gameId,
         GameDataView memory g,
         uint _shipId
-    ) internal view returns (AIBehavior.Decision memory d) {
+    ) internal view returns (AIBehavior.Decision memory d, bool decided) {
         (Position memory myPos, bool posFound) = AIBehavior.findPosition(
             g,
             _shipId
@@ -493,7 +525,7 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
             d.destRow = myPos.row;
             d.destCol = myPos.col;
             d.action = ActionType.Pass;
-            return d;
+            return (d, true);
         }
 
         AIShipInfo memory info = aiShipInfo[_shipId];
@@ -514,13 +546,25 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         // healing is an equipped special for variant 1 but a faction ability
         // for variant 2), so the tree is chosen by variant first, then by the
         // ship's archetype inside that faction's contract. A variant with no
-        // registered AI reverts NoAIForVariant.
-        // UA-08 fix: pinned registry (see aiRegistryAtStart), not the live
-        // aiRegistry field.
-        return
-            AIBehaviorRegistry(aiRegistryAtStart[_gameId])
-                .aiFor(info.variant)
-                .decide(ctx, info.archetype, info.special);
+        // registered AI fails at match start (aiFor at mint).
+        // Calls the ship's own AI contract, pinned at mint (AIShipInfo.ai).
+        // docs/audit-3.md HA6-12: any failure to decide falls back to
+        // passing in place instead of reverting — an non-contract AI,
+        // a revert or out-of-gas inside decide.
+        // Reverting here would make takeAITurn fail every time, leaving the
+        // game stuck on the AI's turn. (The code-length checks matter: a
+        // call to an address with no code returns empty data, and the
+        // resulting decode failure isn't catchable.)
+        d.destRow = myPos.row;
+        d.destCol = myPos.col;
+        d.action = ActionType.Pass;
+        if (address(info.ai).code.length == 0) return (d, false);
+        try info.ai.decide(ctx, info.archetype, info.special) returns (
+            AIBehavior.Decision memory chosen
+        ) {
+            return (chosen, true);
+        } catch {}
+        return (d, false);
     }
 
     function _findUnmovedShip(

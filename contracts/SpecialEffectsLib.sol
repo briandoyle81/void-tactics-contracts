@@ -209,7 +209,13 @@ library SpecialEffectsLib {
             uint16 damage = uint16(uint32(-int32(_hullDelta)));
             if (damage >= attrs.hullPoints) {
                 attrs.hullPoints = 0;
-                EnumerableSet.remove(game.shipMovedThisRound, _shipId);
+                // HA6-24: remember it had already moved this round (see
+                // GameData.zeroedAfterMovingInRound).
+                if (EnumerableSet.remove(game.shipMovedThisRound, _shipId)) {
+                    game.zeroedAfterMovingInRound[_shipId] = game
+                        .turnState
+                        .currentRound;
+                }
                 EnumerableSet.add(game.shipsWithZeroHP, _shipId);
                 game.lastDamage[_shipId] = _actingShipId;
             } else {
@@ -230,7 +236,22 @@ library SpecialEffectsLib {
             attrs.hullPoints = cappedHullPoints > currentHullPoints
                 ? uint8(cappedHullPoints)
                 : currentHullPoints;
-            EnumerableSet.remove(game.shipsWithZeroHP, _shipId);
+            // Only a ship actually brought back above 0 HP leaves the
+            // zero-HP set — a heal capped at 0 (healCapPercent 0) used to
+            // remove it anyway, so it was never reactor-ticked or destroyed
+            // and stalled the round (docs/audit-3.md HA6-25).
+            if (currentHullPoints == 0 && attrs.hullPoints > 0) {
+                EnumerableSet.remove(game.shipsWithZeroHP, _shipId);
+                // HA6-24: going to 0 HP cleared its moved flag. If it had
+                // already acted this round, it counts as moved again so it
+                // can't act twice; a ship downed before moving keeps its move.
+                if (
+                    game.zeroedAfterMovingInRound[_shipId] ==
+                    game.turnState.currentRound
+                ) {
+                    EnumerableSet.add(game.shipMovedThisRound, _shipId);
+                }
+            }
         }
     }
 

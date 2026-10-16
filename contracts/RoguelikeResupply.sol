@@ -33,6 +33,8 @@ contract RoguelikeResupply is Ownable {
     error ShipNotInRoster();
     error ShipNotOwned();
     error ShipAlreadyInFleet();
+    error ShipCostVersionMismatch();
+    error EngineAlreadyLive();
     error WrongCampaignVariant();
     error InsufficientFunds(uint required, uint available);
     error ActiveGameInProgress();
@@ -61,11 +63,23 @@ contract RoguelikeResupply is Ownable {
         runLedger = RoguelikeRun(_runLedger);
     }
 
+    // docs/audit-3.md HA6-13 (same rule as PvPMatch's UA-02 fix): once a
+    // run has started, the dependencies live runs rely on can't be
+    // repointed — a swap would orphan in-flight state (a game that can never
+    // call back, fleets or a run ledger the old state lives in, an AI pool
+    // whose ids don't match). A new engine is deployed fresh instead and
+    // registered via GameEngineRegistry.
+    function _requireNotLive() internal view {
+        if (runLedger.runsStarted() > 0) revert EngineAlreadyLive();
+    }
+
     function setHumanShipsAddress(address _humanShips) external onlyOwner {
+        _requireNotLive();
         humanShips = IShips(_humanShips);
     }
 
     function setFleetsAddress(address _fleets) external onlyOwner {
+        _requireNotLive();
         fleets = IFleets(_fleets);
     }
 
@@ -82,10 +96,12 @@ contract RoguelikeResupply is Ownable {
     }
 
     function setNodeMapAddress(address _nodeMap) external onlyOwner {
+        _requireNotLive();
         nodeMap = RoguelikeNodeMap(_nodeMap);
     }
 
     function setRunLedgerAddress(address _runLedger) external onlyOwner {
+        _requireNotLive();
         runLedger = RoguelikeRun(_runLedger);
     }
 
@@ -193,6 +209,13 @@ contract RoguelikeResupply is Ownable {
             if (ship.shipData.inFleet) revert ShipAlreadyInFleet();
             if (requiredVariant != 0 && ship.traits.variant != requiredVariant)
                 revert WrongCampaignVariant();
+            // The roster is re-reserved at frozen prices (HA6-09), so a ship
+            // newly joining it must be at current prices — the check
+            // Fleets.createFleet would otherwise have done.
+            if (
+                ship.shipData.costsVersion !=
+                shipAttributes.getCurrentCostsVersion(ship.traits.variant)
+            ) revert ShipCostVersionMismatch();
         }
 
         uint newLength = keepCount + _shipIdsToAdd.length;
@@ -230,6 +253,8 @@ contract RoguelikeResupply is Ownable {
             });
         }
         // mapId 0: map-agnostic synthetic fleet, see the doc comment above.
-        fleetId = fleets.createFleet(0, _player, _shipIds, positions, _costCap, true, 0);
+        // Frozen prices: kept roster ships keep their run-start prices; adds
+        // were checked against current prices in resupplyModifyRoster.
+        fleetId = fleets.createFleetFrozenPrices(0, _player, _shipIds, positions, _costCap, true, 0);
     }
 }

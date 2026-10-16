@@ -112,23 +112,38 @@ contract ShipsRouter is IShips, Ownable {
             revert NotAuthorized(msg.sender);
         }
 
-        uint16 destroyedVariant = getShip(_id).traits.variant;
+        Ship memory destroyed = getShip(_id);
 
         address destroyedOwner = _isAI(_id)
             ? aiShips.markDestroyed(_id)
             : ships.markDestroyed(_id);
 
-        address destroyerOwner = _isAI(_destroyerId)
-            ? aiShips.recordKill(_destroyerId)
-            : ships.recordKill(_destroyerId);
+        // docs/audit-3.md HA6-16: only a PvP kill (no AI ship on either
+        // side) of a non-free ship counts toward the destroyer's kill count
+        // (= rank). PvE kills and free-ship kills only look up the owner.
+        bool freeVictim = destroyed.shipData.isFreeShip;
+        address destroyerOwner;
+        if (_isAI(_id) || _isAI(_destroyerId) || freeVictim) {
+            destroyerOwner = getShip(_destroyerId).owner;
+        } else {
+            destroyerOwner = ships.recordKill(_destroyerId);
+        }
 
-        if (destroyerOwner != address(0)) {
+        // No reward for destroying a free ship (HA6-16: free ships pay no
+        // UTC), and none when an AI ship is the destroyer — its owner is an
+        // orchestrator contract, so the UTC was minted to a contract that
+        // can't use it (HA6-21).
+        if (
+            destroyerOwner != address(0) &&
+            !freeVictim &&
+            !_isAI(_destroyerId)
+        ) {
             DestroyRewardLib.payDestroyReward(
                 lobbyAddress,
                 destroyedOwner,
                 destroyerOwner,
                 ships.recycleReward() >> 2, // Division by 4
-                destroyedVariant,
+                destroyed.traits.variant,
                 universalCredits,
                 factionRewardTokenRegistry
             );

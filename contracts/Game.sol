@@ -313,7 +313,7 @@ contract Game is Ownable {
         );
         for (uint i = 0; i < shipIds.length; i++) {
             EnumerableSet.add(game.playerActiveShipIds[_player], shipIds[i]);
-            calculateShipAttributes(_gameId, shipIds[i]);
+            _calculateShipAttributes(_gameId, shipIds[i]);
         }
     }
 
@@ -374,17 +374,19 @@ contract Game is Ownable {
         });
     }
 
-    // Calculate and store attributes for a ship in a game.
-    // Left public/permissionless on purpose so players can self-serve this during
-    // fleet setup, but the write is snapshot-once: `attributes.version` is 0 only
+    // Calculate and store attributes for a ship in a game. Private: only
+    // startGame (via _registerFleetShips) may snapshot — a public version let
+    // anyone pre-write (nextGameId, shipId) before start, making startGame hit
+    // the guard below and revert forever (docs/audit-3.md HA6-01). The write is
+    // snapshot-once: `attributes.version` is 0 only
     // until the first calculation. ShipAttributes versions are per variant and
     // start at 1 on first publish (a rollback can't reach 0 either), so a
     // non-zero version reliably means "already set for this game." That stored
     // version is also the game's pin: special resolvers read special data at it
-    // (ShipAttributes.getSpecialRangeAt/StrengthAt). Without this guard, anyone
-    // could call this again mid-game to pull in a newer ShipAttributes version,
-    // silently breaking the snapshot the game is supposed to lock in at start.
-    function calculateShipAttributes(uint _gameId, uint _shipId) public {
+    // (ShipAttributes.getSpecialRangeAt/StrengthAt). Now that nothing external
+    // can reach this, the guard is defense in depth: a re-snapshot would pull
+    // in a newer ShipAttributes version, silently breaking the start-of-game pin.
+    function _calculateShipAttributes(uint _gameId, uint _shipId) private {
         GameData storage game = games[_gameId];
         Attributes storage attributes = game.shipAttributes[_shipId];
         if (attributes.version != 0) revert InvalidMove(); // already calculated for this game
@@ -405,7 +407,7 @@ contract Game is Ownable {
     }
 
     // Lets a game's orchestrator seed a ship's hull points below the fresh
-    // 100% calculateShipAttributes just set, for orchestrators that carry
+    // 100% _calculateShipAttributes just set, for orchestrators that carry
     // persistent damage across matches (e.g. a roguelike run's fleet).
     // Same orchestrator-identity check forceEndSession already uses — every
     // existing orchestrator (Lobbies/PvPMatch/SinglePlayerMatch/Tournament)
@@ -583,17 +585,32 @@ contract Game is Ownable {
     // Helper function to check if the game should end due to a player having no active ships
     function _checkGameEndCondition(uint _gameId) internal {
         GameData storage game = games[_gameId];
+        address creator = game.metadata.creator;
+        address joiner = game.metadata.joiner;
+        bool creatorActive = _playerHasActiveShips(_gameId, creator);
+        bool joinerActive = _playerHasActiveShips(_gameId, joiner);
 
-        // Check if creator has no active ships
-        if (!_playerHasActiveShips(_gameId, game.metadata.creator)) {
-            _endGame(_gameId, game.metadata.joiner, game.metadata.creator);
-            return;
+        // Neither side has an active ship (e.g. friendly fire or a swarm
+        // disabled both at once): decide by score, like the score threshold
+        // — the creator used to lose automatically just for being checked
+        // first (docs/audit-3.md HA6-26).
+        if (!creatorActive && !joinerActive) {
+            _endGameByScore(_gameId, game);
+        } else if (!creatorActive) {
+            _endGame(_gameId, joiner, creator);
+        } else if (!joinerActive) {
+            _endGame(_gameId, creator, joiner);
         }
+    }
 
-        // Check if joiner has no active ships
-        if (!_playerHasActiveShips(_gameId, game.metadata.joiner)) {
+    // Higher score wins; a tie is a draw.
+    function _endGameByScore(uint _gameId, GameData storage game) private {
+        if (game.creatorScore == game.joinerScore) {
+            _endGame(_gameId, address(0), address(0));
+        } else if (game.creatorScore > game.joinerScore) {
             _endGame(_gameId, game.metadata.creator, game.metadata.joiner);
-            return;
+        } else {
+            _endGame(_gameId, game.metadata.joiner, game.metadata.creator);
         }
     }
 
@@ -703,12 +720,18 @@ contract Game is Ownable {
             ship
         );
 
-        // Check if both players have moved all their ships (round complete)
-        if (_checkRoundComplete(_gameId)) {
-            _handleEndOfRound(_gameId);
-        } else {
-            // Switch turns only if the other player has unmoved ships
-            _switchTurnIfOtherPlayerHasShips(_gameId);
+        // Skip round handling if this move's action already ended the game:
+        // _endGame cleared both fleets, so a round-start reactor tick
+        // removing another ship would revert ShipNotFound and unwind the
+        // whole (game-ending) move (docs/audit-3.md HA6-02).
+        if (!game.metadata.ended) {
+            // Check if both players have moved all their ships (round complete)
+            if (_checkRoundComplete(_gameId)) {
+                _handleEndOfRound(_gameId);
+            } else {
+                // Switch turns only if the other player has unmoved ships
+                _switchTurnIfOtherPlayerHasShips(_gameId);
+            }
         }
 
         // Update turn start time for the new turn
@@ -1038,7 +1061,11 @@ contract Game is Ownable {
     function _setShipHPToZero(uint _gameId, uint _shipId) internal {
         GameData storage game = games[_gameId];
         game.shipAttributes[_shipId].hullPoints = 0;
-        EnumerableSet.remove(game.shipMovedThisRound, _shipId);
+        // HA6-24: remember it had already moved this round (see
+        // GameData.zeroedAfterMovingInRound).
+        if (EnumerableSet.remove(game.shipMovedThisRound, _shipId)) {
+            game.zeroedAfterMovingInRound[_shipId] = game.turnState.currentRound;
+        }
         EnumerableSet.add(game.shipsWithZeroHP, _shipId);
     }
 
@@ -1294,6 +1321,10 @@ contract Game is Ownable {
                 results.removeKinds[i] == 1,
                 _validateShipExistsAndNotDestroyed(results.removeShipIds[i])
             );
+            // A removal that ended the game cleared both fleets; a further
+            // removal would revert ShipNotFound (HA6-02). Relocations below
+            // still apply (grid/positions only) so the final board is right.
+            if (game.metadata.ended) break;
         }
         SpecialEffectsLib.applyRelocations(
             game,
@@ -1312,7 +1343,8 @@ contract Game is Ownable {
         bool _isRetreat,
         Ship memory _ship
     ) internal {
-        _requireGameExists(_gameId);
+        // No _requireGameExists: every caller is reached only via moveShip,
+        // which already checked it.
         GameData storage game = games[_gameId];
 
         // Ensure the passed ship is not globally destroyed
@@ -1409,6 +1441,9 @@ contract Game is Ownable {
                 if (attrs.reactorCriticalTimer >= 3) {
                     Ship memory ship = ships.getShip(shipId);
                     _removeShipFromGame(_gameId, shipId, false, ship);
+                    // This removal ended the game and cleared both fleets;
+                    // another removal would revert ShipNotFound (HA6-02).
+                    if (game.metadata.ended) return;
                     // Set shrinks; re-check same index
                     zeroHPShipCount = EnumerableSet.length(
                         game.shipsWithZeroHP
@@ -1613,22 +1648,7 @@ contract Game is Ownable {
                 game.creatorScore >= game.maxScore ||
                 game.joinerScore >= game.maxScore
             ) {
-                // If both players have reached at least maxScore and are tied, end the game as a draw
-                if (game.creatorScore == game.joinerScore) {
-                    _endGame(_gameId, address(0), address(0));
-                } else if (game.creatorScore > game.joinerScore) {
-                    _endGame(
-                        _gameId,
-                        game.metadata.creator,
-                        game.metadata.joiner
-                    );
-                } else {
-                    _endGame(
-                        _gameId,
-                        game.metadata.joiner,
-                        game.metadata.creator
-                    );
-                }
+                _endGameByScore(_gameId, game);
                 return;
             }
         }

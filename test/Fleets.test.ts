@@ -81,6 +81,28 @@ describe("Fleets — deployment zones (per-map)", function () {
     ).to.not.be.rejected;
   });
 
+  it("rejects an unconstructed ship even after its costs are synced (HA6-23)", async function () {
+    const f = await loadFixture(deployFixture);
+    // A fresh pack: ships 6-10, unconstructed.
+    await f.ships.write.purchaseWithFlow(
+      [f.creator.account.address, 0n, f.creator.account.address, 1],
+      { value: parseEther("4.99") },
+    );
+    // The permissionless sync stamps a current costsVersion on it (L-03).
+    await f.ships.write.syncShipCosts([[6n]]);
+    await expect(
+      f.fleets.write.createFleet([
+        0n,
+        f.creator.account.address,
+        [6n],
+        [{ row: 0, col: 0 }],
+        1000n,
+        true,
+        0n,
+      ]),
+    ).to.be.rejectedWith("ShipNotConstructed");
+  });
+
   it("rejects a duplicate shipId across two slots in the same fleet (HA4-05)", async function () {
     const f = await loadFixture(deployFixture);
     const mapId = await createEmptyMap(f);

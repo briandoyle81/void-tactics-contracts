@@ -505,7 +505,11 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
             revert InvalidVariant(_variant);
         }
         if (purchaseGate != address(0)) {
-            IVariantPurchaseGate(purchaseGate).checkGate(_variant, _to);
+            IVariantPurchaseGate(purchaseGate).checkGate(
+                _variant,
+                _to,
+                msg.sender
+            );
         }
 
         unchecked {
@@ -520,10 +524,11 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
             newShip.shipData.shipsDestroyed = _shipsDestroyed;
         }
 
-        _safeMint(_to, shipCount);
-
-        // Set owner after minting to avoid check in _update
-        newShip.owner = _to;
+        // _mint, not _safeMint: no onERC721Received callback mid-mint, so a
+        // recipient contract can't act before this function and its callers
+        // (createShips' isFreeShip write, Game._endGame via ShipGrantWinEffect)
+        // finish. Owner is set by _update (docs/audit-3.md HA6-04/HA6-11).
+        _mint(_to, shipCount);
 
         // ERC-5192: Ships start unlocked (emit for indexers if desired)
         emit Unlocked(shipCount);

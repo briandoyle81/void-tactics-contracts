@@ -71,7 +71,7 @@ contract GameLens {
     // first. Walks children from campaignRootNode rather than scanning
     // 1..nodeCount: node ids are global across all campaigns, so a scan
     // would cost more with every campaign ever created. Each node's
-    // children (with twoWay flags) come back inside its struct, so this is
+    // child ids come back inside its struct, so this is
     // the whole graph. A node reachable by more than one path appears once;
     // a child edge into a cycle is fine (already-visited nodes are skipped).
     // Returns an empty array for an unknown campaign or one with no root.
@@ -91,9 +91,9 @@ contract GameLens {
         uint tail = 1;
 
         for (uint head = 0; head < tail; head++) {
-            RoguelikeEdge[] memory children = queue[head].children;
+            uint[] memory children = queue[head].children;
             for (uint c = 0; c < children.length; c++) {
-                uint childId = children[c].childId;
+                uint childId = children[c];
                 bool seen = false;
                 for (uint v = 0; v < tail; v++) {
                     if (visited[v] == childId) {

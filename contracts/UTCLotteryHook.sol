@@ -12,8 +12,8 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import "./BlockHashLib.sol";
 import "./IShips.sol";
-import "./IRandomManager.sol";
 import "./Types.sol";
 
 // UTCLotteryHook — the pool + lottery half of the Uniswap pick
@@ -47,7 +47,6 @@ contract UTCLotteryHook is BaseHook, Ownable {
     using BalanceDeltaLibrary for BalanceDelta;
 
     IShips public ships;
-    IRandomManager public randomManager;
     address public immutable utcToken;
 
     bool public poolLocked;
@@ -80,8 +79,8 @@ contract UTCLotteryHook is BaseHook, Ownable {
     // than a 1-in-10 chance).
     uint256 public maxWinProbabilityDenominator = 10;
 
-    // A draw only starts once ALL of these hold: at least drawInterval has
-    // elapsed since the last draw started, AND the draw has accumulated at
+    // A draw only closes once ALL of these hold: at least drawInterval has
+    // elapsed since the last draw closed, AND the draw has accumulated at
     // least minParticipants distinct qualifying sellers, AND at least
     // minTotalWeightWei total qualifying volume. Time alone is deliberately
     // not enough — if a draw hasn't reached eligibility once drawInterval
@@ -104,8 +103,46 @@ contract UTCLotteryHook is BaseHook, Ownable {
     mapping(uint256 => mapping(address => bool)) public hasParticipated;
     mapping(uint256 => mapping(address => uint256)) public weightInDraw;
     mapping(uint256 => uint256) public totalWeightInDraw;
-    mapping(uint256 => uint256) public drawRandomRequestId;
     mapping(uint256 => bool) public drawResolved;
+
+    // Ticket segments (docs/audit-2.md HA5-02): every time an address's
+    // weight in a draw goes up, the increase is appended as one segment,
+    // packed as (cumulative end << 160) | owner. Ends only ever increase,
+    // so resolveDraw finds the winning segment by binary search (O(log n)
+    // storage reads) instead of looping over every participant — a draw can
+    // no longer be made unresolvable by inflating its participant count.
+    // Each address's segments sum to exactly its weightInDraw, so the odds
+    // are unchanged.
+    mapping(uint256 => uint256[]) internal drawSegments;
+
+    // Randomness (docs/audit-3.md HA6-05/HA6-07): a draw's winner comes from
+    // the hash of the block in which the draw CLOSED — the block containing
+    // the swap that met the close conditions. Entries freeze at close, and
+    // nobody can know that block's hash until the block is sealed, so the
+    // closing swap can't pick its outcome; after it's sealed the result is
+    // fixed, so it doesn't matter who resolves or when. (The hash of an
+    // EARLIER block must never be used: it's public before the closing
+    // swap is sent, letting the closer compute the result — or tune its own
+    // entry size in the same tx — and close only when it wins.)
+    //
+    // Resolution happens automatically in the afterSwap of the next swap in
+    // a later block (see _maybeAutoResolve), or via the permissionless
+    // resolveDraw. The close block's hash stays readable for 8191 blocks
+    // (~4.5 hours on Base) via EIP-2935, or 256 without it (BlockHashLib);
+    // if nothing resolves a draw within that window, the next attempt
+    // re-targets it to its own (equally unknowable) block — see _retarget.
+    mapping(uint256 => uint256) public drawCloseBlock;
+    // The pick's denominator, snapshotted at close so later owner changes to
+    // maxWeightPerEntryWei/maxWinProbabilityDenominator (made after the
+    // close block's hash is public) can't influence an already-closed draw.
+    mapping(uint256 => uint256) public drawEffectiveTotalWeight;
+    // Oldest closed draw that may still be unresolved — what the automatic
+    // afterSwap resolution attempts next.
+    uint256 public nextDrawToResolve;
+    // afterSwap only attempts automatic resolution when at least this much
+    // gas remains, so an ordinarily-gassed swap isn't charged for a prize
+    // mint that would just run out of gas. Owner-configurable.
+    uint256 public autoResolveMinGas = 1_000_000;
 
     // "1-of-a-kind" resolved: the owner can queue up to MAX_QUEUE_SIZE
     // hand-crafted ship templates (queuePrizeTemplate); each resolved draw
@@ -156,20 +193,18 @@ contract UTCLotteryHook is BaseHook, Ownable {
         uint256 ethProceeds,
         uint256 playerWeightInDraw
     );
-    event DrawStarted(uint256 indexed drawId, uint256 requestId, uint256 totalWeight);
+    event DrawClosed(uint256 indexed drawId, uint256 closeBlock, uint256 totalWeight);
+    event DrawRetargeted(uint256 indexed drawId, uint256 closeBlock);
     event DrawResolved(uint256 indexed drawId, address indexed winner);
     event DrawResolvedNoWinner(uint256 indexed drawId);
-    // HA4-02 fix (2026-09-28): emitted instead of DrawResolved when the
-    // picked winner can't actually receive the prize (e.g. a contract that
-    // reverts in onERC721Received) — see resolveDraw's own comment.
-    event PrizeMintFailed(uint256 indexed drawId, address indexed winner);
     event PrizeQueued(uint256 indexed queueIndex);
     event PrizeQueueCleared();
 
     error NotOurPool();
     error PoolAlreadyLocked();
     error DrawAlreadyResolved(uint256 drawId);
-    error DrawNotStarted(uint256 drawId);
+    error DrawNotClosed(uint256 drawId);
+    error DrawNotReady(uint256 drawId);
     error NoParticipants(uint256 drawId);
     error InvalidPrizeVariant(uint16 variant);
     error ArmorAndShieldsBothSet();
@@ -179,12 +214,10 @@ contract UTCLotteryHook is BaseHook, Ownable {
     constructor(
         IPoolManager _poolManager,
         address _ships,
-        address _randomManager,
         address _utcToken,
         address _initialOwner
     ) BaseHook(_poolManager) Ownable(_initialOwner) {
         ships = IShips(_ships);
-        randomManager = IRandomManager(_randomManager);
         utcToken = _utcToken;
         lastDrawTime = block.timestamp;
         // Queue starts empty — no seeded default template. An empty queue
@@ -276,7 +309,10 @@ contract UTCLotteryHook is BaseHook, Ownable {
             // deliberately not used as a fallback here.
         }
 
-        _maybeStartDraw();
+        // Resolve an older closed draw first (needs a block after its close
+        // block, so it can never be the draw this same swap closes).
+        _maybeAutoResolve();
+        _maybeCloseDraw();
 
         return (BaseHook.afterSwap.selector, 0);
     }
@@ -335,123 +371,173 @@ contract UTCLotteryHook is BaseHook, Ownable {
         // trade actually being bigger.
         uint256 previousWeight = weightInDraw[drawId][_player];
         if (cappedProceeds > previousWeight) {
-            totalWeightInDraw[drawId] =
-                totalWeightInDraw[drawId] -
+            uint256 newTotal = totalWeightInDraw[drawId] -
                 previousWeight +
                 cappedProceeds;
+            // Segment ends are packed into 96 bits (~7.9e10 ETH). Unreachable
+            // in practice; skip rather than revert, since a revert here
+            // would fail the trader's swap.
+            if (newTotal > type(uint96).max) return;
+            totalWeightInDraw[drawId] = newTotal;
             weightInDraw[drawId][_player] = cappedProceeds;
+            drawSegments[drawId].push(
+                (newTotal << 160) | uint256(uint160(_player))
+            );
         }
 
         emit SellRecorded(drawId, _player, ethProceeds, weightInDraw[drawId][_player]);
     }
 
-    function _maybeStartDraw() internal {
+    function _maybeCloseDraw() internal {
         uint256 drawId = currentDrawId;
         // totalWeightInDraw[drawId] == 0 is checked explicitly, not just
         // implied by minTotalWeightWei/minParticipants, since both of those
         // are owner-configurable down to 0 — this floor always applies
-        // regardless of configuration, so a draw can never start with
+        // regardless of configuration, so a draw can never close with
         // nothing in it.
+        uint256 totalWeight = totalWeightInDraw[drawId];
         if (
             block.timestamp < lastDrawTime + drawInterval ||
-            totalWeightInDraw[drawId] == 0 ||
-            totalWeightInDraw[drawId] < minTotalWeightWei ||
+            totalWeight == 0 ||
+            totalWeight < minTotalWeightWei ||
             drawParticipants[drawId].length < minParticipants
         ) {
             return;
         }
 
-        uint256 requestId = randomManager.requestRandomness();
-        drawRandomRequestId[drawId] = requestId;
-        lastDrawTime = block.timestamp;
-        currentDrawId = drawId + 1;
-
-        emit DrawStarted(drawId, requestId, totalWeightInDraw[drawId]);
-    }
-
-    // Permissionless, like Tournament.buildBracket — anyone can trigger
-    // resolution once RandomManager's entropy window has opened; reverts
-    // TooSoonToReveal (from RandomManager itself) if called too early.
-    function resolveDraw(uint256 _drawId) external {
-        if (drawResolved[_drawId]) {
-            revert DrawAlreadyResolved(_drawId);
-        }
-        uint256 requestId = drawRandomRequestId[_drawId];
-        if (requestId == 0) {
-            revert DrawNotStarted(_drawId);
-        }
-        uint256 totalWeight = totalWeightInDraw[_drawId];
-        address[] storage participants = drawParticipants[_drawId];
-        if (totalWeight == 0 || participants.length == 0) {
-            revert NoParticipants(_drawId);
-        }
-
-        uint64 randomness = randomManager.fulfillRandomRequest(requestId);
-
         // Floors the pick's denominator so no single address's (already
-        // capped, see _recordSell) weight can ever exceed a
-        // 1/maxWinProbabilityDenominator share of this draw, regardless of
-        // how thin real participation is (see docs/audit-2.md HA2-06). A
-        // target landing beyond the real participants' cumulative weight
+        // capped, see _recordSell) weight can exceed a
+        // 1/maxWinProbabilityDenominator share of this draw (docs/audit-2.md
+        // HA2-06). A target beyond the real participants' cumulative weight
         // (only possible when real weight is thin relative to the floor)
-        // means nobody wins this draw — the next qualifying sell simply
-        // starts accumulating toward the next draw as usual.
+        // means nobody wins this draw.
         uint256 effectiveTotalWeight = maxWinProbabilityDenominator *
             maxWeightPerEntryWei;
         if (totalWeight > effectiveTotalWeight) {
             effectiveTotalWeight = totalWeight;
         }
-        uint256 target = uint256(randomness) % effectiveTotalWeight;
+
+        drawCloseBlock[drawId] = block.number;
+        drawEffectiveTotalWeight[drawId] = effectiveTotalWeight;
+        lastDrawTime = block.timestamp;
+        currentDrawId = drawId + 1;
+
+        emit DrawClosed(drawId, block.number, totalWeight);
+    }
+
+    // Attempts the oldest pending draw from inside afterSwap. Must never
+    // revert the trader's swap: the expensive part runs through a
+    // try/catch'd self-call, and any failure (including a swap deliberately
+    // sent with too little gas) just leaves the draw pending for the next
+    // swap or a manual resolveDraw — resolveDraw reverts as a whole on
+    // failure, so nothing is finalized and no prize is consumed.
+    function _maybeAutoResolve() internal {
+        uint256 drawId = nextDrawToResolve;
+        if (drawId >= currentDrawId) return; // nothing closed and pending
+        if (drawResolved[drawId]) {
+            // Resolved out of order via resolveDraw; step past it.
+            nextDrawToResolve = drawId + 1;
+            return;
+        }
+        uint256 closeBlock = drawCloseBlock[drawId];
+        if (block.number <= closeBlock) return; // close block not sealed yet
+        if (BlockHashLib.get(closeBlock) == bytes32(0)) {
+            _retarget(drawId);
+            return;
+        }
+        if (gasleft() < autoResolveMinGas) return;
+        try this.resolveDraw(drawId) {} catch {}
+    }
+
+    // A block hash is only readable for BlockHashLib's window (8191 blocks
+    // with EIP-2935, else 256). A draw nobody resolved in time moves its
+    // target to the current block, whose hash is just as unknowable to the
+    // caller as the original was to the closer. The only leverage this
+    // leaves is a losing party hoping nobody resolves within the whole
+    // window; ordinary swaps auto-resolving plus anyone being able to call
+    // resolveDraw make that impractical.
+    function _retarget(uint256 _drawId) internal {
+        drawCloseBlock[_drawId] = block.number;
+        emit DrawRetargeted(_drawId, block.number);
+    }
+
+    // Permissionless, and also what afterSwap calls automatically. Once the
+    // close block is sealed the outcome is fixed, so who calls this and
+    // when can't change the winner. Reverts DrawNotReady in the close block
+    // itself; past the blockhash window it re-targets instead of resolving
+    // (see _retarget).
+    function resolveDraw(uint256 _drawId) external {
+        if (drawResolved[_drawId]) {
+            revert DrawAlreadyResolved(_drawId);
+        }
+        uint256 closeBlock = drawCloseBlock[_drawId];
+        if (closeBlock == 0) {
+            revert DrawNotClosed(_drawId);
+        }
+        if (block.number <= closeBlock) {
+            revert DrawNotReady(_drawId);
+        }
+        bytes32 closeHash = BlockHashLib.get(closeBlock);
+        if (closeHash == bytes32(0)) {
+            _retarget(_drawId);
+            return;
+        }
+        uint256 totalWeight = totalWeightInDraw[_drawId];
+        uint256[] storage segments = drawSegments[_drawId];
+        if (totalWeight == 0 || segments.length == 0) {
+            revert NoParticipants(_drawId);
+        }
+
+        // Full 256-bit randomness, mixed with the draw id (HA6-05: the old
+        // 64-bit value modulo a ~1e19+ weight space biased the pick and left
+        // later entrants unable to win at all).
+        uint256 target = uint256(keccak256(abi.encode(closeHash, _drawId))) %
+            drawEffectiveTotalWeight[_drawId];
 
         drawResolved[_drawId] = true;
+        if (_drawId == nextDrawToResolve) {
+            nextDrawToResolve = _drawId + 1;
+        }
 
         if (target >= totalWeight) {
             emit DrawResolvedNoWinner(_drawId);
             return;
         }
 
-        address winner = participants[participants.length - 1];
-        uint256 cumulative;
-        for (uint256 i = 0; i < participants.length; i++) {
-            cumulative += weightInDraw[_drawId][participants[i]];
-            if (target < cumulative) {
-                winner = participants[i];
-                break;
+        // Binary search for the first segment whose cumulative end exceeds
+        // target. target < totalWeight == the last segment's end, so one
+        // always exists.
+        uint256 lo;
+        uint256 hi = segments.length - 1;
+        while (lo < hi) {
+            uint256 mid = (lo + hi) / 2;
+            if (target < segments[mid] >> 160) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
             }
         }
+        address winner = address(uint160(segments[lo]));
 
-        // HA4-02 fix (2026-09-28): the mint is wrapped in try/catch instead
-        // of called bare. `drawResolved[_drawId] = true` above still isn't
-        // enough on its own — a revert here unwinds the ENTIRE transaction,
-        // including that write — so without this, a picked winner that's a
-        // contract reverting on ERC-721 receipt (trivial and cheap for any
-        // participant to arrange for themselves via `hookData`, see
-        // _extractPlayer) would permanently brick this exact draw forever:
-        // fulfillRandomRequest returns the same fixed value on every retry,
-        // so the same winner gets picked every time. Falling through to
-        // PrizeMintFailed instead lets the draw resolve either way — the
-        // only one who loses out is the winner who made themselves
-        // unable to receive it, not every other honest participant.
-        // A queued curated template is only dequeued on success, so a
-        // failed mint doesn't burn it — it stays queued for the next draw.
+        // The prize mint is called bare, NOT in try/catch (docs/audit-3.md
+        // HA6-06): if it reverts for any reason, the whole call reverts —
+        // including `drawResolved[_drawId] = true` above — so the draw stays
+        // pending and is retried (by the next swap or a manual call) once
+        // the cause is fixed. The winner is fixed by the close block's hash,
+        // so retrying can't change who wins. Ships mints with _mint (no
+        // receiver callback, HA6-04) and this hook is exempt from
+        // VariantPurchaseGate, so no winner can make the mint revert.
         if (queueTail > queueHead) {
             PrizeTemplate memory t = prizeQueue[queueHead];
-            try ships.createSpecificShip(winner, _buildPrizeShip(_drawId, t)) returns (uint) {
-                delete prizeQueue[queueHead];
-                queueHead++;
-                emit DrawResolved(_drawId, winner);
-            } catch {
-                emit PrizeMintFailed(_drawId, winner);
-            }
+            delete prizeQueue[queueHead];
+            queueHead++;
+            ships.createSpecificShip(winner, _buildPrizeShip(_drawId, t));
         } else {
             // Random 4-star fallback — see the PrizeTemplate comment above
             // for exactly why tier 4 + amount 1 produces this.
-            try ships.createShips(winner, 1, fallbackVariant, 4, false) {
-                emit DrawResolved(_drawId, winner);
-            } catch {
-                emit PrizeMintFailed(_drawId, winner);
-            }
+            ships.createShips(winner, 1, fallbackVariant, 4, false);
         }
+        emit DrawResolved(_drawId, winner);
     }
 
     // Hand-crafts this draw's prize from a dequeued template, rather than
@@ -552,6 +638,19 @@ contract UTCLotteryHook is BaseHook, Ownable {
         emit PrizeQueueCleared();
     }
 
+    function drawSegmentCount(uint256 _drawId) external view returns (uint256) {
+        return drawSegments[_drawId].length;
+    }
+
+    // One ticket segment: `owner` holds [previous segment's end, `end`).
+    function getDrawSegment(
+        uint256 _drawId,
+        uint256 _index
+    ) external view returns (address owner, uint256 end) {
+        uint256 packed = drawSegments[_drawId][_index];
+        return (address(uint160(packed)), packed >> 160);
+    }
+
     function queueLength() external view returns (uint256) {
         return queueTail - queueHead;
     }
@@ -567,8 +666,8 @@ contract UTCLotteryHook is BaseHook, Ownable {
         ships = IShips(_ships);
     }
 
-    function setRandomManager(address _randomManager) external onlyOwner {
-        randomManager = IRandomManager(_randomManager);
+    function setAutoResolveMinGas(uint256 _autoResolveMinGas) external onlyOwner {
+        autoResolveMinGas = _autoResolveMinGas;
     }
 
     // Validates what Ships.createSpecificShip doesn't itself enforce — see

@@ -45,13 +45,6 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     // Maps each faction (variant) to its own AI decision contract — see
     // AIBehaviorRegistry/IVariantAI.
     AIBehaviorRegistry public aiRegistry;
-    // UA-08 fix (2026-09-29): which aiRegistry was live when each combat
-    // node's game started, read by _decideMove instead of the live
-    // aiRegistry above — so an admin AI balance patch mid-fight can't
-    // change how the opponent thinks partway through a node the human
-    // already committed roster/resources to. See
-    // docs/upgrade-safety-audit-2026-09-29.md UA-08.
-    mapping(uint => address) public aiRegistryAtStart;
     // UA-11 fix (2026-09-29): campaignAutoHealPercent/isFinalNode/
     // node win-effects, all pinned at enterCombatNode time and read by
     // onGameEnded instead of re-deriving them live from current
@@ -87,6 +80,11 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         uint16 variant;
         Special special;
         MainWeapon mainWeapon;
+        // The AI contract this ship plays with, pinned at mint
+        // (docs/audit-3.md HA6-18): pinning only the registry address left
+        // its contents mutable via setVariantAI, so a mid-match AI patch
+        // still changed the opponent. Packs into the same slot.
+        IVariantAI ai;
     }
     mapping(uint shipId => AIShipInfo) public aiShipInfo;
 
@@ -99,17 +97,20 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     error WrongNodeKind();
     error NodeAlreadyDefeated();
     error NotYourGame();
+    error EngineAlreadyLive();
     error NotGame();
     error GameEnded();
     error NotAITurn();
     error NoAIPlacementsConfigured();
     error ActiveGameInProgress();
+    error CurrentNodeNotCleared();
 
     event RunStarted(address indexed player, uint indexed campaignId, uint rootNodeId);
     event CombatNodeEntered(uint indexed gameId, uint indexed nodeId, address indexed player);
     event ResupplyNodeEntered(uint indexed nodeId, address indexed player);
     event AIFleetCreated(uint indexed gameId, uint fleetId);
     event AITurnTaken(uint indexed gameId, uint shipId, ActionType actionType, uint targetShipId);
+    event AIDecisionFailed(uint indexed gameId, uint shipId);
     event WinEffectFailed(
         address indexed player,
         uint indexed contextId,
@@ -142,15 +143,28 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         engineIndex = _engineIndex;
     }
 
+    // docs/audit-3.md HA6-13 (same rule as PvPMatch's UA-02 fix): once a
+    // run has started, the dependencies live runs rely on can't be
+    // repointed — a swap would orphan in-flight state (a game that can never
+    // call back, fleets or a run ledger the old state lives in, an AI pool
+    // whose ids don't match). A new engine is deployed fresh instead and
+    // registered via GameEngineRegistry.
+    function _requireNotLive() internal view {
+        if (runLedger.runsStarted() > 0) revert EngineAlreadyLive();
+    }
+
     function setAIShipsAddress(address _aiShips) external onlyOwner {
+        _requireNotLive();
         aiShips = AIShips(_aiShips);
     }
 
     function setHumanShipsAddress(address _humanShips) external onlyOwner {
+        _requireNotLive();
         humanShips = IShips(_humanShips);
     }
 
     function setGameAddress(address _game) external onlyOwner {
+        _requireNotLive();
         game = Game(_game);
     }
 
@@ -159,6 +173,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     }
 
     function setFleetsAddress(address _fleets) external onlyOwner {
+        _requireNotLive();
         fleets = IFleets(_fleets);
     }
 
@@ -167,6 +182,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     }
 
     function setMapsAddress(address _maps) external onlyOwner {
+        _requireNotLive();
         maps = IMaps(_maps);
     }
 
@@ -175,10 +191,12 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     }
 
     function setNodeMapAddress(address _nodeMap) external onlyOwner {
+        _requireNotLive();
         nodeMap = RoguelikeNodeMap(_nodeMap);
     }
 
     function setRunLedgerAddress(address _runLedger) external onlyOwner {
+        _requireNotLive();
         runLedger = RoguelikeRun(_runLedger);
     }
 
@@ -204,7 +222,18 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         ) revert WrongCampaignVariant();
 
         uint initialCostCap = nodeMap.campaignInitialCostCap(_campaignId);
-        uint fleetId = _reserveRoster(msg.sender, _shipIds, initialCostCap);
+        // Checked createFleet: a run's prices must be current when it
+        // starts. Every later fleet for the run uses frozen prices (see
+        // _reserveRoster).
+        uint fleetId = fleets.createFleet(
+            0,
+            msg.sender,
+            _shipIds,
+            _rosterPositions(_shipIds.length),
+            initialCostCap,
+            true,
+            0
+        );
 
         runLedger.startRun(
             msg.sender,
@@ -230,10 +259,11 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         if (run.status != RunStatus.Active) revert NoActiveRun();
         RoguelikeNode memory node = _commitToNode(msg.sender, run, _targetNodeId);
         if (node.kind != RoguelikeNodeKind.Combat) revert WrongNodeKind();
-        // A twoWay edge can lead back to an already-won Combat node (e.g. a
-        // resupply hub with routes to more than one fight) — reject a
-        // repeat attempt rather than letting its kill rewards be farmed
-        // indefinitely (see docs/pre-audit.md SP-05).
+        // Re-entering the current node skips the lockout in _commitToNode,
+        // so a just-won Combat node could otherwise be fought again in
+        // place — reject the repeat rather than letting its kill rewards be
+        // farmed (see docs/pre-audit.md SP-05). Any node already left is
+        // locked, so a cycle in the graph can't reach it either.
         if (runLedger.isNodeDefeated(msg.sender, _targetNodeId)) {
             revert NodeAlreadyDefeated();
         }
@@ -248,8 +278,6 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             engineIndex *
             ENGINE_ID_BLOCK_SIZE +
             matchCount;
-        // UA-08 fix: pin this combat node's AI registry for its duration.
-        aiRegistryAtStart[gameId] = address(aiRegistry);
         // UA-11 fix: pin this combat node's heal floor, final-node status,
         // and win-effects list, all as of entry — see the fields' own
         // comment above.
@@ -260,7 +288,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             nodeMap.getChildren(_targetNodeId).length == 0;
         winEffectsAtStart[gameId] = nodeMap.getNodeWinEffects(_targetNodeId);
 
-        uint humanFleetId = fleets.createFleet(
+        uint humanFleetId = fleets.createFleetFrozenPrices(
             gameId,
             msg.sender,
             shipIds,
@@ -305,15 +333,6 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     function enterResupplyNode(uint _targetNodeId) external {
         Run memory run = runLedger.getRun(msg.sender);
         if (run.status != RunStatus.Active) revert NoActiveRun();
-        // Can't advance to a resupply node while a combat match is still
-        // live at the current node — that would detach run.currentNodeId
-        // from the node actually being fought, so the eventual
-        // onGameEnded callback (which only checks *which game*, not *which
-        // node*) would credit the wrong node as defeated and evaluate
-        // win-effects/isFinalNode against it instead. Same guard
-        // retreatRun(0) already has, for the same underlying reason (see
-        // docs/pre-audit.md SP-04) — see docs/audit-2.md HA2-04.
-        if (run.activeGameId != 0) revert ActiveGameInProgress();
         RoguelikeNode memory node = _commitToNode(msg.sender, run, _targetNodeId);
         if (node.kind != RoguelikeNodeKind.Resupply) revert WrongNodeKind();
 
@@ -356,15 +375,25 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
 
     // ---- Internal: graph traversal / lockout ----
 
-    // twoWay only ever affects whether the PARENT stays reachable (walking
-    // backward across that specific edge) — every other sibling is always
-    // locked the moment a different child is committed to, regardless of
-    // that sibling's own edge type or the type of edge just traversed.
+    // Moves are forward-only: the target must be an unlocked child of the
+    // current node. Committing to it locks every other sibling and the node
+    // being left.
     function _commitToNode(
         address _player,
         Run memory _run,
         uint _targetNodeId
     ) internal returns (RoguelikeNode memory node) {
+        // Can't enter any node — another one, or the current one again —
+        // while a combat match is still live. Moving would detach
+        // run.currentNodeId from the node actually being fought, so the
+        // eventual onGameEnded callback (which only checks *which game*,
+        // not *which node*) would credit the wrong node as defeated and
+        // evaluate win-effects/isFinalNode against it; re-entering would
+        // overwrite activeGameId with a duplicate match. Same guard
+        // retreatRun(0) already has, for the same underlying reason (see
+        // docs/pre-audit.md SP-04, docs/audit-2.md HA2-04).
+        if (_run.activeGameId != 0) revert ActiveGameInProgress();
+
         node = nodeMap.getNode(_targetNodeId);
 
         // Already standing here — either the very first node right after
@@ -376,41 +405,33 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             return node;
         }
 
-        (bool isForwardChild, bool forwardEdgeTwoWay) = _isChildOf(
-            _run.currentNodeId,
-            _targetNodeId
-        );
-        bool allowed;
-        bool isForwardMove;
-        if (isForwardChild && !runLedger.isNodeLocked(_player, _targetNodeId)) {
-            allowed = true;
-            isForwardMove = true;
-        } else {
-            (bool isBackwardChild, bool backEdgeTwoWay) = _isChildOf(
-                _targetNodeId,
-                _run.currentNodeId
-            );
-            if (isBackwardChild && backEdgeTwoWay) {
-                allowed = true;
-            }
+        // Leaving a combat node requires having won it — otherwise a player
+        // could skip any mission (including the root, right after startRun)
+        // by walking straight to one of its children. A resupply node has
+        // no fight, so leaving one is always allowed.
+        if (
+            nodeMap.getNode(_run.currentNodeId).kind ==
+            RoguelikeNodeKind.Combat &&
+            !runLedger.isNodeDefeated(_player, _run.currentNodeId)
+        ) {
+            revert CurrentNodeNotCleared();
         }
-        if (!allowed) revert CannotAdvance();
 
-        if (isForwardMove) {
-            RoguelikeEdge[] memory siblings = nodeMap.getChildren(
-                _run.currentNodeId
-            );
-            for (uint i = 0; i < siblings.length; i++) {
-                if (siblings[i].childId != _targetNodeId) {
-                    runLedger.lockNode(_player, siblings[i].childId);
-                }
-            }
-            // Only a one-way edge locks the parent — a two-way edge stays
-            // reachable so the player can walk back across it later.
-            if (!forwardEdgeTwoWay) {
-                runLedger.lockNode(_player, _run.currentNodeId);
+        if (runLedger.isNodeLocked(_player, _targetNodeId)) {
+            revert CannotAdvance();
+        }
+        uint[] memory children = nodeMap.getChildren(_run.currentNodeId);
+        bool isChild;
+        for (uint i = 0; i < children.length; i++) {
+            if (children[i] == _targetNodeId) {
+                isChild = true;
+            } else {
+                runLedger.lockNode(_player, children[i]);
             }
         }
+        // Reverting rolls back the sibling locks above.
+        if (!isChild) revert CannotAdvance();
+        runLedger.lockNode(_player, _run.currentNodeId);
 
         runLedger.setCurrentNode(_player, _targetNodeId);
 
@@ -419,22 +440,12 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         // happens on simply *entering* it.
     }
 
-    function _isChildOf(
-        uint _parentId,
-        uint _childId
-    ) internal view returns (bool found, bool twoWay) {
-        RoguelikeEdge[] memory children = nodeMap.getChildren(_parentId);
-        for (uint i = 0; i < children.length; i++) {
-            if (children[i].childId == _childId) {
-                return (true, children[i].twoWay);
-            }
-        }
-        return (false, false);
-    }
-
     // Synthetic grid positions — this fleet never has a matching Game, so
     // these are never rendered/read by anything except Fleets' own
     // structural validation (bounds, no duplicates, creator-side columns).
+    // Frozen prices (docs/audit-3.md HA6-09): the roster was priced at run
+    // start (or, for resupply adds, checked by RoguelikeResupply), and a
+    // mid-run ShipAttributes.setCosts must not break re-reservation.
     function _reserveRoster(
         address _player,
         uint[] memory _shipIds,
@@ -442,7 +453,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     ) internal returns (uint fleetId) {
         // mapId 0: this fleet is map-agnostic (synthetic, see the doc
         // comment above), so Fleets falls back to its default column rule.
-        fleetId = fleets.createFleet(
+        fleetId = fleets.createFleetFrozenPrices(
             0,
             _player,
             _shipIds,
@@ -600,9 +611,10 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             return;
         }
 
-        // Won this node — mark it defeated so a twoWay edge back to it
-        // can't be farmed for repeat kill rewards (see docs/pre-audit.md
-        // SP-05; enforced in enterCombatNode).
+        // Won this node — mark it defeated, which lets the run leave it
+        // (CurrentNodeNotCleared) and stops it being re-fought in place for
+        // repeat kill rewards (see docs/pre-audit.md SP-05; enforced in
+        // enterCombatNode).
         runLedger.setNodeDefeated(player, run.currentNodeId);
 
         // The combat fleet's survivors are still inFleet (Game._endGame
@@ -666,7 +678,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             // pre-rejoin behavior) rather than ever reverting here.
             uint newFleetId;
             try
-                fleets.createFleet(
+                fleets.createFleetFrozenPrices(
                     0,
                     player,
                     newRoster,
@@ -710,7 +722,10 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
                 archetype: config.archetype,
                 variant: config.traits.variant,
                 special: config.equipment.special,
-                mainWeapon: config.equipment.mainWeapon
+                mainWeapon: config.equipment.mainWeapon,
+                // Reverts NoAIForVariant at match start if the variant has
+                // no AI — failing loudly up front instead of mid-match.
+                ai: aiRegistry.aiFor(config.traits.variant)
             });
         }
         gameIdToAiShipIds[_gameId] = shipIds;
@@ -803,7 +818,14 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         GameDataView memory g,
         uint _shipId
     ) internal returns (bool) {
-        AIBehavior.Decision memory d = _decideMove(_gameId, g, _shipId);
+        (AIBehavior.Decision memory d, bool decided) = _decideMove(
+            _gameId,
+            g,
+            _shipId
+        );
+        // HA6-12: _decideMove fell back to Pass; surface it so a broken AI
+        // fails loudly instead of silently passing forever.
+        if (!decided) emit AIDecisionFailed(_gameId, _shipId);
 
         try
             game.moveShip(
@@ -845,7 +867,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         uint _gameId,
         GameDataView memory g,
         uint _shipId
-    ) internal view returns (AIBehavior.Decision memory d) {
+    ) internal view returns (AIBehavior.Decision memory d, bool decided) {
         (Position memory myPos, bool posFound) = AIBehavior.findPosition(
             g,
             _shipId
@@ -856,7 +878,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             d.destRow = myPos.row;
             d.destCol = myPos.col;
             d.action = ActionType.Pass;
-            return d;
+            return (d, true);
         }
 
         AIShipInfo memory info = aiShipInfo[_shipId];
@@ -875,13 +897,25 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
 
         // Chosen by variant first (each faction's AI is built around its own
         // abilities), then by archetype inside that faction's contract. A
-        // variant with no registered AI reverts NoAIForVariant.
-        // UA-08 fix: pinned registry (see aiRegistryAtStart), not the live
-        // aiRegistry field.
-        return
-            AIBehaviorRegistry(aiRegistryAtStart[_gameId])
-                .aiFor(info.variant)
-                .decide(ctx, info.archetype, info.special);
+        // variant with no registered AI fails at match start (aiFor at mint).
+        // Calls the ship's own AI contract, pinned at mint (AIShipInfo.ai).
+        // docs/audit-3.md HA6-12: any failure to decide falls back to
+        // passing in place instead of reverting — an non-contract AI,
+        // a revert or out-of-gas inside decide.
+        // Reverting here would make takeAITurn fail every time, leaving the
+        // game stuck on the AI's turn. (The code-length checks matter: a
+        // call to an address with no code returns empty data, and the
+        // resulting decode failure isn't catchable.)
+        d.destRow = myPos.row;
+        d.destCol = myPos.col;
+        d.action = ActionType.Pass;
+        if (address(info.ai).code.length == 0) return (d, false);
+        try info.ai.decide(ctx, info.archetype, info.special) returns (
+            AIBehavior.Decision memory chosen
+        ) {
+            return (chosen, true);
+        } catch {}
+        return (d, false);
     }
 
     function _findUnmovedShip(

@@ -371,6 +371,152 @@ describe("SinglePlayerMatch", function () {
       .be.rejected;
   });
 
+  it("lets the human forfeit their own match, releasing their ships (HA6-12)", async function () {
+    const {
+      ships,
+      maps,
+      nodeMap,
+      singlePlayerMatch,
+      aiEncounters,
+      randomManager,
+      humanShips,
+      humanGame,
+      singlePlayerMatchOther,
+      humanSinglePlayerMatch,
+      human,
+    } = await loadFixture(deploySinglePlayerFixture);
+
+    const mapId = await setupBasicAIEncounter(maps, aiEncounters);
+    const nodeId = await createCampaignNode(nodeMap, mapId);
+    await purchaseAndConstructHumanShip(ships, randomManager, humanShips, human);
+    await humanSinglePlayerMatch.write.startNodeMatch([
+      nodeId,
+      [1n],
+      [{ row: 0, col: 0 }],
+    ]);
+    const gameId = NODE_MATCH_ID_OFFSET + 1n;
+    expect((await ships.read.getShip([1n])).shipData.inFleet).to.equal(true);
+
+    await expect(
+      singlePlayerMatchOther.write.forfeit([gameId]),
+    ).to.be.rejectedWith("NotYourGame");
+
+    await humanSinglePlayerMatch.write.forfeit([gameId]);
+    const game = await humanGame.read.getGame([gameId]);
+    expect(game.metadata.ended).to.equal(true);
+    expect(game.metadata.winner.toLowerCase()).to.equal(
+      singlePlayerMatch.address.toLowerCase(),
+    );
+    expect((await ships.read.getShip([1n])).shipData.inFleet).to.equal(false);
+  });
+
+  it("locks the live-state address setters once a match has started (HA6-13)", async function () {
+    const {
+      ships,
+      maps,
+      nodeMap,
+      singlePlayerMatch,
+      aiEncounters,
+      randomManager,
+      humanShips,
+      humanSinglePlayerMatch,
+      human,
+      owner,
+    } = await loadFixture(deploySinglePlayerFixture);
+
+    // Before any match: still configurable.
+    const current = await singlePlayerMatch.read.game();
+    await singlePlayerMatch.write.setGameAddress([current], {
+      account: owner.account,
+    });
+
+    const mapId = await setupBasicAIEncounter(maps, aiEncounters);
+    const nodeId = await createCampaignNode(nodeMap, mapId);
+    await purchaseAndConstructHumanShip(ships, randomManager, humanShips, human);
+    await humanSinglePlayerMatch.write.startNodeMatch([
+      nodeId,
+      [1n],
+      [{ row: 0, col: 0 }],
+    ]);
+
+    const someAddress = owner.account.address;
+    for (const fn of [
+      "setGameAddress",
+      "setShipsAddress",
+      "setMapsAddress",
+      "setNodeMapAddress",
+    ] as const) {
+      await expect(
+        (singlePlayerMatch.write as any)[fn]([someAddress], {
+          account: owner.account,
+        }),
+      ).to.be.rejectedWith("EngineAlreadyLive");
+    }
+  });
+
+  it("allows a mixed-variant AI fleet, with each AI ship on its own faction's AI (HA6-30)", async function () {
+    const {
+      ships,
+      maps,
+      nodeMap,
+      singlePlayerMatch,
+      aiEncounters,
+      aiBehaviorRegistry,
+      randomManager,
+      humanShips,
+      humanGame,
+      humanSinglePlayerMatch,
+      singlePlayerMatchOther,
+      human,
+    } = await loadFixture(deploySinglePlayerFixture);
+
+    await maps.write.createPresetMap([[], MapMode.Both]);
+    const mapId = await maps.read.mapCount();
+    const equipment = { mainWeapon: 0, armor: 0, shields: 0, special: 0 };
+    const colors = { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 };
+    for (const [variant, row] of [[1, 0], [2, 2]] as const) {
+      await aiEncounters.write.createAIShipConfig([
+        `AI v${variant}`,
+        equipment,
+        { serialNumber: 0n, colors, variant, accuracy: 0, hull: 0, speed: 0 },
+        0,
+      ]);
+      const configId = await aiEncounters.read.aiShipConfigCount();
+      await aiEncounters.write.setMapPlacement([mapId, row, 16, configId]);
+    }
+    const nodeId = await createCampaignNode(nodeMap, mapId);
+    await purchaseAndConstructHumanShip(ships, randomManager, humanShips, human);
+
+    // Used to revert MixedVariantFleet.
+    await humanSinglePlayerMatch.write.startNodeMatch([
+      nodeId,
+      [1n],
+      [{ row: 0, col: 0 }],
+    ]);
+    const gameId = NODE_MATCH_ID_OFFSET + 1n;
+    const gd = await humanGame.read.getGame([gameId]);
+    const aiIds = gd.joinerActiveShipIds;
+    expect(aiIds.length).to.equal(2);
+    const infos = await Promise.all(
+      aiIds.map((id: bigint) => singlePlayerMatch.read.aiShipInfo([id])),
+    );
+    const variants = infos.map((i: any) => Number(i[1])).sort();
+    expect(variants).to.deep.equal([1, 2]);
+    const ais = infos.map((i: any) => (i[4] as string).toLowerCase()).sort();
+    expect(ais).to.deep.equal(
+      [
+        (await aiBehaviorRegistry.read.aiFor([1])).toLowerCase(),
+        (await aiBehaviorRegistry.read.aiFor([2])).toLowerCase(),
+      ].sort(),
+    );
+
+    // Both AI ships can take their turns.
+    await humanGame.write.moveShip([gameId, 1n, 0, 0, ActionType.Pass, 0n], {
+      account: human.account,
+    });
+    await singlePlayerMatchOther.write.takeAITurns([gameId, 2n]);
+  });
+
   it("reverts takeAITurn when it isn't the AI's turn", async function () {
     const {
       ships,
@@ -1301,7 +1447,7 @@ describe("SinglePlayerMatch", function () {
       expect(allyAttrs.hullPoints).to.be.greaterThan(0);
     });
 
-    it("reverts NoAIForVariant for an AI ship whose variant has no registered AI", async function () {
+    it("passes (emitting AIDecisionFailed) instead of freezing when an AI ship's AI contract can't decide (HA6-12)", async function () {
       const {
         ships,
         game,
@@ -1328,6 +1474,11 @@ describe("SinglePlayerMatch", function () {
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
 
+      // Register a "broken" AI for variant 1 before the match: a contract
+      // with no decide() (AIEncounters itself), so every decide reverts.
+      // AI ships pin their AI at mint (HA6-18), so it must be set up front.
+      await aiBehaviorRegistry.write.setVariantAI([1, aiEncounters.address]);
+
       const gameId = await startMatch(
         nodeMap,
         ships,
@@ -1343,13 +1494,117 @@ describe("SinglePlayerMatch", function () {
         account: human.account,
       });
 
-      // Unregister variant 1's AI (fail loud, not a silent generic fallback).
+      // This used to revert on every takeAITurn, leaving the game stuck on
+      // the AI's turn forever; now the ship passes and the failure is
+      // still loud via an event.
+      const hash = await singlePlayerMatchOther.write.takeAITurn([gameId]);
+      const publicClient = await hre.viem.getPublicClient();
+      const receipt = await publicClient.getTransactionReceipt({ hash });
+      const logs = parseEventLogs({
+        abi: singlePlayerMatchOther.abi,
+        logs: receipt.logs,
+      });
+      const failed = logs.find((l: any) => l.eventName === "AIDecisionFailed");
+      expect(failed).to.not.be.undefined;
+      const taken = logs.find((l: any) => l.eventName === "AITurnTaken") as any;
+      expect(taken.args.actionType).to.equal(ActionType.Pass);
+      expect((await humanGame.read.getGame([gameId])).metadata.ended).to.equal(
+        false,
+      );
+    });
+
+    it("keeps each AI ship on the AI it was minted with, even if the registry entry changes mid-match (HA6-18)", async function () {
+      const {
+        ships,
+        game,
+        maps,
+        nodeMap,
+        aiEncounters,
+        aiBehaviorRegistry,
+        randomManager,
+        humanShips,
+        humanGame,
+        humanSinglePlayerMatch,
+        singlePlayerMatchOther,
+        human,
+      } = await loadFixture(deploySinglePlayerFixture);
+
+      await maps.write.createPresetMap([[], MapMode.Both]);
+      const mapId = await maps.read.mapCount();
+      await aiEncounters.write.createAIShipConfig([
+        "Grunt Ship",
+        defaultEquipment,
+        defaultTraits,
+        0,
+      ]);
+      const configId = await aiEncounters.read.aiShipConfigCount();
+      await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
+      const gameId = await startMatch(
+        nodeMap,
+        ships,
+        randomManager,
+        humanShips,
+        humanSinglePlayerMatch,
+        human,
+        mapId,
+      );
+      await setShipPosition(game.address, gameId, 1n, 0, 15);
+      await humanGame.write.moveShip([gameId, 1n, 0, 15, ActionType.Pass, 0n], {
+        account: human.account,
+      });
+
+      // Swap variant 1's registry entry mid-match: this match's AI ship
+      // keeps deciding with the AI it was minted with.
+      await aiBehaviorRegistry.write.setVariantAI([1, aiEncounters.address]);
+      const hash = await singlePlayerMatchOther.write.takeAITurn([gameId]);
+      const publicClient = await hre.viem.getPublicClient();
+      const receipt = await publicClient.getTransactionReceipt({ hash });
+      const logs = parseEventLogs({
+        abi: singlePlayerMatchOther.abi,
+        logs: receipt.logs,
+      });
+      expect(logs.find((l: any) => l.eventName === "AIDecisionFailed")).to.be
+        .undefined;
+    });
+
+    it("fails at match start when an AI ship's variant has no registered AI (HA6-18)", async function () {
+      const {
+        ships,
+        maps,
+        nodeMap,
+        aiEncounters,
+        aiBehaviorRegistry,
+        randomManager,
+        humanShips,
+        humanSinglePlayerMatch,
+        human,
+      } = await loadFixture(deploySinglePlayerFixture);
+
+      await maps.write.createPresetMap([[], MapMode.Both]);
+      const mapId = await maps.read.mapCount();
+      await aiEncounters.write.createAIShipConfig([
+        "Grunt Ship",
+        defaultEquipment,
+        defaultTraits,
+        0,
+      ]);
+      const configId = await aiEncounters.read.aiShipConfigCount();
+      await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
       await aiBehaviorRegistry.write.setVariantAI([
         1,
         "0x0000000000000000000000000000000000000000",
       ]);
+
       await expect(
-        singlePlayerMatchOther.write.takeAITurn([gameId]),
+        startMatch(
+          nodeMap,
+          ships,
+          randomManager,
+          humanShips,
+          humanSinglePlayerMatch,
+          human,
+          mapId,
+        ),
       ).to.be.rejectedWith("NoAIForVariant");
     });
 
@@ -1834,50 +2089,24 @@ describe("SinglePlayerMatch", function () {
       expect(utcAfter).to.equal(utcBefore);
     });
 
-    it("pays UTC to SinglePlayerMatch (not the human) when the AI destroys a human ship, and the owner can withdraw it", async function () {
+    it("mints no UTC when the AI destroys a human ship (HA6-21)", async function () {
       const fixture = await loadFixture(deploySinglePlayerFixture);
-      const {
-        ships,
-        shipsRouter,
-        universalCredits,
-        droneEnergyCores,
-        singlePlayerMatch,
-        owner,
-        human,
-      } = fixture;
+      const { universalCredits, shipsRouter, singlePlayerMatch, droneEnergyCores, owner, human } =
+        fixture;
       const { humanShipId, aiShipId } = await setUpOneAIShip(fixture);
 
       await shipsRouter.write.setTimestampDestroyed([humanShipId, aiShipId], {
         account: owner.account,
       });
 
-      const recycleReward = await ships.read.recycleReward();
-      const contractUtcBalance = await universalCredits.read.balanceOf([
-        singlePlayerMatch.address,
-      ]);
-      expect(contractUtcBalance).to.equal(recycleReward >> 2n);
-
-      // Human's own DEC balance is untouched by this — DEC only pays out
-      // the other direction (a human destroying an AI ship).
-      expect(
-        await droneEnergyCores.read.balanceOf([human.account.address]),
-      ).to.equal(0n);
-
-      await expect(
-        singlePlayerMatch.write.withdrawUC({ account: human.account }),
-      ).to.be.rejectedWith("OwnableUnauthorizedAccount");
-
-      const ownerUtcBefore = await universalCredits.read.balanceOf([
-        owner.account.address,
-      ]);
-      await singlePlayerMatch.write.withdrawUC({ account: owner.account });
-
+      // The AI's owner is this orchestrator contract; minting UTC to it
+      // only created stuck/unused supply, so nothing is paid.
       expect(
         await universalCredits.read.balanceOf([singlePlayerMatch.address]),
       ).to.equal(0n);
       expect(
-        await universalCredits.read.balanceOf([owner.account.address]),
-      ).to.equal(ownerUtcBefore + contractUtcBalance);
+        await droneEnergyCores.read.balanceOf([human.account.address]),
+      ).to.equal(0n);
     });
   });
 });

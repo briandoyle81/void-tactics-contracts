@@ -206,6 +206,15 @@ free ships can't be recycled (`CannotRecycleFreeShip`), the per-kill rate is tin
 *repeat* game costs real FLOW (`additionalLobbyFee`) that almost certainly exceeds the reward.
 Noted since it's a real, previously-undocumented path, even though the value is negligible.
 
+> **Correction (2026-10-15):** the "any *repeat* game costs real FLOW (`additionalLobbyFee`)" premise above is wrong.
+> - **Why:** `freeGamesPerAddress` limits *concurrently open* lobbies. `activeLobbiesCount` drops when a game starts, so back-to-back self-play games are always free.
+> - **Consequence:** this path was effectively unbounded. With eligibility gating off, unlimited Sybil addresses each claim 10 free ships per 28 days. Each kill minted 0.025 UTC, and the killer's ship ranked up toward rank 6 (+50% PvP stats) for roughly $75–150 in Base gas.
+> - **Resolution (2026-10-16, `docs/audit-3.md` HA6-16):**
+>   - destroying a free ship no longer pays UTC and no longer counts as a kill;
+>   - PvE (AI) kills no longer count toward rank;
+>   - free ships still can't be recycled (`CannotRecycleFreeShip`), so they never pay out that way either;
+>   - rank otherwise stays grindable by design.
+
 ### ECON-07 — UTC Has No Automatic Supply Sink; Mitigated by an Active Owner-Managed Burn/Sell Policy
 
 **Context, 2026-09-17** — arose from a holistic design-review discussion (pros/cons/opportunities

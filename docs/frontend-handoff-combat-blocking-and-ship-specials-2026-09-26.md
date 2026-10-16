@@ -42,6 +42,7 @@ These are the existing `hasMovementPath`/`hasMaps` straight-line (Bresenham) che
 
 - `moveShip` can now revert `InvalidMove()` because an enemy ship sits somewhere on the straight-line path — not just because of impassable terrain. **Same error, no new error type** — if the FE already treats `InvalidMove()` generically ("that move isn't legal"), no code change is required. If the FE has specific user-facing copy like "blocked by terrain," it's no longer fully accurate and may want to generalize to "blocked" or "path obstructed."
 - Same rule applies to shooting: a `Shoot`/`Special` action at range > 1 already required clear line of sight; now that check also fails if a *different* enemy ship sits between the shooter and the target. You can always shoot the enemy actually standing at the target tile — only other enemies *along the way* can block the shot.
+  > **Correction (2026-10-15):** this applies to `Shoot` only. `Special` actions ignore line of sight entirely, by design: they check range only, and neither terrain nor other ships block them. Don't show LoS-blocked previews for specials. See `docs/audit-3.md` HA6-15.
 - No change to `ActionType`, targeting parameters, or any existing revert reason's meaning — this is a pure behavior tightening under the same `InvalidMove()`.
 
 ### 1.4 AI behavior

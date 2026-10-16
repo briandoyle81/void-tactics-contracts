@@ -10,7 +10,7 @@ import { mineHookAddress, HOOK_FLAGS } from "../scripts/hookMiner";
 // in place; this only confirms the hook can be deployed at all.
 describe("UTCLotteryHook deployment (CREATE2 address mining)", function () {
   it("mines a salt producing a correctly-flagged address and deploys there", async function () {
-    const [deployerSigner, shipsStandin, randomManagerStandin, utcStandin, owner] =
+    const [deployerSigner, shipsStandin, utcStandin, owner] =
       await hre.viem.getWalletClients();
 
     const create2Deployer = await hre.viem.deployContract("Create2Deployer", []);
@@ -29,7 +29,6 @@ describe("UTCLotteryHook deployment (CREATE2 address mining)", function () {
       constructorArgs: [
         deployerSigner.account.address,
         shipsStandin.account.address,
-        randomManagerStandin.account.address,
         utcStandin.account.address,
         owner.account.address,
       ],

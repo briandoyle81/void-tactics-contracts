@@ -1,5 +1,8 @@
 # Void Tactics — Open Security/Audit Items
 
+> **2026-10-13:** `docs/audit-3.md` (pass HA6) is now the live tracker for new findings. Still-open
+> items below are listed there under "Carried forward".
+
 _Created 2026-09-12. This is the live, actionable tracker — every item below is currently open
 (not fixed, not accepted-as-a-non-issue). `docs/pre-audit.md` is the full historical audit record
 (every finding ever made, including everything already fixed or resolved) and is kept exactly as
@@ -916,8 +919,10 @@ registration/reveal UX cost. No further design work has been done beyond the ske
 
 ---
 
-### HA5-02 — `UTCLotteryHook.resolveDraw`'s Unbounded `drawParticipants` Array Can Be Sybil-Inflated
-to Make a Draw Permanently Gas-Unresolvable
+### ~~HA5-02 — `UTCLotteryHook.resolveDraw`'s Unbounded `drawParticipants` Array Can Be Sybil-Inflated
+to Make a Draw Permanently Gas-Unresolvable~~
+
+**Status: Fixed 2026-10-15** (see `docs/audit-3.md`, Carried forward). Each weight increase now appends one packed ticket segment (cumulative end and owner), and `resolveDraw` finds the winner by binary search. Resolution gas no longer grows with participant count: about 591k gas at 300 participants, the same as at 3.
 
 **File:** `contracts/UTCLotteryHook.sol:103` (`drawParticipants` — no size cap), `:304-346`
 (`_recordSell`, pushes any new qualifying seller with no per-draw participant ceiling), `:375-421`

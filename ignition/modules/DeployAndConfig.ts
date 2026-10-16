@@ -265,6 +265,15 @@ const DeployModule = buildModule("DeployModule", (m) => {
     [renderFore0, renderFore1, renderFore2, renderForePerfect],
   ]);
 
+  // Destroyed-ship (explosion) and unconstructed-ship art, split into
+  // leaves by scripts/renderer-pipeline/svg-to-leaves.js. Order matters:
+  // the image renderer concatenates them in array order.
+  const renderExplosion1 = m.contract("RenderExplosion1");
+  const renderExplosion2 = m.contract("RenderExplosion2");
+  const renderUnconstructed = [1, 2].map((n) =>
+    m.contract(`RenderUnconstructed${n}`),
+  );
+
   // Deploy ImageRenderer with all main renderers
   const imageRenderer = m.contract("ImageRenderer", [
     renderSpecial,
@@ -272,6 +281,8 @@ const DeployModule = buildModule("DeployModule", (m) => {
     renderWeapon,
     renderBody,
     renderFore,
+    [renderExplosion1, renderExplosion2],
+    renderUnconstructed,
   ]);
 
   // Deploy variant 2 (faction 2)'s own renderer set, generated from the real
@@ -334,12 +345,21 @@ const DeployModule = buildModule("DeployModule", (m) => {
     [renderFore0V2, renderFore1V2, renderFore2V2, renderForePerfectV2],
   ]);
 
+  const renderExplosion1V2 = m.contract("RenderExplosion1V2");
+  const renderExplosion2V2 = m.contract("RenderExplosion2V2");
+  const renderExplosion3V2 = m.contract("RenderExplosion3V2");
+  const renderUnconstructedV2 = [1, 2, 3, 4, 5].map((n) =>
+    m.contract(`RenderUnconstructed${n}V2`),
+  );
+
   const imageRendererV2 = m.contract("ImageRendererV2", [
     renderSpecialV2,
     renderAftV2,
     renderWeaponV2,
     renderBodyV2,
     renderForeV2,
+    [renderExplosion1V2, renderExplosion2V2, renderExplosion3V2],
+    renderUnconstructedV2,
   ]);
 
   // Deploy MetadataRenderer with both factions' image renderers.
@@ -714,27 +734,8 @@ const DeployModule = buildModule("DeployModule", (m) => {
     { id: "AllowShipGrantWinEffectToCreateShips" },
   );
 
-  // Same three resolvers, now also independently authorized to be
-  // triggered by PvPMatch — its own winEffects list defaults to empty
-  // (opt-in), same as a roguelike node with nothing configured.
-  const allowPvpMatchToTriggerDecBonusCall = m.call(
-    decBonusWinEffect,
-    "setIsAllowedToTrigger",
-    [pvpMatch, true],
-    { id: "AllowPvpMatchToTriggerDecBonus" },
-  );
-  const allowPvpMatchToTriggerHealAboveFloorCall = m.call(
-    healAboveFloorWinEffect,
-    "setIsAllowedToTrigger",
-    [pvpMatch, true],
-    { id: "AllowPvpMatchToTriggerHealAboveFloor" },
-  );
-  const allowPvpMatchToTriggerShipGrantCall = m.call(
-    shipGrantWinEffect,
-    "setIsAllowedToTrigger",
-    [pvpMatch, true],
-    { id: "AllowPvpMatchToTriggerShipGrant" },
-  );
+  // Win effects are PvE-only (docs/audit-3.md HA6-27): PvPMatch and
+  // Tournament are deliberately NOT authorized to trigger any of them.
 
   const allowRoguelikeNodeEditorCall = m.call(
     roguelikeNodeMap,
@@ -1851,11 +1852,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
     const call = m.call(
       roguelikeNodeMap,
       "addChild",
-      [
-        roguelikeNodeIds[edge.from],
-        roguelikeNodeIds[edge.to],
-        edge.twoWay ?? false,
-      ],
+      [roguelikeNodeIds[edge.from], roguelikeNodeIds[edge.to]],
       {
         id: `AddRoguelikeEdge${i + 1}`,
         after: [
@@ -2292,29 +2289,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
     randomManager, // backs the round-1 pairing shuffle in buildBracket()
   ]);
 
-  // Same three win-effect resolvers, now also independently authorized to
-  // be triggered by Tournament — its own winEffects list defaults to
-  // empty (opt-in), same as PvPMatch/a roguelike node with nothing
-  // configured.
-  const allowTournamentToTriggerDecBonusCall = m.call(
-    decBonusWinEffect,
-    "setIsAllowedToTrigger",
-    [tournament, true],
-    { id: "AllowTournamentToTriggerDecBonus" },
-  );
-  const allowTournamentToTriggerHealAboveFloorCall = m.call(
-    healAboveFloorWinEffect,
-    "setIsAllowedToTrigger",
-    [tournament, true],
-    { id: "AllowTournamentToTriggerHealAboveFloor" },
-  );
-  const allowTournamentToTriggerShipGrantCall = m.call(
-    shipGrantWinEffect,
-    "setIsAllowedToTrigger",
-    [tournament, true],
-    { id: "AllowTournamentToTriggerShipGrant" },
-  );
-
   // Deploy GameBlobRegistry — stores Walrus blobId per player per completed game
   const gameBlobRegistry = m.contract("GameBlobRegistry", [
     gameResults,
@@ -2577,6 +2551,12 @@ const DeployModule = buildModule("DeployModule", (m) => {
       after: [setVariant1AICall, setVariant2AICall],
     });
 
+    // RandomManager is Ownable only for retargetExpired (re-targeting ship
+    // rolls that missed the 256-block window — docs/audit-3.md HA6-19).
+    m.call(randomManager, "transferOwnership", [MAP_EDITOR], {
+      id: "TransferRandomManagerOwnership",
+    });
+
     m.call(variant1AI, "transferOwnership", [MAP_EDITOR], {
       id: "TransferVariant1AIOwnership",
     });
@@ -2641,8 +2621,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
       id: "TransferDecBonusWinEffectOwnership",
       after: [
         allowRoguelikeMatchToTriggerDecBonusCall,
-        allowPvpMatchToTriggerDecBonusCall,
-        allowTournamentToTriggerDecBonusCall,
       ],
     });
 
@@ -2650,8 +2628,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
       id: "TransferHealAboveFloorWinEffectOwnership",
       after: [
         allowRoguelikeMatchToTriggerHealAboveFloorCall,
-        allowPvpMatchToTriggerHealAboveFloorCall,
-        allowTournamentToTriggerHealAboveFloorCall,
       ],
     });
 
@@ -2659,8 +2635,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
       id: "TransferShipGrantWinEffectOwnership",
       after: [
         allowRoguelikeMatchToTriggerShipGrantCall,
-        allowPvpMatchToTriggerShipGrantCall,
-        allowTournamentToTriggerShipGrantCall,
       ],
     });
 

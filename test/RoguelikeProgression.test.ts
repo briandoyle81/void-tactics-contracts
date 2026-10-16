@@ -74,9 +74,9 @@ describe("Roguelike enemy progression", function () {
       const id = queue.shift()!;
       const here = missionOf.get(id)!;
       const children = await d.roguelikeNodeMap.read.getChildren([id]);
-      for (const edge of children) {
-        const child = await d.roguelikeNodeMap.read.getNode([edge.childId]);
-        await visit(edge.childId, here + (child.kind === COMBAT ? 1 : 0));
+      for (const childId of children) {
+        const child = await d.roguelikeNodeMap.read.getNode([childId]);
+        await visit(childId, here + (child.kind === COMBAT ? 1 : 0));
       }
     }
     return { missionOf, nodeOf };

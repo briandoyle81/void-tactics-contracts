@@ -321,6 +321,7 @@ describe("GameEngineRegistry — in-flight engine upgrades", function () {
         gameEngineRegistry,
         singlePlayerMatch: spmA, // engineIndex 0, the deploy's own instance
         lobbies,
+        aiBehaviorRegistry,
       } = deployed;
 
       // A second SinglePlayerMatch, engineIndex 1, reusing every other
@@ -339,6 +340,10 @@ describe("GameEngineRegistry — in-flight engine upgrades", function () {
       await fleets.write.setIsAllowedToManageFleets([spmB.address, true]);
       await aiShips.write.setIsAllowedToCreateShips([spmB.address, true]);
       await spmB.write.setEngineRegistry([gameEngineRegistry.address]);
+      // A new engine needs its AI registry wired: AI ships pin their AI
+      // contract at mint, so startNodeMatch fails loudly without one
+      // (docs/audit-3.md HA6-18).
+      await spmB.write.setAIRegistryAddress([aiBehaviorRegistry.address]);
       await gameEngineRegistry.write.setIsAllowedToRecord([spmB.address, true]);
 
       // One shared map/AI-config/campaign node, reused by both matches —

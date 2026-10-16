@@ -13,15 +13,6 @@ enum RoguelikeNodeKind {
     Resupply
 }
 
-// twoWay only means the player can walk BACK across this specific edge
-// later (e.g. a resupply hub they can return to) — it does not exempt the
-// child from being locked out as someone else's sibling when a different
-// one-way sibling is chosen. See RoguelikeMatch's lockout logic.
-struct RoguelikeEdge {
-    uint childId;
-    bool twoWay;
-}
-
 struct RoguelikeNode {
     uint id;
     uint campaignId;
@@ -33,7 +24,8 @@ struct RoguelikeNode {
     bool creatorGoesFirst;
     // Resupply-only (ignored for Combat nodes):
     uint costCapOverride; // 0 = no change to the run's current cost cap
-    RoguelikeEdge[] children;
+    // Edges are forward-only: a run can never walk back to a parent.
+    uint[] children;
     bool exists;
 }
 
@@ -104,7 +96,7 @@ contract RoguelikeNodeMap is Ownable {
         RoguelikeNodeKind kind
     );
     event NodeUpdated(uint indexed nodeId);
-    event ChildAdded(uint indexed parentId, uint indexed childId, bool twoWay);
+    event ChildAdded(uint indexed parentId, uint indexed childId);
     event ChildRemoved(uint indexed parentId, uint indexed childId);
     event NodeWinEffectsSet(uint indexed nodeId, uint effectCount);
 
@@ -271,19 +263,18 @@ contract RoguelikeNodeMap is Ownable {
 
     function addChild(
         uint _parentId,
-        uint _childId,
-        bool _twoWay
+        uint _childId
     ) external onlyNodeEditor {
         RoguelikeNode storage parent = nodes[_parentId];
         if (!parent.exists) revert NodeNotFound();
         if (!nodes[_childId].exists) revert ChildNotFound();
         if (_childId == _parentId) revert SelfChild();
         for (uint i = 0; i < parent.children.length; i++) {
-            if (parent.children[i].childId == _childId)
+            if (parent.children[i] == _childId)
                 revert ChildAlreadyExists();
         }
-        parent.children.push(RoguelikeEdge({childId: _childId, twoWay: _twoWay}));
-        emit ChildAdded(_parentId, _childId, _twoWay);
+        parent.children.push(_childId);
+        emit ChildAdded(_parentId, _childId);
     }
 
     // Swap-and-pop — order doesn't matter for graph traversal, same pattern
@@ -293,7 +284,7 @@ contract RoguelikeNodeMap is Ownable {
         if (!parent.exists) revert NodeNotFound();
         uint length = parent.children.length;
         for (uint i = 0; i < length; i++) {
-            if (parent.children[i].childId == _childId) {
+            if (parent.children[i] == _childId) {
                 // UA-05 fix: removing a node's LAST remaining child is the
                 // one edit that can leave an in-progress run with zero
                 // forward moves — removing any other child is always safe
@@ -322,7 +313,7 @@ contract RoguelikeNodeMap is Ownable {
 
     function getChildren(
         uint _nodeId
-    ) external view returns (RoguelikeEdge[] memory) {
+    ) external view returns (uint[] memory) {
         if (!nodes[_nodeId].exists) revert NodeNotFound();
         return nodes[_nodeId].children;
     }
@@ -331,21 +322,5 @@ contract RoguelikeNodeMap is Ownable {
         uint _nodeId
     ) external view returns (address[] memory) {
         return nodeWinEffects[_nodeId];
-    }
-
-    // Finds the edge from _parentId to _childId, reverting if _childId
-    // isn't actually one of _parentId's children — RoguelikeMatch uses this
-    // both to validate a requested move and to learn whether it's two-way.
-    function getEdge(
-        uint _parentId,
-        uint _childId
-    ) external view returns (bool twoWay) {
-        RoguelikeNode storage parent = nodes[_parentId];
-        if (!parent.exists) revert NodeNotFound();
-        for (uint i = 0; i < parent.children.length; i++) {
-            if (parent.children[i].childId == _childId)
-                return parent.children[i].twoWay;
-        }
-        revert ChildNotInNode();
     }
 }

@@ -97,6 +97,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
     error InvalidMapId();
     error MaxFleetCostExceeded();
     error NotReservedJoiner();
+    error KickedFromLobby();
     error LobbyNotReserved();
     error InsufficientUTC();
     error UTCTransferFailed();
@@ -106,6 +107,12 @@ contract Lobbies is Ownable, ReentrancyGuard {
     uint public constant MAX_TURN_TIME = 86400; // 24 hours in seconds
     uint public constant MIN_TIMEOUT = 300; // 5 minutes in seconds
     uint public constant KICK_PENALTY_PER_HOUR = 3600; // 1 hour in seconds
+
+    // docs/audit-3.md HA6-29: an address timed out of a lobby (timeoutJoiner)
+    // can never rejoin that same lobby. kickCount only applies when the
+    // creator had committed a fleet, so otherwise the same address could
+    // rejoin immediately and stall the creator again, indefinitely.
+    mapping(uint lobbyId => mapping(address => bool)) public kickedFromLobby;
 
     constructor(address _ships) Ownable(msg.sender) {
         ships = Ships(_ships);
@@ -154,6 +161,22 @@ contract Lobbies is Ownable, ReentrancyGuard {
         playerLobbies[_player].remove(_lobbyId);
     }
 
+    // A player leaving a not-yet-started lobby by any path (docs/audit-3.md
+    // HA6-10): activeLobbiesCount must come back down (it gates the
+    // additionalLobbyFee), and activeLobbyId — a single slot for a player
+    // who can be in several lobbies — is only cleared when it actually
+    // points at this lobby, never clobbered when it points at another one.
+    function _releasePlayerSlot(address _player, uint _lobbyId) internal {
+        PlayerLobbyState storage state = playerStates[_player];
+        if (state.activeLobbiesCount > 0) {
+            state.activeLobbiesCount--;
+        }
+        if (state.activeLobbyId == _lobbyId) {
+            state.hasActiveLobby = false;
+            state.activeLobbyId = 0;
+        }
+    }
+
     function _addLobbyToOpenSet(uint _lobbyId) internal {
         openLobbyIds.add(_lobbyId);
         // Stamped every time a lobby (re-)enters the open set, not just at
@@ -195,8 +218,9 @@ contract Lobbies is Ownable, ReentrancyGuard {
         if (lobby.state.status == LobbyStatus.InGame)
             revert CannotLeaveStartedGame();
 
-        PlayerLobbyState storage state = playerStates[msg.sender];
-        if (state.activeLobbyId != _lobbyId) revert NotInLobby();
+        // Membership, not the single activeLobbyId slot: a player can be in
+        // several lobbies and must be able to leave any of them (HA6-10).
+        if (!playerLobbies[msg.sender].contains(_lobbyId)) revert NotInLobby();
 
         // If player is creator, delete the lobby
         if (msg.sender == lobby.basic.creator) {
@@ -271,12 +295,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
             emit LobbyAbandoned(_lobbyId, msg.sender);
         }
 
-        // Clear player's state and decrement active lobbies count
-        state.hasActiveLobby = false;
-        state.activeLobbyId = 0;
-        if (state.activeLobbiesCount > 0) {
-            state.activeLobbiesCount--;
-        }
+        _releasePlayerSlot(msg.sender, _lobbyId);
     }
 
     // Permissionless: removes a lobby from openLobbyIds once it's sat
@@ -399,6 +418,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
         if (lobby.state.status != LobbyStatus.Open) revert LobbyNotOpen();
         if (lobby.basic.creator == msg.sender) revert PlayerAlreadyInLobby();
         if (lobby.players.joiner != address(0)) revert LobbyFull();
+        if (kickedFromLobby[_lobbyId][msg.sender]) revert KickedFromLobby();
 
         // Check if lobby is reserved for a specific player
         if (lobby.players.reservedJoiner != address(0)) {
@@ -462,6 +482,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
         if (msg.sender != lobby.players.reservedJoiner) revert NotReservedJoiner();
         if (lobby.state.status != LobbyStatus.Open) revert LobbyNotOpen();
         if (lobby.players.joiner != address(0)) revert LobbyFull();
+        if (kickedFromLobby[_lobbyId][msg.sender]) revert KickedFromLobby();
 
         PlayerLobbyState storage state = playerStates[msg.sender];
 
@@ -540,8 +561,8 @@ contract Lobbies is Ownable, ReentrancyGuard {
             joinerState.kickCount++;
             joinerState.lastKickTime = block.timestamp;
         }
-        joinerState.hasActiveLobby = false;
-        joinerState.activeLobbyId = 0;
+        _releasePlayerSlot(lobby.players.joiner, _lobbyId);
+        kickedFromLobby[_lobbyId][lobby.players.joiner] = true;
 
         // Remove joiner from tracking and add lobby back to open set
         _removePlayerFromLobby(lobby.players.joiner, _lobbyId);
@@ -637,24 +658,8 @@ contract Lobbies is Ownable, ReentrancyGuard {
             _removeLobbyFromOpenSet(_lobbyId);
 
             // Decrement active lobbies count for both players
-            PlayerLobbyState storage creatorState = playerStates[
-                lobby.basic.creator
-            ];
-            PlayerLobbyState storage joinerState = playerStates[
-                lobby.players.joiner
-            ];
-            if (creatorState.activeLobbiesCount > 0) {
-                creatorState.activeLobbiesCount--;
-            }
-            if (joinerState.activeLobbiesCount > 0) {
-                joinerState.activeLobbiesCount--;
-            }
-
-            // Reset active lobby state for both players
-            creatorState.hasActiveLobby = false;
-            creatorState.activeLobbyId = 0;
-            joinerState.hasActiveLobby = false;
-            joinerState.activeLobbyId = 0;
+            _releasePlayerSlot(lobby.basic.creator, _lobbyId);
+            _releasePlayerSlot(lobby.players.joiner, _lobbyId);
 
             // Remove from tracking sets when game starts
             _cleanupLobbyFromAllSets(_lobbyId);
@@ -702,18 +707,13 @@ contract Lobbies is Ownable, ReentrancyGuard {
         ];
         creatorState.kickCount++;
         creatorState.lastKickTime = block.timestamp;
-        creatorState.hasActiveLobby = false;
-        creatorState.activeLobbyId = 0;
 
-        // Clear joiner's state
-        PlayerLobbyState storage joinerState = playerStates[
-            lobby.players.joiner
-        ];
-        joinerState.hasActiveLobby = false;
-        joinerState.activeLobbyId = 0;
-
-        // Remove both players from tracking and add lobby back to open set
-        _removePlayerFromLobby(lobby.basic.creator, _lobbyId);
+        // The joiner leaves; the lobby reopens with the (penalized) creator
+        // still its owner — same as timeoutJoiner's reset. The creator stays
+        // tracked in it (count and membership unchanged), so they can still
+        // leaveLobby it later; removing them from tracking here used to
+        // leave an open lobby whose creator could never leave it (HA6-10).
+        _releasePlayerSlot(lobby.players.joiner, _lobbyId);
         _removePlayerFromLobby(lobby.players.joiner, _lobbyId);
         _addLobbyToOpenSet(_lobbyId);
 

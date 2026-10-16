@@ -42,10 +42,10 @@ import { getEthUsdPrice, MAP_EDITOR } from "../ignition/modules/DeployAndConfig"
 // IMPORTANT, confirmed 2026-09-17 (this caused real confusion once already):
 // mineHookAddress (hookMiner.ts) is a DETERMINISTIC salt search, not random --
 // given the exact same constructorArgs (POOL_MANAGER, shipsAddress,
-// randomManagerAddress, universalCreditsAddress, hookOwnerAddress), it always
+// universalCreditsAddress, hookOwnerAddress), it always
 // finds and returns the exact same salt/hookAddress. "Mine and deploy a fresh
 // hook and try again" only actually produces a *different* address because
-// Phase 1 mints a brand-new UniversalCredits/Ships/RandomManager address
+// Phase 1 mints a brand-new UniversalCredits/Ships address
 // every time it's redeployed (per this project's workflow -- the UTC contract
 // is not meant to be permanent yet), which changes constructorArgs and
 // therefore the mined address as a side effect. Re-running *this* script
@@ -355,11 +355,11 @@ async function main() {
   const universalCreditsAddress = getAddress(
     deployed["DeployModule#UniversalCredits"],
   );
-  const randomManagerAddress = getAddress(
-    deployed["DeployModule#RandomManager"],
-  );
   const shipPurchaserAddress = getAddress(
     deployed["DeployModule#ShipPurchaser"],
+  );
+  const variantPurchaseGateAddress = getAddress(
+    deployed["DeployModule#VariantPurchaseGate"],
   );
 
   for (const [label, addr] of [
@@ -378,11 +378,12 @@ async function main() {
   console.log("Loaded + verified addresses:", {
     ships: shipsAddress,
     universalCredits: universalCreditsAddress,
-    randomManager: randomManagerAddress,
     shipPurchaser: shipPurchaserAddress,
   });
 
   const shipsAbi = (await hre.artifacts.readArtifact("Ships")).abi as any;
+  const gateAbi = (await hre.artifacts.readArtifact("VariantPurchaseGate"))
+    .abi as any;
   const shipPurchaserAbi = (await hre.artifacts.readArtifact("ShipPurchaser"))
     .abi as any;
   const ucAbi = (await hre.artifacts.readArtifact("UniversalCredits"))
@@ -478,7 +479,6 @@ async function main() {
   const constructorArgs = [
     POOL_MANAGER,
     shipsAddress,
-    randomManagerAddress,
     universalCreditsAddress,
     hookOwnerAddress,
   ] as const;
@@ -751,7 +751,7 @@ async function main() {
           `(${lockedPoolId}, expected ${intendedPoolId}). There is no on-chain fix, and ` +
           `re-running this script alone won't mine a different hook address -- the salt ` +
           `search is deterministic given the same constructorArgs (see this file's header ` +
-          `comment). Redeploy Phase 1 first (fresh Ships/UniversalCredits/RandomManager ` +
+          `comment). Redeploy Phase 1 first (fresh Ships/UniversalCredits ` +
           `addresses), THEN re-run this script.`,
       );
     }
@@ -871,6 +871,57 @@ async function main() {
     });
     console.log("MANUAL STEP REQUIRED -- submit this from the Ships owner wallet:");
     console.log("  to:  ", shipsAddress);
+    console.log("  data:", calldata);
+  }
+
+  // ---- Step 13b: exempt the hook from VariantPurchaseGate ----------------
+  // Lottery prizes may be any variant and go to any winner, medal or not
+  // (docs/audit-3.md HA6-06) -- without this, a gated prize variant makes
+  // resolveDraw revert for a winner lacking the required NFT.
+  const gateOwner = getAddress(
+    (await publicClient.readContract({
+      address: variantPurchaseGateAddress,
+      abi: gateAbi,
+      functionName: "owner",
+      args: [],
+    })) as `0x${string}`,
+  );
+  const alreadyExempt = (await publicClient.readContract({
+    address: variantPurchaseGateAddress,
+    abi: gateAbi,
+    functionName: "exemptMinter",
+    args: [hookAddress],
+  })) as boolean;
+  const gateOwnerClient = alreadyExempt
+    ? undefined
+    : resolveOwnerClient(gateOwner, "VariantPurchaseGate.owner()");
+  if (alreadyExempt) {
+    console.log("Hook already exempt from VariantPurchaseGate -- skipping.");
+  } else if (gateOwnerClient) {
+    const { request } = await publicClient.simulateContract({
+      address: variantPurchaseGateAddress,
+      abi: gateAbi,
+      functionName: "setExemptMinter",
+      args: [hookAddress, true],
+      account: gateOwnerClient.account,
+    });
+    const hash = await gateOwnerClient.writeContract(request);
+    console.log("Gate exemption tx:", hash);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") {
+      throw new Error(`Gate exemption tx reverted: ${hash}`);
+    }
+    console.log("Hook exempted from VariantPurchaseGate.");
+  } else {
+    const calldata = encodeFunctionData({
+      abi: gateAbi,
+      functionName: "setExemptMinter",
+      args: [hookAddress, true],
+    });
+    console.log(
+      "MANUAL STEP REQUIRED -- submit this from the VariantPurchaseGate owner wallet:",
+    );
+    console.log("  to:  ", variantPurchaseGateAddress);
     console.log("  data:", calldata);
   }
 

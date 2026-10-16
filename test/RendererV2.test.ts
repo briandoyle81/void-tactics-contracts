@@ -100,4 +100,55 @@ describe("RenderMetadata variant dispatch", function () {
     expect(svg).to.match(/^<svg/);
     expect(svg).to.match(/<\/svg>$/);
   });
+
+  // 2026-10-16: destroyed and unconstructed ships render on-chain art (per
+  // variant, stored pre-base64-encoded in leaves by
+  // scripts/renderer-pipeline/svg-to-leaves.js) instead of IPFS images.
+  it("renders each variant's on-chain unconstructed and destroyed SVGs", async function () {
+    const fixture = await loadFixture(deployShipsFixture);
+    const { ships, imageRenderer, imageRendererV2 } = fixture;
+
+    const decode = (image: string) => {
+      expect(image).to.match(/^data:image\/svg\+xml;base64,/);
+      const svg = Buffer.from(
+        image.replace("data:image/svg+xml;base64,", ""),
+        "base64",
+      ).toString("utf8");
+      expect(svg).to.match(/^<svg[^>]*viewBox="0 0 256 256"/);
+      expect(svg).to.match(/<\/svg>$/);
+      expect((svg.match(/<path /g) || []).length).to.be.greaterThan(5);
+      return svg;
+    };
+
+    const svgs: string[] = [];
+    for (const [variant, renderer] of [
+      [1, imageRenderer],
+      [2, imageRendererV2],
+    ] as const) {
+      const countBefore = await ships.read.shipCount();
+      if (variant === 2) {
+        await fixture.shatteredHiveMedal.write.ownerMint([fixture.user1.account.address], {
+          account: fixture.owner.account,
+        });
+      }
+      await ships.write.purchaseWithFlow(
+        [fixture.user1.account.address, 0n, fixture.user1.account.address, variant],
+        { value: parseEther("4.99") },
+      );
+      const id = countBefore + 1n;
+
+      // Unconstructed, through the real tokenURI path.
+      const uri = await ships.read.tokenURI([id]);
+      const json = JSON.parse(
+        Buffer.from(uri.replace("data:application/json;base64,", ""), "base64").toString("utf8"),
+      );
+      svgs.push(decode(json.image));
+
+      // Destroyed.
+      const ship = tupleToShip((await ships.read.ships([id])) as ShipTuple);
+      ship.shipData.timestampDestroyed = 1n;
+      svgs.push(decode(await (renderer as any).read.renderShip([ship])));
+    }
+    expect(new Set(svgs).size).to.equal(4);
+  });
 });

@@ -145,6 +145,12 @@ function isEligible(address _player) external view returns (bool);
   verification is a rolling 90-day window from whenever `markVerified` last
   ran for that address, not a one-time flag.
 
+> **Updated 2026-10-15** (`docs/audit-3.md` HA6-14): renewal now actually works.
+> - **Same wallet:** re-running `markVerified(player, sameNullifier)` refreshes the window. It used to revert `NullifierAlreadyUsed`, which locked every player out after 90 days.
+> - **Different wallet:** the same nullifier on a different wallet still reverts.
+> - **Wallet moves:** for a real person who moved wallets, the owner calls `releaseNullifier(nullifier)`. That ends the old wallet's eligibility, and the new wallet can then be verified.
+> - **New views and events:** `nullifierOwner(bytes32)` and the `NullifierReleased(nullifierHash, previousOwner)` event.
+
 ### 3.4 What changed in `FreeShipClaim` / `TutorialClaim`
 
 Both now have exactly **one** claim/complete entry point each, and it's the
@@ -280,6 +286,8 @@ evaluated internally on every qualifying swap. If your UI wants to show
 "draw pending," compute it client-side from the values above.
 
 ### 4.5 Events
+
+> **Superseded 2026-10-14:** `DrawStarted` was replaced by `DrawClosed`, and draws now resolve automatically. See `docs/frontend-handoff-lottery-prize-retry-2026-10-14.md` for the current §4.5/§4.6 behavior.
 
 ```solidity
 event SellRecorded(uint256 indexed drawId, address indexed player, uint256 ethProceeds, uint256 playerWeightInDraw);

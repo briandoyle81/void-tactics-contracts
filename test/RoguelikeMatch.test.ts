@@ -219,6 +219,28 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     await otherRoguelikeMatch.write.takeAITurn([gameId]);
   }
 
+  // Launches and wins the root combat mission, so the run is free to move
+  // on — leaving a combat node requires having won it (CurrentNodeNotCleared).
+  async function clearRoot(fx: any, rootNodeId: bigint) {
+    const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } = fx;
+    await humanRoguelikeMatch.write.enterCombatNode([
+      rootNodeId,
+      [{ row: 0, col: 0 }],
+    ]);
+    const { activeGameId } = await deployed.roguelikeRun.read.getRun([
+      human.account.address,
+    ]);
+    await winCombatNode(
+      deployed.game,
+      humanGame,
+      otherRoguelikeMatch,
+      owner,
+      human,
+      activeGameId,
+      1n,
+    );
+  }
+
   describe("Deploy wiring", function () {
     it("deploys successfully with all wiring intact", async function () {
       const { deployed } = await loadFixture(deployFixture);
@@ -474,17 +496,17 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       const c = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
       // Created but never linked — must not appear.
       await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, a, false]);
-      await roguelikeNodeMap.write.addChild([rootNodeId, b, false]);
-      await roguelikeNodeMap.write.addChild([a, c, false]);
-      await roguelikeNodeMap.write.addChild([b, c, false]); // diamond
-      await roguelikeNodeMap.write.addChild([c, a, true]); // cycle
+      await roguelikeNodeMap.write.addChild([rootNodeId, a]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, b]);
+      await roguelikeNodeMap.write.addChild([a, c]);
+      await roguelikeNodeMap.write.addChild([b, c]); // diamond
+      await roguelikeNodeMap.write.addChild([c, a]); // cycle
 
       const graph = await gameLens.read.getCampaignGraph([campaignId]);
       const ids = graph.map((n: any) => n.id);
       expect(ids[0]).to.equal(rootNodeId);
       expect([...ids].sort()).to.deep.equal([rootNodeId, a, b, c].sort());
-      expect(graph[0].children.map((e: any) => e.childId)).to.deep.equal([a, b]);
+      expect(graph[0].children).to.deep.equal([a, b]);
 
       expect(await gameLens.read.getCampaignGraph([999n])).to.deep.equal([]);
     });
@@ -522,8 +544,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     });
 
     it("returns a player's run, roster HP and per-node lock/defeat flags in one call", async function () {
-      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
-        await loadFixture(deployFixture);
+      const fx = await loadFixture(deployFixture);
+      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, roguelikeRun, randomManager, game, gameLens } =
         deployed;
       const player = human.account.address;
@@ -543,12 +565,13 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       const childB = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
       // childA needs a child so winning it doesn't end the run as Won.
       const grandchild = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, childA, false]);
-      await roguelikeNodeMap.write.addChild([rootNodeId, childB, false]);
-      await roguelikeNodeMap.write.addChild([childA, grandchild, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childA]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childB]);
+      await roguelikeNodeMap.write.addChild([childA, grandchild]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
       await humanRoguelikeMatch.write.enterCombatNode([
         childA,
         [{ row: 0, col: 0 }],
@@ -559,7 +582,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         otherRoguelikeMatch,
         owner,
         human,
-        ROGUELIKE_GAME_ID_OFFSET + 1n,
+        ROGUELIKE_GAME_ID_OFFSET + 2n, // match 1 was the root
         1n,
       );
 
@@ -591,9 +614,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
 
   describe("Graph lockout", function () {
     it("locks every other sibling and the parent on a one-way commit", async function () {
-      const { deployed, human, humanRoguelikeMatch } = await loadFixture(
-        deployFixture,
-      );
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human, humanRoguelikeMatch } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
         deployed;
       const { campaignId, rootNodeId, mapId } = await setupCampaignWithRoot(
@@ -603,11 +625,12 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       );
       const childA = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
       const childB = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, childA, false]);
-      await roguelikeNodeMap.write.addChild([rootNodeId, childB, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childA]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childB]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
       await humanRoguelikeMatch.write.enterCombatNode([
         childA,
         [{ row: 0, col: 0 }],
@@ -627,9 +650,9 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       ).to.equal(true);
     });
 
-    it("lets a two-way edge be walked back across without unlocking the other sibling", async function () {
-      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
-        await loadFixture(deployFixture);
+    it("never lets the run walk back to a parent, even after winning the child", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, game } =
         deployed;
       const { campaignId, rootNodeId, mapId } = await setupCampaignWithRoot(
@@ -637,80 +660,69 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         maps,
         aiEncounters,
       );
-      const childA = await createCombatNode(roguelikeNodeMap, campaignId, mapId); // one-way
-      const childB = await createCombatNode(roguelikeNodeMap, campaignId, mapId); // two-way
-      // childB needs a child of its own so it isn't treated as the
-      // campaign's final node (childless == final, see onGameEnded) —
-      // otherwise winning it would end the run as Won instead of leaving
-      // it open to walk back to the root afterward.
-      const grandchild = await createCombatNode(
-        roguelikeNodeMap,
-        campaignId,
-        mapId,
-      );
-      await roguelikeNodeMap.write.addChild([rootNodeId, childA, false]);
-      await roguelikeNodeMap.write.addChild([rootNodeId, childB, true]);
-      await roguelikeNodeMap.write.addChild([childB, grandchild, false]);
+      const hub = await createResupplyNode(roguelikeNodeMap, campaignId);
+      const child = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      // child needs a child of its own so winning it doesn't end the run.
+      const grandchild = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, hub]);
+      await roguelikeNodeMap.write.addChild([hub, child]);
+      await roguelikeNodeMap.write.addChild([child, grandchild]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
 
+      // Leaving a resupply node for its child locks the resupply node.
+      await humanRoguelikeMatch.write.enterResupplyNode([hub]);
       await humanRoguelikeMatch.write.enterCombatNode([
-        childB,
+        child,
         [{ row: 0, col: 0 }],
       ]);
-      // childA is still locked (a one-way sibling), but the root itself
-      // must NOT be locked, since we arrived via a two-way edge.
-      expect(
-        await deployed.roguelikeRun.read.isNodeLocked([
-          human.account.address,
-          childA,
-        ]),
-      ).to.equal(true);
-      expect(
-        await deployed.roguelikeRun.read.isNodeLocked([
-          human.account.address,
-          rootNodeId,
-        ]),
-      ).to.equal(false);
-
-      // Win childB's combat so we're free to move again, then walk back.
-      const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
       await winCombatNode(
         game,
         humanGame,
         otherRoguelikeMatch,
         owner,
         human,
-        gameId,
+        ROGUELIKE_GAME_ID_OFFSET + 2n, // match 1 was the root
         1n,
       );
 
-      await humanRoguelikeMatch.write.enterCombatNode([
-        rootNodeId,
-        [{ row: 0, col: 0 }],
-      ]);
-      const run = await deployed.roguelikeRun.read.getRun([
-        human.account.address,
-      ]);
-      expect(run.currentNodeId).to.equal(rootNodeId);
+      expect(
+        await deployed.roguelikeRun.read.isNodeLocked([
+          human.account.address,
+          hub,
+        ]),
+      ).to.equal(true);
+      await expect(
+        humanRoguelikeMatch.write.enterResupplyNode([hub]),
+      ).to.be.rejectedWith("CannotAdvance");
+      await expect(
+        humanRoguelikeMatch.write.enterCombatNode([
+          rootNodeId,
+          [{ row: 0, col: 0 }],
+        ]),
+      ).to.be.rejectedWith("CannotAdvance");
     });
 
     it("reverts advancing to a node that isn't a child of the current node", async function () {
-      const { deployed, human, humanRoguelikeMatch } = await loadFixture(
-        deployFixture,
-      );
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human, humanRoguelikeMatch } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
         deployed;
-      const { campaignId, mapId } = await setupCampaignWithRoot(
+      const { campaignId, mapId, rootNodeId } = await setupCampaignWithRoot(
         roguelikeNodeMap,
         maps,
         aiEncounters,
       );
       const unrelated = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      // Root needs a child so winning it doesn't end the run as Won.
+      const child = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, child]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
 
       await expect(
         humanRoguelikeMatch.write.enterCombatNode([
@@ -736,7 +748,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         campaignId,
         mapId,
       );
-      await roguelikeNodeMap.write.addChild([rootNodeId, onlyChild, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, onlyChild]);
 
       const humanRoguelikeMatch = await hre.viem.getContractAt(
         "RoguelikeMatch",
@@ -763,8 +775,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       );
       const childA = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
       const childB = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, childA, false]);
-      await roguelikeNodeMap.write.addChild([rootNodeId, childB, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childA]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, childB]);
 
       const humanRoguelikeMatch = await hre.viem.getContractAt(
         "RoguelikeMatch",
@@ -795,7 +807,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         campaignId,
         mapId,
       );
-      await roguelikeNodeMap.write.addChild([rootNodeId, onlyChild, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, onlyChild]);
 
       const humanRoguelikeMatch = await hre.viem.getContractAt(
         "RoguelikeMatch",
@@ -812,7 +824,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     });
 
     it("moves the guard with the run when it advances to a new node", async function () {
-      const { deployed, human } = await loadFixture(deployFixture);
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
         deployed;
       const { campaignId, mapId, rootNodeId } = await setupCampaignWithRoot(
@@ -825,8 +838,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       // increment/decrement, not removeChild's length==1 gate again.
       const hub = await createResupplyNode(roguelikeNodeMap, campaignId);
       const decoy = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, hub, false]);
-      await roguelikeNodeMap.write.addChild([rootNodeId, decoy, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, hub]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, decoy]);
       // The hub's only child — this is what should become guarded once the
       // run actually moves onto the hub, and NOT before.
       const hubOnlyChild = await createCombatNode(
@@ -834,7 +847,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         campaignId,
         mapId,
       );
-      await roguelikeNodeMap.write.addChild([hub, hubOnlyChild, false]);
+      await roguelikeNodeMap.write.addChild([hub, hubOnlyChild]);
 
       const humanRoguelikeMatch = await hre.viem.getContractAt(
         "RoguelikeMatch",
@@ -843,6 +856,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       );
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
 
       // Run is still at rootNodeId — the hub's only child isn't guarded
       // yet, since no run has actually reached the hub.
@@ -850,7 +864,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         roguelikeNodeMap.write.removeChild([hub, hubOnlyChild]),
       ).to.not.be.rejected;
       // Re-add it for the rest of the test.
-      await roguelikeNodeMap.write.addChild([hub, hubOnlyChild, false]);
+      await roguelikeNodeMap.write.addChild([hub, hubOnlyChild]);
 
       // Advance onto the hub.
       await humanRoguelikeMatch.write.enterResupplyNode([hub]);
@@ -930,11 +944,11 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     });
   });
 
-  describe("Combat node reward farming via a twoWay edge (SP-05)", function () {
-    // Hub (Resupply, root) <-twoWay-> Combat node -> dummy Resupply node
-    // (kept non-final so winning it doesn't immediately end the run,
-    // leaving room to walk back to the hub and try to re-enter it).
-    async function setupTwoWayCombatCampaign(
+  describe("Combat node reward farming (SP-05)", function () {
+    // Hub (Resupply, root) -> Combat node -> dummy Resupply node -> back to
+    // the Combat node (a cycle). The dummy keeps the Combat node non-final,
+    // so winning it doesn't end the run and there's something to farm.
+    async function setupCycleCampaign(
       roguelikeNodeMap: any,
       maps: any,
       aiEncounters: any,
@@ -949,56 +963,69 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         mapId,
       );
       const dummyNodeId = await createResupplyNode(roguelikeNodeMap, campaignId);
-      await roguelikeNodeMap.write.addChild([hubNodeId, combatNodeId, true]);
-      await roguelikeNodeMap.write.addChild([combatNodeId, dummyNodeId, false]);
+      await roguelikeNodeMap.write.addChild([hubNodeId, combatNodeId]);
+      await roguelikeNodeMap.write.addChild([combatNodeId, dummyNodeId]);
+      await roguelikeNodeMap.write.addChild([dummyNodeId, combatNodeId]);
       await roguelikeNodeMap.write.setCampaignRoot([campaignId, hubNodeId]);
       await roguelikeNodeMap.write.setCampaignInitialCostCap([campaignId, 2000n]);
       return { campaignId, hubNodeId, combatNodeId, dummyNodeId };
     }
 
-    it("reverts re-entering an already-won Combat node reached back via a twoWay edge", async function () {
-      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
-        await loadFixture(deployFixture);
+    async function winTheCombatNode(fx: any) {
+      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
         deployed;
-      const { campaignId, hubNodeId, combatNodeId } =
-        await setupTwoWayCombatCampaign(roguelikeNodeMap, maps, aiEncounters);
+      const ids = await setupCycleCampaign(roguelikeNodeMap, maps, aiEncounters);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
-      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
-
+      await humanRoguelikeMatch.write.startRun([ids.campaignId, [1n]]);
       await humanRoguelikeMatch.write.enterCombatNode([
-        combatNodeId,
+        ids.combatNodeId,
         [{ row: 0, col: 0 }],
       ]);
-      const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
       await winCombatNode(
         deployed.game,
         humanGame,
         otherRoguelikeMatch,
         owner,
         human,
-        gameId,
+        ROGUELIKE_GAME_ID_OFFSET + 1n,
         1n,
       );
 
-      // Run must still be Active (the dummy child keeps combatNodeId from
-      // being a final node) so there's something left to try to farm.
-      const runAfterWin = await deployed.roguelikeRun.read.getRun([
+      // Still Active: the dummy child keeps combatNodeId from being final.
+      const run = await deployed.roguelikeRun.read.getRun([
         human.account.address,
       ]);
-      expect(runAfterWin.status).to.equal(1); // Active
+      expect(run.status).to.equal(1); // Active
+      return ids;
+    }
 
-      // Walk back to the hub via the twoWay edge...
-      await humanRoguelikeMatch.write.enterResupplyNode([hubNodeId]);
+    it("reverts re-entering a just-won Combat node in place", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { combatNodeId } = await winTheCombatNode(fx);
 
-      // ...and try to re-enter the already-won Combat node.
       await expect(
-        humanRoguelikeMatch.write.enterCombatNode([
+        fx.humanRoguelikeMatch.write.enterCombatNode([
           combatNodeId,
           [{ row: 0, col: 0 }],
         ]),
       ).to.be.rejectedWith("NodeAlreadyDefeated");
+    });
+
+    it("reverts re-entering a won Combat node through a cycle in the graph", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { combatNodeId, dummyNodeId } = await winTheCombatNode(fx);
+
+      await fx.humanRoguelikeMatch.write.enterResupplyNode([dummyNodeId]);
+      // dummy -> combatNodeId is a real child edge, but the node was locked
+      // when the run left it.
+      await expect(
+        fx.humanRoguelikeMatch.write.enterCombatNode([
+          combatNodeId,
+          [{ row: 0, col: 0 }],
+        ]),
+      ).to.be.rejectedWith("CannotAdvance");
     });
   });
 
@@ -1014,7 +1041,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         aiEncounters,
       );
       const nextNode = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode]);
       // Heal floor of 90% — the real damage taken (see below) is engineered
       // to leave the ship well below that, so the floor should visibly
       // raise its persisted HP above what it actually ended combat at.
@@ -1083,7 +1110,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         aiEncounters,
       );
       const nextNode = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode]);
       // No auto-heal floor configured (defaults to 0%).
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
@@ -1191,7 +1218,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       // is CURRENTLY fighting at a real child — after this, a LIVE
       // re-check of "is this node final" would read false.
       const newChild = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, newChild, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, newChild]);
 
       await winCombatNode(
         game,
@@ -1224,7 +1251,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         aiEncounters,
       );
       const nextNode = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode]);
       // Live at entry: 90%, engineered (as the sibling persistence test
       // above does) so real combat damage lands well below it.
       await roguelikeNodeMap.write.setCampaignAutoHealPercent([campaignId, 90]);
@@ -1303,7 +1330,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         opts.archetype ?? 0,
       );
       const nextNode = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode]);
       await roguelikeNodeMap.write.setCampaignAutoHealPercent([campaignId, 80]);
 
       let shipCount = 5;
@@ -1533,7 +1560,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         campaignId,
         exactCap,
       ]);
-      await roguelikeNodeMap.write.addChild([root, next, false]);
+      await roguelikeNodeMap.write.addChild([root, next]);
       await roguelikeNodeMap.write.setCampaignAutoHealPercent([campaignId, 80]);
       await humanRoguelikeMatch.write.startRun([
         campaignId,
@@ -2065,7 +2092,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         aiEncounters,
       );
       const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
@@ -2089,6 +2116,127 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     });
   });
 
+  describe("Leaving a mission before winning it", function () {
+    // _commitToNode used to check only the target node, never the node being
+    // left, so a player could skip an unbeaten combat mission (including the
+    // root, right after startRun) or move while a match was still live —
+    // which let onGameEnded credit the win to a node never fought.
+    async function setupBranchingCampaign(fx: any) {
+      const { roguelikeNodeMap, maps, aiEncounters, ships, randomManager } =
+        fx.deployed;
+      const { campaignId, rootNodeId, mapId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      // root -> combatChild (has its own child so it isn't final)
+      // root -> hub (resupply) -> hubChild (combat, also non-final)
+      const combatChild = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      const grandchild = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      const hub = await createResupplyNode(roguelikeNodeMap, campaignId);
+      const hubChild = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      const hubGrandchild = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, combatChild]);
+      await roguelikeNodeMap.write.addChild([combatChild, grandchild]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, hub]);
+      await roguelikeNodeMap.write.addChild([hub, hubChild]);
+      await roguelikeNodeMap.write.addChild([hubChild, hubGrandchild]);
+
+      await purchaseAndConstructHumanShips(ships, randomManager, fx.human);
+      await fx.humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      return { rootNodeId, combatChild, hub, hubChild };
+    }
+
+    it("reverts entering a child of the root right after startRun", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { combatChild, hub } = await setupBranchingCampaign(fx);
+
+      await expect(
+        fx.humanRoguelikeMatch.write.enterCombatNode([
+          combatChild,
+          [{ row: 0, col: 0 }],
+        ]),
+      ).to.be.rejectedWith("CurrentNodeNotCleared");
+      await expect(
+        fx.humanRoguelikeMatch.write.enterResupplyNode([hub]),
+      ).to.be.rejectedWith("CurrentNodeNotCleared");
+    });
+
+    it("reverts entering a child, a resupply node, or the current node again while a match is live", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { rootNodeId, combatChild, hub } = await setupBranchingCampaign(fx);
+      await fx.humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+      const { activeGameId } = await fx.deployed.roguelikeRun.read.getRun([
+        fx.human.account.address,
+      ]);
+
+      await expect(
+        fx.humanRoguelikeMatch.write.enterCombatNode([
+          combatChild,
+          [{ row: 0, col: 0 }],
+        ]),
+      ).to.be.rejectedWith("ActiveGameInProgress");
+      await expect(
+        fx.humanRoguelikeMatch.write.enterResupplyNode([hub]),
+      ).to.be.rejectedWith("ActiveGameInProgress");
+      await expect(
+        fx.humanRoguelikeMatch.write.enterCombatNode([
+          rootNodeId,
+          [{ row: 0, col: 0 }],
+        ]),
+      ).to.be.rejectedWith("ActiveGameInProgress");
+
+      const run = await fx.deployed.roguelikeRun.read.getRun([
+        fx.human.account.address,
+      ]);
+      expect(run.currentNodeId).to.equal(rootNodeId);
+      expect(run.activeGameId).to.equal(activeGameId);
+    });
+
+    it("lets the run move on once the root is won, crediting the root, not the child", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { rootNodeId, combatChild } = await setupBranchingCampaign(fx);
+      await clearRoot(fx, rootNodeId);
+
+      await fx.humanRoguelikeMatch.write.enterCombatNode([
+        combatChild,
+        [{ row: 0, col: 0 }],
+      ]);
+
+      const player = fx.human.account.address;
+      const run = await fx.deployed.roguelikeRun.read.getRun([player]);
+      expect(run.currentNodeId).to.equal(combatChild);
+      expect(
+        await fx.deployed.roguelikeRun.read.isNodeDefeated([player, rootNodeId]),
+      ).to.equal(true);
+      expect(
+        await fx.deployed.roguelikeRun.read.isNodeDefeated([player, combatChild]),
+      ).to.equal(false);
+    });
+
+    it("always lets the run leave a resupply node", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { rootNodeId, hub, hubChild } = await setupBranchingCampaign(fx);
+      await clearRoot(fx, rootNodeId);
+
+      await fx.humanRoguelikeMatch.write.enterResupplyNode([hub]);
+      // Re-entering the hub while standing on it is still allowed.
+      await fx.humanRoguelikeMatch.write.enterResupplyNode([hub]);
+      // A resupply node has no fight, so its children open straight away.
+      await fx.humanRoguelikeMatch.write.enterCombatNode([
+        hubChild,
+        [{ row: 0, col: 0 }],
+      ]);
+      const run = await fx.deployed.roguelikeRun.read.getRun([
+        fx.human.account.address,
+      ]);
+      expect(run.currentNodeId).to.equal(hubChild);
+    });
+  });
+
   describe("Resupply: repair", function () {
     it("full-heals listed ships and charges UTC proportional to missing HP", async function () {
       const { deployed, owner, human, humanRoguelikeMatch, humanRoguelikeResupply, otherRoguelikeMatch, humanGame, humanUniversalCredits } =
@@ -2101,7 +2249,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         aiEncounters,
       );
       const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode, false]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
       await deployed.roguelikeResupply.write.setRepairCostPerHP([10n]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
@@ -2181,10 +2329,216 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     });
   });
 
+  describe("Engine-live setter locks (HA6-13)", function () {
+    it("locks RoguelikeMatch and RoguelikeResupply's live-state setters once any run has started", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { deployed, owner, human, humanRoguelikeMatch } = fx;
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, roguelikeMatch, roguelikeResupply, roguelikeRun } =
+        deployed;
+
+      // Before any run: still configurable.
+      expect(await roguelikeRun.read.runsStarted()).to.equal(0n);
+      await roguelikeMatch.write.setFleetsAddress([await roguelikeMatch.read.fleets()]);
+      await roguelikeResupply.write.setFleetsAddress([await roguelikeResupply.read.fleets()]);
+
+      const { campaignId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      expect(await roguelikeRun.read.runsStarted()).to.equal(1n);
+
+      const someAddress = owner.account.address;
+      for (const fn of [
+        "setAIShipsAddress",
+        "setHumanShipsAddress",
+        "setGameAddress",
+        "setFleetsAddress",
+        "setMapsAddress",
+        "setNodeMapAddress",
+        "setRunLedgerAddress",
+      ]) {
+        await expect(
+          (roguelikeMatch.write as any)[fn]([someAddress]),
+        ).to.be.rejectedWith("EngineAlreadyLive");
+      }
+      for (const fn of [
+        "setHumanShipsAddress",
+        "setFleetsAddress",
+        "setNodeMapAddress",
+        "setRunLedgerAddress",
+      ]) {
+        await expect(
+          (roguelikeResupply.write as any)[fn]([someAddress]),
+        ).to.be.rejectedWith("EngineAlreadyLive");
+      }
+    });
+  });
+
+  describe("AI that can't decide (HA6-12)", function () {
+    it("passes and emits AIDecisionFailed instead of freezing the match", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human, humanGame, humanRoguelikeMatch, otherRoguelikeMatch } = fx;
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, aiBehaviorRegistry } =
+        deployed;
+      const { campaignId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      // A "broken" AI (a contract with no decide()), registered before the
+      // fight since AI ships pin their AI at mint (HA6-18).
+      await aiBehaviorRegistry.write.setVariantAI([1, aiEncounters.address]);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+      const { activeGameId } = await deployed.roguelikeRun.read.getRun([
+        human.account.address,
+      ]);
+      await humanGame.write.moveShip(
+        [activeGameId, 1n, 0, 0, ActionType.Pass, 0n],
+        { account: human.account },
+      );
+
+      await otherRoguelikeMatch.write.takeAITurn([activeGameId]);
+      const failed = await deployed.roguelikeMatch.getEvents.AIDecisionFailed();
+      expect(failed.length).to.be.greaterThan(0);
+      expect(
+        (await deployed.game.read.getGame([activeGameId])).metadata.ended,
+      ).to.equal(false);
+    });
+  });
+
+  describe("Cost changes during a run (HA6-09)", function () {
+    // Re-publishes variant 1's cost table (bumping its version), optionally
+    // raising baseCost so every ship's current price goes up.
+    async function bumpCosts(shipAttributes: any, extraBaseCost = 0) {
+      const [, costs] = await shipAttributes.read.getCosts([1]);
+      await shipAttributes.write.setCosts([
+        1,
+        { ...costs, baseCost: Number(costs.baseCost) + extraBaseCost },
+      ]);
+    }
+
+    it("a price increase mid-combat doesn't break the winning move or the next fight", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { deployed, owner, human, humanGame, humanRoguelikeMatch, otherRoguelikeMatch } = fx;
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, shipAttributes } =
+        deployed;
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      // Cap the run at ship 1's exact current price, so any increase
+      // would push the roster over the cap if it were re-priced.
+      const startPrice = (await ships.read.getShip([1n])).shipData.cost;
+      const { campaignId, rootNodeId, mapId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+        BigInt(startPrice),
+      );
+      const nextNode = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode]);
+
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+      const { activeGameId } = await deployed.roguelikeRun.read.getRun([
+        human.account.address,
+      ]);
+
+      await bumpCosts(shipAttributes, 50);
+
+      await winCombatNode(
+        deployed.game,
+        humanGame,
+        otherRoguelikeMatch,
+        owner,
+        human,
+        activeGameId,
+        1n,
+      );
+      let run = await deployed.roguelikeRun.read.getRun([human.account.address]);
+      expect(run.status).to.equal(1); // still Active
+      expect(run.activeGameId).to.equal(0n);
+      expect(run.reservationFleetId).to.not.equal(0n);
+      expect((await ships.read.getShip([1n])).shipData.inFleet).to.equal(true);
+
+      // Another price change between nodes; the next fight still starts.
+      await bumpCosts(shipAttributes, 10);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        nextNode,
+        [{ row: 0, col: 0 }],
+      ]);
+      run = await deployed.roguelikeRun.read.getRun([human.account.address]);
+      expect(run.activeGameId).to.not.equal(0n);
+    });
+
+    it("startRun still requires current prices", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human, humanRoguelikeMatch } = fx;
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, shipAttributes } =
+        deployed;
+      const { campaignId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await bumpCosts(shipAttributes);
+
+      await expect(
+        humanRoguelikeMatch.write.startRun([campaignId, [1n]]),
+      ).to.be.rejectedWith("ShipCostVersionMismatch");
+
+      await ships.write.syncShipCosts([[1n]]);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+    });
+
+    it("resupply keeps the roster's frozen prices but requires current prices for added ships", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human, humanRoguelikeMatch, humanRoguelikeResupply } = fx;
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, shipAttributes } =
+        deployed;
+      const { campaignId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
+      await humanRoguelikeMatch.write.enterResupplyNode([resupplyNode]);
+
+      await bumpCosts(shipAttributes);
+
+      // Ship 2 was never re-priced after the change.
+      await expect(
+        humanRoguelikeResupply.write.resupplyModifyRoster([[2n], []]),
+      ).to.be.rejectedWith("ShipCostVersionMismatch");
+
+      // Once re-priced it can join; ship 1 (still on the old price) stays.
+      await ships.write.syncShipCosts([[2n]]);
+      await humanRoguelikeResupply.write.resupplyModifyRoster([[2n], []]);
+      const run = await deployed.roguelikeRun.read.getRun([
+        human.account.address,
+      ]);
+      expect(run.rosterShipIds.map(String)).to.deep.equal(["1", "2"]);
+    });
+  });
+
   describe("Resupply: roster composition", function () {
     it("adds and removes ships, re-reserving against the current cost cap", async function () {
-      const { deployed, human, humanRoguelikeMatch, humanRoguelikeResupply } =
-        await loadFixture(deployFixture);
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human, humanRoguelikeMatch, humanRoguelikeResupply } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
         deployed;
       const { campaignId, rootNodeId } = await setupCampaignWithRoot(
@@ -2193,10 +2547,11 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         aiEncounters,
       );
       const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode, true]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
       await humanRoguelikeMatch.write.enterResupplyNode([resupplyNode]);
 
       await humanRoguelikeResupply.write.resupplyModifyRoster([[2n], [1n]]);
@@ -2213,13 +2568,14 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     });
 
     it("reverts adding a ship the caller doesn't own", async function () {
+      const fx = await loadFixture(deployFixture);
       const {
         deployed,
         human,
         other,
         humanRoguelikeMatch,
         humanRoguelikeResupply,
-      } = await loadFixture(deployFixture);
+      } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
         deployed;
       const { campaignId, rootNodeId } = await setupCampaignWithRoot(
@@ -2228,7 +2584,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         aiEncounters,
       );
       const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode, true]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       // ship 6 belongs to `other`, not `human`.
@@ -2238,6 +2594,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       );
 
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
       await humanRoguelikeMatch.write.enterResupplyNode([resupplyNode]);
 
       await expect(
@@ -2246,8 +2603,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     });
 
     it("reverts adding a wrong-variant ship when the campaign requires one", async function () {
-      const { deployed, owner, human, humanRoguelikeMatch, humanRoguelikeResupply } =
-        await loadFixture(deployFixture);
+      const fx = await loadFixture(deployFixture);
+      const { deployed, owner, human, humanRoguelikeMatch, humanRoguelikeResupply } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
         deployed;
       const { campaignId, rootNodeId } = await setupCampaignWithRoot(
@@ -2257,7 +2614,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       );
       await roguelikeNodeMap.write.setCampaignRequiredVariant([campaignId, 1]);
       const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode, true]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
 
@@ -2284,6 +2641,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       );
 
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
       await humanRoguelikeMatch.write.enterResupplyNode([resupplyNode]);
 
       await expect(
@@ -2295,8 +2653,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     });
 
     it("keeps a run's required-variant rule pinned to whatever was live at startRun, even if an admin retunes it mid-run (UA-16)", async function () {
-      const { deployed, owner, human, humanRoguelikeMatch, humanRoguelikeResupply } =
-        await loadFixture(deployFixture);
+      const fx = await loadFixture(deployFixture);
+      const { deployed, owner, human, humanRoguelikeMatch, humanRoguelikeResupply } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
         deployed;
       const { campaignId, rootNodeId } = await setupCampaignWithRoot(
@@ -2306,7 +2664,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       );
       // Unrestricted (0) at the moment the run starts.
       const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
-      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode, true]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
 
@@ -2328,6 +2686,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       );
 
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
 
       // Admin tightens the requirement AFTER the run has already started —
       // a live (unpinned) read would apply this new rule to this run's
@@ -2369,9 +2728,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
 
   describe("Resupply: cost cap override", function () {
     it("updates the run's cost cap going forward", async function () {
-      const { deployed, human, humanRoguelikeMatch } = await loadFixture(
-        deployFixture,
-      );
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human, humanRoguelikeMatch } = fx;
       const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } =
         deployed;
       const { campaignId, rootNodeId } = await setupCampaignWithRoot(
@@ -2385,10 +2743,11 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         campaignId,
         9000n,
       );
-      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode, true]);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await clearRoot(fx, rootNodeId);
 
       let run = await deployed.roguelikeRun.read.getRun([
         human.account.address,

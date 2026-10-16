@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./Types.sol";
 import "./IWorldID.sol";
 import "./ByteHasher.sol";
-import "./IWinEffect.sol";
 import "./IRandomManager.sol";
 
 /// @dev Minimal reader for the deployed GameResults contract. `getGameResult`
@@ -113,6 +112,12 @@ contract Tournament is Ownable, ReentrancyGuard {
     uint16 public constant PROTOCOL_FEE_BPS = 100; // 1.00%
     uint256 public constant MIN_MATCH_TIMEOUT = 3600; // 1 hour
     uint256 public constant MAX_MATCH_TIMEOUT = 604800; // 1 week
+    // docs/audit-3.md HA6-17: buildBracket writes the whole bracket in one
+    // transaction, ~107k gas per player (measured 2026-10-16: 64 players
+    // 6.9M, 128 players 13.7M). Capping at 128 keeps it under a 2^24
+    // (~16.8M) per-transaction gas cap; with no cap, a big enough
+    // tournament could never leave Starting, locking every entry fee.
+    uint32 public constant MAX_PLAYERS = 128;
     // HA2-07: a patient outside observer can preview, for free, what
     // buildBracket()'s shuffle would produce for the current RandomManager
     // epoch (the registrant list is already frozen by start()) and simply
@@ -130,16 +135,8 @@ contract Tournament is Ownable, ReentrancyGuard {
     uint256 public tournamentCount;
     mapping(uint256 => TournamentData) internal tournaments;
 
-    // Pluggable win effects (see IWinEffect.sol) — fires for the champion
-    // only (not the runner-up) when a tournament finalizes, same mechanism
-    // roguelike combat nodes and PvP matches use. One flat list across
-    // every tournament run by this contract, not per-tournament — empty by
-    // default (opt-in), same as PvPMatch.winEffects.
-    // Private + explicit getter (not a bare public array) so callers get a
-    // full-array read in one call, matching RoguelikeNodeMap.
-    // getNodeWinEffects — a public array only auto-generates an index
-    // accessor, not a length/full-array getter.
-    address[] private winEffects;
+    // No win effects in tournaments (docs/audit-3.md HA6-27): win effects
+    // are PvE-only — tournament games are PvP.
 
     // ---- Events ----
     event TournamentCreated(
@@ -170,8 +167,6 @@ contract Tournament is Ownable, ReentrancyGuard {
     event Refunded(uint256 indexed tournamentId, address indexed player, uint256 amount);
     event MatchForfeited(uint256 indexed tournamentId, uint256 indexed matchId, address winner, address loser);
     event MatchStalled(uint256 indexed tournamentId, uint256 indexed matchId, address winner, address loser);
-    event WinEffectsSet(uint effectCount);
-    event WinEffectFailed(address indexed player, uint indexed tournamentId, address indexed resolver);
 
     // ---- Errors ----
     error TournamentNotFound();
@@ -201,6 +196,7 @@ contract Tournament is Ownable, ReentrancyGuard {
     error NotADraw();
     error GamePredatesAssignment();
     error MatchTimeoutNotReached();
+    error GameNotStalled();
     error GameAlreadyAssigned();
     error NotAMatchPlayer();
     error NotStarting();
@@ -238,17 +234,6 @@ contract Tournament is Ownable, ReentrancyGuard {
         feeRecipient = _feeRecipient;
     }
 
-    /// @dev Full-replace the win-effect list, same "full replace, not
-    /// add/remove" shape as RoguelikeNodeMap.setNodeWinEffects.
-    function setWinEffects(address[] calldata _effects) external onlyOwner {
-        winEffects = _effects;
-        emit WinEffectsSet(_effects.length);
-    }
-
-    function getWinEffects() external view returns (address[] memory) {
-        return winEffects;
-    }
-
     // ---- Creation & funding ----
     function createTournament(
         TournamentConfig calldata cfg
@@ -256,6 +241,7 @@ contract Tournament is Ownable, ReentrancyGuard {
         if (
             cfg.minPlayers < 2 ||
             cfg.maxPlayers < cfg.minPlayers ||
+            cfg.maxPlayers > MAX_PLAYERS ||
             cfg.lastStartTime <= block.timestamp ||
             cfg.matchTimeout < MIN_MATCH_TIMEOUT ||
             cfg.matchTimeout > MAX_MATCH_TIMEOUT
@@ -401,7 +387,16 @@ contract Tournament is Ownable, ReentrancyGuard {
     function rerollBracketShuffle(uint256 tournamentId) external {
         TournamentData storage t = _get(tournamentId);
         if (t.state != TournamentState.Starting) revert NotStarting();
-        if (block.timestamp <= t.shuffleDeadline) revert ShuffleWindowNotExpired();
+        // Also allowed once the request itself has expired (its block hash
+        // aged out of RandomManager's window; on a chain without EIP-2935
+        // that's 256 blocks, ~8.5 min, which can be before
+        // SHUFFLE_REVEAL_WINDOW ends) — otherwise there'd be a gap
+        // where neither buildBracket nor a reroll could succeed. The new
+        // request's block hash is unknowable to whoever triggers it.
+        if (
+            block.timestamp <= t.shuffleDeadline &&
+            !randomManager.isExpired(t.randomRequestId)
+        ) revert ShuffleWindowNotExpired();
 
         uint256 requestId = randomManager.requestRandomness();
         t.randomRequestId = requestId;
@@ -576,15 +571,23 @@ contract Tournament is Ownable, ReentrancyGuard {
         _resolve(t, matchId, winner, bytes32(0));
     }
 
-    /// @notice Anyone may force-resolve a match that neither player ever
-    /// engaged with (no game assigned, no forfeit claimed) once matchTimeout
-    /// has elapsed — the same window either player already had via
-    /// claimForfeitWin. Prevents two silent/colluding registrants (trivially
-    /// achievable with unlimited free accounts, since seed == registration
-    /// order and pairing is deterministic) from permanently freezing every
-    /// other registrant's and sponsor's prize money with no recovery path.
-    /// Winner is decided by the same seed-tiebreak resolveDraw already uses,
-    /// so the outcome is deterministic and gameable by no one at this point.
+    /// @notice Anyone may force-resolve a stalled match, so two silent or
+    /// colluding registrants (trivially achievable with unlimited free
+    /// accounts, since seed == registration order and pairing is
+    /// deterministic) can never permanently freeze every other registrant's
+    /// and sponsor's prize money. Two cases:
+    ///
+    /// - No game assigned: once matchTimeout has elapsed since readyAt (the
+    ///   same window either player already had via claimForfeitWin), the
+    ///   lower seed wins, same tiebreak resolveDraw uses.
+    /// - A game assigned but never finished (docs/audit-3.md HA6-08): both
+    ///   players went silent mid-game, so recordResult/resolveDraw can't
+    ///   resolve it and only the absent players could call
+    ///   PvPMatch.endGameOnTimeout. Once the current turn's timeout PLUS a
+    ///   further matchTimeout grace has passed, the player whose turn it is
+    ///   loses — the same outcome endGameOnTimeout would give. The grace
+    ///   leaves the waiting player ample time to end the game normally
+    ///   first; this only fires when both have gone silent.
     function resolveStalledMatch(uint256 tournamentId, uint256 matchId) external {
         TournamentData storage t = _get(tournamentId);
         if (t.state != TournamentState.Active) revert NotActive();
@@ -592,12 +595,26 @@ contract Tournament is Ownable, ReentrancyGuard {
         Match storage m = t.bracket[matchId];
         if (m.resolved) revert MatchAlreadyResolved();
         if (m.player1 == address(0) || m.player2 == address(0)) revert MatchNotReady();
-        if (m.gameId != 0) revert GameAlreadyAssigned();
-        if (block.timestamp <= m.readyAt + t.config.matchTimeout)
-            revert MatchTimeoutNotReached();
 
-        address winner = t.seed[m.player1] <= t.seed[m.player2] ? m.player1 : m.player2;
-        address loser = winner == m.player1 ? m.player2 : m.player1;
+        address winner;
+        address loser;
+        if (m.gameId != 0) {
+            (GameMetadata memory gameMetadata, GameTurnState memory turnState) = game
+                .getGameMetadataAndTurnState(m.gameId);
+            if (
+                gameMetadata.ended ||
+                block.timestamp <=
+                turnState.turnStartTime + turnState.turnTime + t.config.matchTimeout
+            ) revert GameNotStalled();
+            loser = turnState.currentTurn;
+            if (loser != m.player1 && loser != m.player2) revert WinnerNotInMatch();
+            winner = loser == m.player1 ? m.player2 : m.player1;
+        } else {
+            if (block.timestamp <= m.readyAt + t.config.matchTimeout)
+                revert MatchTimeoutNotReached();
+            winner = t.seed[m.player1] <= t.seed[m.player2] ? m.player1 : m.player2;
+            loser = winner == m.player1 ? m.player2 : m.player1;
+        }
         emit MatchStalled(tournamentId, matchId, winner, loser);
         _resolve(t, matchId, winner, bytes32(0));
     }
@@ -622,18 +639,6 @@ contract Tournament is Ownable, ReentrancyGuard {
         t.prizesDistributed = true;
         t.state = TournamentState.Complete;
         emit TournamentFinalized(tournamentId, t.champion, t.runnerUp);
-
-        // Champion only, not the runner-up — a win effect is for winning,
-        // matching PvP (winner only) and roguelike (whoever won the node).
-        // Each call is individually try/catch'd so a broken resolver can't
-        // block prize distribution, which has already been committed
-        // above by this point regardless — same reasoning as
-        // RoguelikeMatch/PvPMatch's matching dispatch loops.
-        for (uint i = 0; i < winEffects.length; i++) {
-            try IWinEffect(winEffects[i]).onWin(t.champion, tournamentId) {} catch {
-                emit WinEffectFailed(t.champion, tournamentId, winEffects[i]);
-            }
-        }
     }
 
     function claim(uint256 tournamentId) external nonReentrant {

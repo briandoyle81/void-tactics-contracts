@@ -22,7 +22,7 @@ contract RenderBody is IRenderComponent {
         renderShield3 = IReturnSVG(renderers[3]);
         renderArmor1 = IReturnSVG(renderers[4]);
         renderArmor2 = IReturnSVG(renderers[5]);
-        renderArmor3 = IReturnSVG(renderers[5]);
+        renderArmor3 = IReturnSVG(renderers[6]);
     }
 
     function render(

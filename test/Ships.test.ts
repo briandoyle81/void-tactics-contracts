@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import hre from "hardhat";
-import { parseEther, keccak256, toBytes } from "viem";
+import { parseEther, keccak256, toBytes, getAddress } from "viem";
 import { deployShipsFixture } from "./fixtures/deployShipsFixture";
 import { attributeParams, costsParams } from "./fixtures/attributeTables";
 import {
@@ -2434,16 +2434,35 @@ describe("Ships", function () {
       ).to.be.rejectedWith("CannotRecycleFreeShip");
     });
 
-    it("blocks a reentrant claimFreeShips call from the ERC721 mint callback (SP-01)", async function () {
-      const { freeShipClaim } = await loadFixture(deployShipsFixture);
+    it("mints to a contract without an onERC721Received callback, so a claim can't re-enter (SP-01, HA6-04)", async function () {
+      const { freeShipClaim, ships } = await loadFixture(deployShipsFixture);
 
+      // This mock re-enters claimFreeShips from onERC721Received. Ships now
+      // mints with _mint, so that callback never fires: the claim simply
+      // succeeds once, and the cooldown (recorded before minting, SP-01)
+      // still blocks a second claim.
       const attacker = await hre.viem.deployContract(
         "MockFreeShipClaimReentrant",
         [],
       );
       await attacker.write.setTarget([freeShipClaim.address]);
 
-      await expect(attacker.write.claim([1])).to.be.rejected;
+      await attacker.write.claim([1]);
+      const owned = await ships.read.getShipIdsOwned([attacker.address]);
+      expect(owned.length).to.be.greaterThan(0);
+      // Struct owner and ERC-721 owner agree (HA6-04).
+      for (const id of owned) {
+        expect(getAddress(await ships.read.ownerOf([id]))).to.equal(
+          getAddress(attacker.address),
+        );
+        expect(
+          getAddress((await ships.read.getShip([id])).owner),
+        ).to.equal(getAddress(attacker.address));
+      }
+
+      await expect(attacker.write.claim([1])).to.be.rejectedWith(
+        "ClaimCooldownNotPassed",
+      );
     });
 
     it("Should allow recycling purchased ships but not free ships in the same call", async function () {
@@ -3879,6 +3898,59 @@ describe("Ships", function () {
       const updatedShip = tupleToShip(updatedShipTuple);
       expect(updatedShip.equipment.mainWeapon).to.equal(newMainWeapon);
       expect(updatedShip.shipData.modified).to.not.equal(0);
+    });
+
+    it("ignores caller-supplied shipsDestroyed/isFreeShip on modify (HA6-03)", async function () {
+      const {
+        ships,
+        user1,
+        user2,
+        randomManager,
+        universalCredits,
+        user1DroneYard,
+      } = await loadFixture(deployShipsFixture);
+
+      await ships.write.purchaseWithFlow(
+        [user1.account.address, 0n, user2.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      const ship = tupleToShip((await ships.read.ships([1n])) as ShipTuple);
+      await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      await ships.write.constructShip([1n], { account: user1.account });
+
+      const currentShip = tupleToShip(
+        (await ships.read.ships([1n])) as ShipTuple,
+      );
+      const newMainWeapon = currentShip.equipment.mainWeapon === 0 ? 1 : 0;
+      // A real equipment change, plus forged rank / free-ship fields that
+      // modifyShip must not price or store.
+      const forged: Ship = {
+        ...currentShip,
+        equipment: { ...currentShip.equipment, mainWeapon: newMainWeapon },
+        shipData: {
+          ...currentShip.shipData,
+          shipsDestroyed: 4294967295, // type(uint32).max
+          isFreeShip: !currentShip.shipData.isFreeShip,
+        },
+      };
+
+      const cost = await user1DroneYard.read.calculateCostToModify([
+        1n,
+        forged,
+      ]);
+      await universalCredits.write.mint([user1.account.address, cost]);
+      await user1DroneYard.write.modifyShip([1n, forged], {
+        account: user1.account,
+      });
+
+      const updated = tupleToShip((await ships.read.ships([1n])) as ShipTuple);
+      expect(updated.equipment.mainWeapon).to.equal(newMainWeapon);
+      expect(updated.shipData.shipsDestroyed).to.equal(
+        currentShip.shipData.shipsDestroyed,
+      );
+      expect(updated.shipData.isFreeShip).to.equal(
+        currentShip.shipData.isFreeShip,
+      );
     });
 
     it("Should modify ship traits", async function () {

@@ -1295,14 +1295,45 @@ describe("Lobbies", function () {
       ])) as unknown as PlayerLobbyState;
       expect(joinerState.kickCount).to.equal(0n);
 
+      // HA6-10: being timed out of lobby 1 also gave the joiner their
+      // free-lobby slot back (it used to leak, charging them the
+      // additionalLobbyFee on every future lobby).
+      expect(joinerState.activeLobbiesCount).to.equal(0n);
+
+      // The creator is still in lobby 1, so their second lobby needs the fee.
       await creatorLobbies.write.createLobby(
         [1000n, 300n, true, 0n, 100n, zeroAddress],
         { value: parseEther("1") },
       );
-      // must NOT revert PlayerInTimeout (a fee is still required — the
-      // joiner already used their free quota on lobby 1 — but that's a
-      // separate, unrelated check from the timeout this test is about).
-      await joinerLobbies.write.joinLobby([2n], { value: parseEther("1") });
+      // must NOT revert PlayerInTimeout, and needs no fee.
+      await joinerLobbies.write.joinLobby([2n]);
+    });
+  });
+
+  describe("Kicked-joiner rejoin ban (HA6-29)", function () {
+    it("an address timed out of a lobby can't rejoin that lobby, but can join others", async function () {
+      const { creatorLobbies, joinerLobbies, joiner } = await loadFixture(
+        deployLobbiesFixture,
+      );
+      await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await hre.network.provider.send("evm_increaseTime", [301]);
+      await hre.network.provider.send("evm_mine");
+      await creatorLobbies.write.timeoutJoiner([1n]);
+
+      expect(
+        await creatorLobbies.read.kickedFromLobby([1n, joiner.account.address]),
+      ).to.equal(true);
+      await expect(joinerLobbies.write.joinLobby([1n])).to.be.rejectedWith(
+        "KickedFromLobby",
+      );
+
+      // Other lobbies are unaffected.
+      await creatorLobbies.write.createLobby(
+        [1000n, 300n, true, 0n, 100n, zeroAddress],
+        { value: parseEther("1") },
+      );
+      await joinerLobbies.write.joinLobby([2n]);
     });
   });
 
@@ -1928,10 +1959,59 @@ describe("Lobbies", function () {
       ]);
       const openLobbyIds = await creatorLobbies.read.getOpenLobbies();
 
-      expect(creatorLobbyIds.length).to.equal(0);
+      // HA6-10: the penalized creator stays in their reopened lobby (and
+      // can still leave it); the joiner is out and gets their slot back.
+      expect(creatorLobbyIds.map(String)).to.deep.equal(["1"]);
       expect(joinerLobbyIds.length).to.equal(0);
       expect(openLobbyIds.length).to.equal(1);
       expect(openLobbyIds[0]).to.equal(1n);
+
+      const joinerState = (await joinerLobbies.read.getPlayerState([
+        joiner.account.address,
+      ])) as unknown as PlayerLobbyState;
+      expect(joinerState.activeLobbiesCount).to.equal(0n);
+
+      await creatorLobbies.write.leaveLobby([1n]);
+      const creatorState = (await creatorLobbies.read.getPlayerState([
+        creator.account.address,
+      ])) as unknown as PlayerLobbyState;
+      expect(creatorState.activeLobbiesCount).to.equal(0n);
+    });
+
+    it("lets a player in several lobbies leave any of them, not just the last one recorded (HA6-10)", async function () {
+      const { creatorLobbies, joinerLobbies, joiner } = await loadFixture(
+        deployLobbiesFixture,
+      );
+
+      // Joiner joins lobby 1, then creates lobby 2 (paying the extra fee).
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n,
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await joinerLobbies.write.createLobby(
+        [1000n, 300n, true, 0n, 100n, zeroAddress],
+        { value: parseEther("1") },
+      );
+
+      // activeLobbyId now points at lobby 2; leaving lobby 1 used to
+      // revert NotInLobby.
+      await joinerLobbies.write.leaveLobby([1n]);
+      let state = (await joinerLobbies.read.getPlayerState([
+        joiner.account.address,
+      ])) as unknown as PlayerLobbyState;
+      expect(state.activeLobbiesCount).to.equal(1n);
+      expect(state.activeLobbyId).to.equal(2n); // untouched
+
+      await joinerLobbies.write.leaveLobby([2n]);
+      state = (await joinerLobbies.read.getPlayerState([
+        joiner.account.address,
+      ])) as unknown as PlayerLobbyState;
+      expect(state.activeLobbiesCount).to.equal(0n);
     });
 
     it("should clean up when game starts", async function () {

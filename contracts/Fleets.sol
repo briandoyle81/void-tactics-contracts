@@ -44,6 +44,7 @@ contract Fleets is Ownable, IFleets {
     error FleetNotFound();
     error ShipNotOwned();
     error ShipAlreadyInFleet();
+    error ShipNotConstructed();
     error ShipCostVersionMismatch();
     error InvalidFleetCost();
     error ShipNotFound();
@@ -80,6 +81,47 @@ contract Fleets is Ownable, IFleets {
         ships = IShips(_ships);
     }
 
+    // True only during a createFleetFrozenPrices call; cleared again before
+    // it returns (the set-then-clear is mostly refunded, so it costs a few
+    // thousand gas net). A flag rather than a parameter because
+    // createFleet's frame is already at the legacy codegen's stack limit;
+    // ordinary storage because this compiler job targets Paris (no
+    // transient storage).
+    bool private _frozenPrices;
+
+    // Same as createFleet, minus the costs-version check: each ship counts
+    // at its stored `cost` from when it was last priced, even if
+    // ShipAttributes.setCosts has bumped the variant's version since. For
+    // orchestrators that hold one roster across many fleets (a roguelike
+    // run): prices are checked once when the run starts, then frozen for
+    // the run, the same way a ship's cost is frozen for a single fleet's
+    // lifetime everywhere else. Without this, a routine setCosts mid-run
+    // makes every later fleet for that run revert ShipCostVersionMismatch
+    // while the ships are locked and can't be re-synced (docs/audit-3.md
+    // HA6-09). Callers must check current prices themselves for any ship
+    // entering the roster (run start, resupply adds).
+    function createFleetFrozenPrices(
+        uint _lobbyId,
+        address _owner,
+        uint[] calldata _shipIds,
+        Position[] calldata _startingPositions,
+        uint _costLimit,
+        bool _isCreator,
+        uint _mapId
+    ) external returns (uint fleetId) {
+        _frozenPrices = true;
+        fleetId = createFleet(
+            _lobbyId,
+            _owner,
+            _shipIds,
+            _startingPositions,
+            _costLimit,
+            _isCreator,
+            _mapId
+        );
+        _frozenPrices = false;
+    }
+
     function createFleet(
         uint _lobbyId,
         address _owner,
@@ -88,7 +130,7 @@ contract Fleets is Ownable, IFleets {
         uint _costLimit,
         bool _isCreator,
         uint _mapId
-    ) external returns (uint) {
+    ) public returns (uint) {
         if (!isAllowedToManageFleets[msg.sender])
             revert NotAllowedToManageFleets();
 
@@ -145,19 +187,34 @@ contract Fleets is Ownable, IFleets {
             // Validate ship is not in another fleet
             if (ship.shipData.inFleet) revert ShipAlreadyInFleet();
 
-            // Validate cost version
+            // docs/audit-3.md HA6-23: an unconstructed ship has all-zero
+            // traits, and the permissionless Ships.syncShipCosts can still
+            // stamp it with a current costsVersion — without this it could
+            // join a fleet (and then never be constructable while inFleet).
+            if (!ship.shipData.constructed) revert ShipNotConstructed();
+
+            // Validate cost version (skipped for createFleetFrozenPrices)
             if (
+                !_frozenPrices &&
                 ship.shipData.costsVersion !=
                 shipAttributes.getCurrentCostsVersion(ship.traits.variant)
             ) revert ShipCostVersionMismatch();
 
-            // A fleet is one faction's ships only — factions have distinct
-            // art, weapon flavor, and (variant 2) a different faction
-            // ability, so mixing them mid-fleet has no coherent rendering
-            // or gameplay meaning.
+            // A PLAYER fleet is one faction's ships only — factions have
+            // distinct art, weapon flavor, and (variant 2) a different
+            // faction ability. AI enemy fleets may mix factions
+            // (docs/audit-3.md HA6-30): Game dispatches specials/abilities
+            // and AI decisions per ship, not per fleet. An AI fleet is the
+            // one created with the calling orchestrator as its own owner;
+            // a player fleet is always created on a player's behalf. (Reads
+            // newFleet.owner, already set from _owner above, rather than
+            // _owner itself: this frame is at the legacy stack limit.)
             if (i == 0) {
                 fleetVariant = ship.traits.variant;
-            } else if (ship.traits.variant != fleetVariant) {
+            } else if (
+                ship.traits.variant != fleetVariant &&
+                newFleet.owner != msg.sender
+            ) {
                 revert MixedVariantFleet();
             }
 

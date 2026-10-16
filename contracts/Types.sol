@@ -240,6 +240,12 @@ struct GameData {
     // internal scheduling detail for SpecialEffectsLib, not player-facing
     // game state.
     uint8 healCapPercentAtStart;
+    // docs/audit-3.md HA6-24: the round in which a ship that had ALREADY
+    // moved was knocked to 0 HP (which clears its moved flag). A revive in
+    // that same round puts it back in shipMovedThisRound so it can't act
+    // twice; a ship downed before moving keeps its move. Rounds start at 1,
+    // so the default 0 never matches.
+    mapping(uint => uint) zeroedAfterMovingInRound;
 }
 
 struct GameDataView {

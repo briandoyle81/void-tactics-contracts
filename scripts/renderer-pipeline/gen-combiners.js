@@ -228,64 +228,134 @@ function genImageRenderer(manifest, imageRendererName, combinerImportDir) {
   ];
   const [special, aft, weapon, body, fore] = combiners;
 
-  return (
-    `// SPDX-License-Identifier: UNLICENSED\n` +
-    `pragma solidity ^0.8.28;\n\n` +
-    `import "./Types.sol";\n` +
-    `import "./IRenderer.sol";\n` +
-    `import "./${combinerImportDir}/${special}.sol";\n` +
-    `import "./${combinerImportDir}/${aft}.sol";\n` +
-    `import "./${combinerImportDir}/${weapon}.sol";\n` +
-    `import "./${combinerImportDir}/${body}.sol";\n` +
-    `import "./${combinerImportDir}/${fore}.sol";\n` +
-    `import "@openzeppelin/contracts/utils/Strings.sol";\n` +
-    `import "@openzeppelin/contracts/utils/Base64.sol";\n\n` +
-    `contract ${imageRendererName} is IImageRenderer {\n` +
-    `    using Strings for string;\n\n` +
-    `    string private constant BASE_SVG =\n` +
-    `        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">';\n` +
-    `    string private constant SVG_END = "</svg>";\n\n` +
-    `    string private constant UNCONSTRUCTED_IMAGE =\n` +
-    `        "ipfs://bafkreibc3fdrdsw4l7zy4wjrgalvfhg6kfd3wmijwefny3nxj5244x2tr4";\n` +
-    `    string private constant DESTROYED_IMAGE =\n` +
-    `        "ipfs://bafkreige3z6iopsmgyzefidhydbaikpipxwrstqzuylw2y2c4rvwnn6yvm";\n\n` +
-    `    IRenderComponent public immutable renderSpecial;\n` +
-    `    IRenderComponent public immutable renderAft;\n` +
-    `    IRenderComponent public immutable renderWeapon;\n` +
-    `    IRenderComponent public immutable renderBody;\n` +
-    `    IRenderComponent public immutable renderFore;\n\n` +
-    `    constructor(\n` +
-    `        address _renderSpecial,\n` +
-    `        address _renderAft,\n` +
-    `        address _renderWeapon,\n` +
-    `        address _renderBody,\n` +
-    `        address _renderFore\n` +
-    `    ) {\n` +
-    `        renderSpecial = IRenderComponent(_renderSpecial);\n` +
-    `        renderAft = IRenderComponent(_renderAft);\n` +
-    `        renderWeapon = IRenderComponent(_renderWeapon);\n` +
-    `        renderBody = IRenderComponent(_renderBody);\n` +
-    `        renderFore = IRenderComponent(_renderFore);\n` +
-    `    }\n\n` +
-    `    function renderShip(Ship memory ship) public view override returns (string memory) {\n` +
-    `        if (ship.shipData.timestampDestroyed > 0) {\n` +
-    `            return DESTROYED_IMAGE;\n` +
-    `        } else if (!ship.shipData.constructed) {\n` +
-    `            return UNCONSTRUCTED_IMAGE;\n` +
-    `        }\n\n` +
-    `        string memory svg = BASE_SVG;\n` +
-    `        svg = string.concat(svg, renderSpecial.render(ship));\n` +
-    `        svg = string.concat(svg, renderAft.render(ship));\n` +
-    `        svg = string.concat(svg, renderWeapon.render(ship));\n` +
-    `        svg = string.concat(svg, renderBody.render(ship));\n` +
-    `        svg = string.concat(svg, renderFore.render(ship));\n` +
-    `        svg = string.concat(svg, SVG_END);\n\n` +
-    `        string memory base64Svg = Base64.encode(bytes(svg));\n` +
-    `        return\n` +
-    `            string(abi.encodePacked("data:image/svg+xml;base64,", base64Svg));\n` +
-    `    }\n` +
-    `}\n`
-  );
+  return `// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.28;
+
+import "./Types.sol";
+import "./IRenderer.sol";
+import "./${combinerImportDir}/${special}.sol";
+import "./${combinerImportDir}/${aft}.sol";
+import "./${combinerImportDir}/${weapon}.sol";
+import "./${combinerImportDir}/${body}.sol";
+import "./${combinerImportDir}/${fore}.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/Base64.sol";
+
+contract ${imageRendererName} is IImageRenderer {
+    using Strings for string;
+
+    string private constant BASE_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">';
+    string private constant SVG_END = "</svg>";
+
+    IRenderComponent public immutable renderSpecial;
+    IRenderComponent public immutable renderAft;
+    IRenderComponent public immutable renderWeapon;
+    IRenderComponent public immutable renderBody;
+    IRenderComponent public immutable renderFore;
+
+    // On-chain destroyed (explosion) and unconstructed art, each stored
+    // pre-base64-encoded and split into ordered leaves to fit the 24KB cap
+    // (scripts/renderer-pipeline/svg-to-leaves.js). Replaced the IPFS
+    // DESTROYED_IMAGE and UNCONSTRUCTED_IMAGE 2026-10-16.
+    IReturnSVG[] public destroyedParts;
+    IReturnSVG[] public unconstructedParts;
+
+    constructor(
+        address _renderSpecial,
+        address _renderAft,
+        address _renderWeapon,
+        address _renderBody,
+        address _renderFore,
+        address[] memory _destroyedParts,
+        address[] memory _unconstructedParts
+    ) {
+        renderSpecial = IRenderComponent(_renderSpecial);
+        renderAft = IRenderComponent(_renderAft);
+        renderWeapon = IRenderComponent(_renderWeapon);
+        renderBody = IRenderComponent(_renderBody);
+        renderFore = IRenderComponent(_renderFore);
+        for (uint i = 0; i < _destroyedParts.length; i++) {
+            destroyedParts.push(IReturnSVG(_destroyedParts[i]));
+        }
+        for (uint i = 0; i < _unconstructedParts.length; i++) {
+            unconstructedParts.push(IReturnSVG(_unconstructedParts[i]));
+        }
+    }
+
+    function renderShip(Ship memory ship) public view override returns (string memory) {
+        if (ship.shipData.timestampDestroyed > 0) {
+            return _renderParts(destroyedParts, ship);
+        } else if (!ship.shipData.constructed) {
+            return _renderParts(unconstructedParts, ship);
+        }
+
+        string memory svg = BASE_SVG;
+        svg = string.concat(svg, renderSpecial.render(ship));
+        svg = string.concat(svg, renderAft.render(ship));
+        svg = string.concat(svg, renderWeapon.render(ship));
+        svg = string.concat(svg, renderBody.render(ship));
+        svg = string.concat(svg, renderFore.render(ship));
+        svg = string.concat(svg, SVG_END);
+
+        return _toDataUri(svg);
+    }
+
+    // Joins the leaves' base64 behind the data-URI prefix in one allocation.
+    // Encoding on-chain (~78 gas/byte) or growing the string with repeated
+    // string.concat (quadratic copying) pushed the largest image's tokenURI
+    // read past common eth_call gas caps.
+    function _renderParts(
+        IReturnSVG[] storage parts,
+        Ship memory ship
+    ) private view returns (string memory) {
+        bytes memory prefix = "data:image/svg+xml;base64,";
+        string[] memory chunks = new string[](parts.length);
+        uint total = prefix.length;
+        for (uint i = 0; i < parts.length; i++) {
+            chunks[i] = parts[i].render(ship);
+            total += bytes(chunks[i]).length;
+        }
+
+        bytes memory out = new bytes(total);
+        uint dest;
+        assembly {
+            dest := add(out, 32)
+        }
+        dest = _copy(dest, prefix);
+        for (uint i = 0; i < chunks.length; i++) {
+            dest = _copy(dest, bytes(chunks[i]));
+        }
+        return string(out);
+    }
+
+    // Copies src's bytes to dest; returns the position after them. Whole
+    // words are copied, so up to 31 bytes past src's end get overwritten.
+    // That's safe in _renderParts: a spill inside \`out\` is rewritten by the
+    // next copy, and the last copy's spill lands in out's word padding or
+    // unallocated memory (which Solidity never assumes is zeroed).
+    function _copy(uint dest, bytes memory src) private pure returns (uint) {
+        assembly {
+            let len := mload(src)
+            let s := add(src, 32)
+            for {
+                let i := 0
+            } lt(i, len) {
+                i := add(i, 32)
+            } {
+                mstore(add(dest, i), mload(add(s, i)))
+            }
+            dest := add(dest, len)
+        }
+        return dest;
+    }
+
+    function _toDataUri(string memory svg) private pure returns (string memory) {
+        return
+            string(abi.encodePacked("data:image/svg+xml;base64,", Base64.encode(bytes(svg))));
+    }
+}
+`;
 }
 
 function genAll(manifestPath, { imageRendererName = "ImageRendererV2", imageRendererDir } = {}) {

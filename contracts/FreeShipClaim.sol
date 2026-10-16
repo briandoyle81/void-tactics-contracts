@@ -74,12 +74,11 @@ contract FreeShipClaim is Ownable, ReentrancyGuard {
             revert ClaimCooldownNotPassed();
         }
 
-        // Checks-effects-interactions: record the claim before minting,
-        // since ships.createShips's _safeMint can hand control to msg.sender
-        // (if it's a contract) via onERC721Received before this function
-        // returns — nonReentrant already blocks a reentrant claimFreeShips
-        // call, but this ordering is the actual fix (see docs/pre-audit.md
-        // SP-01) and matches TutorialClaim's pattern.
+        // Checks-effects-interactions: record the claim before minting
+        // (see docs/pre-audit.md SP-01; matches TutorialClaim's pattern).
+        // Ships now mints with _mint (no onERC721Received callback, see
+        // docs/audit-3.md HA6-04), so there's no reentry path today; this
+        // ordering and nonReentrant stay as defense in depth.
         lastClaimTimestamp[msg.sender] = currentTime;
 
         // 10 base ships, plus a permanent bonus (DroneStorefront's own tier

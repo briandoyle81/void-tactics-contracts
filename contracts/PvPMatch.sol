@@ -6,7 +6,6 @@ import "./Types.sol";
 import "./Game.sol";
 import "./IGameResults.sol";
 import "./IGameOrchestrator.sol";
-import "./IWinEffect.sol";
 import "./IGameEngineRegistry.sol";
 
 // PvP-specific orchestration split out of Game.sol: this is what Lobbies
@@ -24,17 +23,9 @@ contract PvPMatch is Ownable, IGameOrchestrator {
     // one wired in (e.g. in tests that don't need it).
     IGameEngineRegistry public engineRegistry;
 
-    // Pluggable win effects (see IWinEffect.sol) — fires for the winner of
-    // every non-draw PvP match, same mechanism roguelike combat nodes use
-    // via RoguelikeNodeMap's per-node list. PvP has no curated per-instance
-    // content the way roguelike nodes do, so this is one flat list rather
-    // than per-map/per-lobby — empty by default (opt-in), same as a
-    // roguelike node with nothing configured.
-    // Private + explicit getter (not a bare public array) so callers get a
-    // full-array read in one call, matching RoguelikeNodeMap.
-    // getNodeWinEffects — a public array only auto-generates an index
-    // accessor, not a length/full-array getter.
-    address[] private winEffects;
+    // No win effects in PvP (docs/audit-3.md HA6-27): two wallets one
+    // person controls can play each other and farm any per-win reward, so
+    // win effects (bonus DEC, granted ships, heals) are PvE-only.
 
     // UA-02 fix (2026-09-29): once this orchestrator has ever started a
     // game, `game`/`gameResults` can never be repointed again — see
@@ -48,12 +39,6 @@ contract PvPMatch is Ownable, IGameOrchestrator {
     error InvalidMove();
     error EngineAlreadyLive();
 
-    event WinEffectsSet(uint effectCount);
-    event WinEffectFailed(
-        address indexed player,
-        uint indexed gameId,
-        address indexed resolver
-    );
     // UA-03 fix (2026-09-29): recordGameResult can revert if
     // GameResults.isAllowedRecorder is ever revoked for this contract while
     // it still has in-flight games — without a try/catch, that revert
@@ -75,17 +60,6 @@ contract PvPMatch is Ownable, IGameOrchestrator {
 
     function setLobbiesAddress(address _lobbiesAddress) external onlyOwner {
         lobbiesAddress = _lobbiesAddress;
-    }
-
-    /// @dev Full-replace the win-effect list, same "full replace, not
-    /// add/remove" shape as RoguelikeNodeMap.setNodeWinEffects.
-    function setWinEffects(address[] calldata _effects) external onlyOwner {
-        winEffects = _effects;
-        emit WinEffectsSet(_effects.length);
-    }
-
-    function getWinEffects() external view returns (address[] memory) {
-        return winEffects;
     }
 
     // UA-02 fix (2026-09-29): `game.metadata.orchestrator` is snapshotted
@@ -219,11 +193,6 @@ contract PvPMatch is Ownable, IGameOrchestrator {
                 emit GameResultRecordFailed(_gameId, _winner, _loser);
             }
 
-            for (uint i = 0; i < winEffects.length; i++) {
-                try IWinEffect(winEffects[i]).onWin(_winner, _gameId) {} catch {
-                    emit WinEffectFailed(_winner, _gameId, winEffects[i]);
-                }
-            }
         }
     }
 }

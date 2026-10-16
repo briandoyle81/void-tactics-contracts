@@ -68,7 +68,8 @@ contract RoguelikeRun is Ownable {
     // reward-eligibility. Keyed by generation for the same reason
     // lockedByGen is, so a new run doesn't inherit a previous one's
     // defeats. Prevents farming a Combat node's kill rewards repeatedly via
-    // a twoWay edge back to it (see docs/pre-audit.md SP-05).
+    // a cycle in the graph back to it (see docs/pre-audit.md SP-05), and
+    // gates leaving a Combat node (RoguelikeMatch's CurrentNodeNotCleared).
     mapping(address => mapping(uint => mapping(uint => bool)))
         private defeatedByGen;
 
@@ -83,6 +84,11 @@ contract RoguelikeRun is Ownable {
     // forward moves and no way back, through no fault of the player. See
     // docs/upgrade-safety-audit-2026-09-29.md UA-05.
     mapping(uint => uint) public activeRunsAtNode;
+
+    // Total runs ever started. RoguelikeMatch and RoguelikeResupply lock the
+    // address setters their live runs depend on once this is non-zero
+    // (docs/audit-3.md HA6-13), the same rule as PvPMatch.gamesStarted.
+    uint public runsStarted;
 
     error NotAllowedToModifyRuns();
     error RunAlreadyActive();
@@ -126,6 +132,7 @@ contract RoguelikeRun is Ownable {
         run.rosterShipIds = _initialRoster;
         run.requiredVariantAtStart = _requiredVariant;
         activeRunsAtNode[_rootNodeId] += 1;
+        runsStarted++;
 
         emit RunStarted(_player, _campaignId);
     }

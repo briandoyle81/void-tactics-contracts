@@ -234,6 +234,14 @@ contract DroneYard is Ownable, ReentrancyGuard {
         _newShip.name = currentShip.name; // Preserve name
         _newShip.id = _shipId;
         _newShip.owner = currentShip.owner;
+        // customizeShip stores these from the caller's struct, and neither
+        // is validated or priced here — without this, ~1 UTC buys rank 6
+        // (or a uint32.max kill count that makes recordKill overflow and
+        // freeze a game), or clears isFreeShip to recycle a free ship
+        // (docs/audit-3.md HA6-03). Shiny is the one shipData field
+        // DroneYard prices, so it's still taken from the caller.
+        _newShip.shipData.shipsDestroyed = currentShip.shipData.shipsDestroyed;
+        _newShip.shipData.isFreeShip = currentShip.shipData.isFreeShip;
 
         // Call customizeShip on Ships contract (it will calculate modifications internally)
         ships.customizeShip(_shipId, _newShip);

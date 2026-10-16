@@ -177,7 +177,7 @@ a direct state read before the script declares success.
   price-distorted) pool:** there is no on-chain fix for that specific hook
   address, **and re-running this script alone will not give you a different
   one.** Confirmed 2026-09-17: `hookMiner.ts`'s salt search is deterministic
-  given the same constructor args (Ships/UniversalCredits/RandomManager/
+  given the same constructor args (Ships/UniversalCredits/
   hookOwnerAddress), so it always reproduces the same hook address until one
   of those inputs changes. The only way to get a genuinely fresh hook is to
   **redeploy Phase 1 first** (a fresh `UniversalCredits` etc. — this project's

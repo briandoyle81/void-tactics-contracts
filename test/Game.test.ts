@@ -17,6 +17,7 @@ import { attributeParams } from "./fixtures/attributeTables";
 import {
   setShipPosition,
   setShipHullPointsToZero,
+  setShipHullPoints,
   primeShipForRealDestruction,
 } from "./helpers/gameStorage";
 
@@ -1014,10 +1015,15 @@ describe("Game", function () {
       expect(after.version).to.equal(1);
       expect(after.hullPoints).to.equal(pinned.hullPoints);
 
-      // and can't be re-snapshotted to pull the new version in.
-      await expect(
-        game.write.calculateShipAttributes([1n, 1n]),
-      ).to.be.rejectedWith("InvalidMove");
+      // and can't be re-snapshotted to pull the new version in — the
+      // snapshot function isn't externally callable at all (HA6-01).
+      expect(
+        game.abi.some(
+          (item: { type: string; name?: string }) =>
+            item.type === "function" &&
+            item.name === "calculateShipAttributes",
+        ),
+      ).to.equal(false);
     });
 
     it("should revert when trying to get attributes for non-existent game", async function () {
@@ -5417,6 +5423,83 @@ describe("Game", function () {
   });
 
   describe("Reactor Critical Timer", function () {
+    it("ends the game cleanly when two 0-HP ships hit timer 3 on the same tick (HA6-02)", async function () {
+      const {
+        creatorLobbies,
+        joinerLobbies,
+        creator,
+        joiner,
+        ships,
+        game,
+        randomManager,
+      } = await loadFixture(deployGameFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const ship = tupleToShip(
+          (await ships.read.ships([BigInt(i)])) as ShipTuple,
+        );
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      await creatorLobbies.write.createLobby([
+        1000n,
+        300n,
+        true,
+        0n,
+        100n,
+        zeroAddress,
+      ]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n, 2n],
+        generateStartingPositions([1n, 2n], true),
+      ]);
+      await joinerLobbies.write.createFleet([
+        1n,
+        [6n, 7n],
+        generateStartingPositions([6n, 7n], false),
+      ]);
+
+      // Creator goes first (selected fleet first). creator 1 -> joiner 6 ->
+      // creator 2 would complete the round once joiner's 7 counts as 0-HP.
+      const pass = async (shipId: bigint, account: any) => {
+        const gd = (await game.read.getGame([1n])) as unknown as GameDataView;
+        const pos = findShipPosition(gd, shipId);
+        await game.write.moveShip(
+          [1n, shipId, pos.row, pos.col, ActionType.Pass, 0n],
+          { account },
+        );
+      };
+      await pass(1n, creator.account);
+      await pass(6n, joiner.account);
+
+      // Both of joiner's ships are downed with identical timers, so both
+      // reach 3 on the same round-start tick. The first removal leaves
+      // joiner with no active ship and ends the game (clearing fleets); the
+      // second removal used to revert ShipNotFound, unwinding the move.
+      await primeShipForRealDestruction(game.address, 1n, 6n);
+      await primeShipForRealDestruction(game.address, 1n, 7n);
+
+      await pass(2n, creator.account);
+
+      const finalGame = await game.read.getGame([1n]);
+      expect(finalGame.metadata.ended).to.equal(true);
+      expect(finalGame.metadata.winner.toLowerCase()).to.equal(
+        creator.account.address.toLowerCase(),
+      );
+    });
+
     it("should increment reactor critical timer when shooting ships with 0 HP", async function () {
       const {
         creatorLobbies,
@@ -6271,6 +6354,145 @@ describe("Game", function () {
       const ship2AttrsAfter = await game.read.getShipAttributes([1n, 2n]);
       expect(ship2AttrsAfter.hullPoints).to.equal(Math.floor(expectedCap));
       expect(ship2AttrsAfter.hullPoints).to.be.lessThan(40);
+    });
+
+    // Shared setup for the HA6-24/25 heal tests: creator [1 (RepairDrones),
+    // 2], joiner [6]; ship 2 knocked to 0 HP; optional heal cap set first.
+    async function setUpRepairOnDownedAlly(capPercent?: number, downShip2 = true) {
+      const f = await loadFixture(deployGameFixture);
+      const { creatorLobbies, joinerLobbies, creator, joiner, ships, game, randomManager, owner } = f;
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const ship = tupleToShip((await ships.read.ships([BigInt(i)])) as ShipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      const colors = { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 };
+      await ships.write.setIsAllowedToCreateShips([owner.account.address, true], {
+        account: owner.account,
+      });
+      await ships.write.customizeShip(
+        [
+          1n,
+          {
+            name: "Repair Ship",
+            id: 1n,
+            equipment: { mainWeapon: 0, armor: 0, shields: 0, special: 2 },
+            traits: { serialNumber: 12345n, colors, variant: 1, accuracy: 0, hull: 0, speed: 2 },
+            shipData: {
+              shipsDestroyed: 0, costsVersion: 1, cost: 0, shiny: false, constructed: false,
+              inFleet: false, isFreeShip: false, modified: 0, timestampDestroyed: 0n,
+            },
+            owner: creator.account.address,
+          },
+        ],
+        { account: owner.account },
+      );
+      await ships.write.constructShip([2n], { account: creator.account });
+      await ships.write.constructShip([6n], { account: joiner.account });
+      if (capPercent !== undefined) {
+        await game.write.setHealCapPercent([capPercent], { account: owner.account });
+      }
+      await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([1n, [1n, 2n], generateStartingPositions([1n, 2n], true)]);
+      await joinerLobbies.write.createFleet([1n, [6n], generateStartingPositions([6n], false)]);
+      if (downShip2) await setShipHullPointsToZero(game.address, 1n, 2n);
+      return f;
+    }
+
+    it("a ship that already moved, was knocked to 0 HP, then revived the same round can't act twice (HA6-24)", async function () {
+      const { game, creator, joiner } = await setUpRepairOnDownedAlly(undefined, false);
+      // Ship 1 (RepairDrones) at (5,3), ship 2 at (5,5), enemy ship 6 adjacent at (5,6).
+      await setShipPosition(game.address, 1n, 1n, 5, 3);
+      await setShipPosition(game.address, 1n, 2n, 5, 5);
+      await setShipPosition(game.address, 1n, 6n, 5, 6);
+      await setShipHullPoints(game.address, 1n, 2n, 1);
+
+      // Ship 2 acts first this round.
+      await game.write.moveShip([1n, 2n, 5, 5, ActionType.Pass, 0n], { account: creator.account });
+      // The enemy knocks it to 0 HP (this clears its moved flag).
+      await game.write.moveShip([1n, 6n, 5, 6, ActionType.Shoot, 2n], { account: joiner.account });
+      expect((await game.read.getShipAttributes([1n, 2n])).hullPoints).to.equal(0);
+      // Ship 1 revives it.
+      await game.write.moveShip([1n, 1n, 5, 3, ActionType.Special, 2n], { account: creator.account });
+      expect((await game.read.getShipAttributes([1n, 2n])).hullPoints).to.be.greaterThan(0);
+
+      // Ship 2 already acted, so every ship has moved and the round ends.
+      // Before the fix ship 2 counted as unmoved and got a second turn.
+      const gd = (await game.read.getGame([1n])) as unknown as GameDataView;
+      expect(gd.turnState.currentRound).to.equal(2n);
+    });
+
+    it("keeps a ship healed to 0 HP (heal cap 0) in the zero-HP set, so the round still completes (HA6-25)", async function () {
+      const { game, creator, joiner } = await setUpRepairOnDownedAlly(0);
+      await game.write.moveShip([1n, 1n, 2, 0, ActionType.Special, 2n], {
+        account: creator.account,
+      });
+      expect((await game.read.getShipAttributes([1n, 2n])).hullPoints).to.equal(0);
+
+      // Joiner's only ship moves; ship 1 moved and ship 2 is still a 0-HP
+      // ship, so the round completes and ship 2's reactor timer ticks.
+      // Before the fix ship 2 dropped out of the zero-HP set and the round
+      // could never complete.
+      const gd = (await game.read.getGame([1n])) as unknown as GameDataView;
+      const pos6 = findShipPosition(gd, 6n);
+      await game.write.moveShip([1n, 6n, pos6.row, pos6.col, ActionType.Pass, 0n], {
+        account: joiner.account,
+      });
+      const after = (await game.read.getGame([1n])) as unknown as GameDataView;
+      expect(after.turnState.currentRound).to.equal(gd.turnState.currentRound + 1n);
+      expect((await game.read.getShipAttributes([1n, 2n])).reactorCriticalTimer).to.equal(1);
+    });
+
+    it("ends a game where both sides are fully disabled at once by score, as a draw on a tie (HA6-26)", async function () {
+      const { creatorLobbies, joinerLobbies, creator, joiner, ships, game, randomManager } =
+        await loadFixture(deployGameFixture);
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const ship = tupleToShip((await ships.read.ships([BigInt(i)])) as ShipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+      await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([1n, [1n, 2n], generateStartingPositions([1n, 2n], true)]);
+      await joinerLobbies.write.createFleet([1n, [6n], generateStartingPositions([6n], false)]);
+
+      let gd = (await game.read.getGame([1n])) as unknown as GameDataView;
+      let pos = findShipPosition(gd, 1n);
+      await game.write.moveShip([1n, 1n, pos.row, pos.col, ActionType.Pass, 0n], { account: creator.account });
+      gd = (await game.read.getGame([1n])) as unknown as GameDataView;
+      pos = findShipPosition(gd, 6n);
+      await game.write.moveShip([1n, 6n, pos.row, pos.col, ActionType.Pass, 0n], { account: joiner.account });
+
+      // Creator ship 1 and joiner's only ship 6 are down; creator's ship 2
+      // retreats, leaving neither side an active ship at once.
+      await setShipHullPointsToZero(game.address, 1n, 1n);
+      await setShipHullPointsToZero(game.address, 1n, 6n);
+      gd = (await game.read.getGame([1n])) as unknown as GameDataView;
+      pos = findShipPosition(gd, 2n);
+      await game.write.moveShip([1n, 2n, pos.row, pos.col, ActionType.Retreat, 0n], { account: creator.account });
+
+      const final = (await game.read.getGame([1n])) as unknown as GameDataView;
+      expect(final.metadata.ended).to.equal(true);
+      // Scores are tied 0-0, so it's a draw — the creator used to lose
+      // automatically just for being checked first.
+      expect(final.metadata.winner).to.equal(zeroAddress);
     });
 
     it("reverts setHealCapPercent above 100 and from a non-owner address", async function () {

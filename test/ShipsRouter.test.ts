@@ -286,11 +286,12 @@ describe("ShipsRouter", function () {
         await universalCredits.read.balanceOf([human.account.address]),
       ).to.equal(0n);
 
+      // PvE kills don't count toward rank (docs/audit-3.md HA6-16).
       const humanShip = await ships.read.getShip([humanId]);
-      expect(humanShip.shipData.shipsDestroyed).to.equal(1);
+      expect(humanShip.shipData.shipsDestroyed).to.equal(0);
     });
 
-    it("pays the destroyer UTC (not DEC) when an AI ship destroys a human-owned ship", async function () {
+    it("pays nothing and credits no kill when an AI ship destroys a human-owned ship (HA6-16/HA6-21)", async function () {
       const { gameRouter, ships, aiShips, universalCredits, droneEnergyCores, human, aiOwner } =
         await loadFixture(deployFixture);
 
@@ -301,15 +302,18 @@ describe("ShipsRouter", function () {
       await gameRouter.write.setTimestampDestroyed([humanId, aiId]);
 
       expect((await ships.read.getShip([humanId])).shipData.timestampDestroyed).to.not.equal(0n);
+      // The AI ship's owner is an orchestrator contract; UTC minted to it
+      // was stuck (HA6-21), so no reward is paid at all.
+      expect(recycleReward > 0n).to.equal(true);
       expect(
         await universalCredits.read.balanceOf([aiOwner.account.address]),
-      ).to.equal(recycleReward >> 2n);
+      ).to.equal(0n);
       expect(
         await droneEnergyCores.read.balanceOf([aiOwner.account.address]),
       ).to.equal(0n);
 
       const aiShip = await aiShips.read.getShip([aiId]);
-      expect(aiShip.shipData.shipsDestroyed).to.equal(1);
+      expect(aiShip.shipData.shipsDestroyed).to.equal(0);
     });
 
     it("still pays UTC correctly for a pure human-vs-human (PvP) kill", async function () {
@@ -328,6 +332,63 @@ describe("ShipsRouter", function () {
       expect(
         await droneEnergyCores.read.balanceOf([other.account.address]),
       ).to.equal(0n);
+      // A PvP kill of a non-free ship does count toward rank.
+      expect(
+        (await ships.read.getShip([destroyerId])).shipData.shipsDestroyed,
+      ).to.equal(1);
+    });
+
+    it("pays nothing and credits no kill for destroying a free ship (HA6-16)", async function () {
+      const { gameRouter, ships, universalCredits, human, other } =
+        await loadFixture(deployFixture);
+
+      await ships.write.createSpecificShip([
+        human.account.address,
+        {
+          name: "Free Victim",
+          id: 0n,
+          equipment: defaultEquipment,
+          traits: defaultTraits,
+          shipData: { ...shipData, isFreeShip: true },
+          owner: zeroAddress,
+        },
+      ]);
+      const destroyedId = await ships.read.shipCount();
+      const destroyerId = await mintHumanShip(ships, other.account.address, "Attacker");
+
+      await gameRouter.write.setTimestampDestroyed([destroyedId, destroyerId]);
+
+      expect(
+        (await ships.read.getShip([destroyedId])).shipData.timestampDestroyed,
+      ).to.not.equal(0n);
+      expect(
+        await universalCredits.read.balanceOf([other.account.address]),
+      ).to.equal(0n);
+      expect(
+        (await ships.read.getShip([destroyerId])).shipData.shipsDestroyed,
+      ).to.equal(0);
+    });
+
+    it("still processes the kill when the reward mint fails, emitting RewardSkipped instead of reverting (HA6-22)", async function () {
+      const { gameRouter, ships, universalCredits, human, other } =
+        await loadFixture(deployFixture);
+
+      const destroyedId = await mintHumanShip(ships, human.account.address, "Victim");
+      const destroyerId = await mintHumanShip(ships, other.account.address, "Attacker");
+
+      // Minting switched off: the UTC mint inside the reward reverts.
+      await universalCredits.write.setMintIsActive([false]);
+      await gameRouter.write.setTimestampDestroyed([destroyedId, destroyerId]);
+
+      expect(
+        (await ships.read.getShip([destroyedId])).shipData.timestampDestroyed,
+      ).to.not.equal(0n);
+      expect(
+        (await ships.read.getShip([destroyerId])).shipData.shipsDestroyed,
+      ).to.equal(1);
+      expect(
+        await universalCredits.read.balanceOf([other.account.address]),
+      ).to.equal(0n);
     });
 
     it("mints no reward token and does not revert when the destroyed AI ship's variant has no reward token registered", async function () {
@@ -343,10 +404,11 @@ describe("ShipsRouter", function () {
       await gameRouter.write.setTimestampDestroyed([aiId, humanId]);
 
       // The kill still processes fully -- no revert, ship still marked
-      // destroyed, kill still recorded -- it just pays no reward currently.
+      // destroyed -- it just pays no reward currently. (No kill credit
+      // either: PvE kills don't count toward rank, HA6-16.)
       expect(await aiShips.read.isShipDestroyed([aiId])).to.equal(true);
       const humanShip = await ships.read.getShip([humanId]);
-      expect(humanShip.shipData.shipsDestroyed).to.equal(1);
+      expect(humanShip.shipData.shipsDestroyed).to.equal(0);
 
       expect(
         await droneEnergyCores.read.balanceOf([human.account.address]),
