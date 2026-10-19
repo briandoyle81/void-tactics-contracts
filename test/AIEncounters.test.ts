@@ -376,6 +376,106 @@ describe("AIEncounters", function () {
       ).to.be.rejectedWith("InvalidPosition");
     });
 
+    // Fixed 2026-10-19: placements used to be hardcoded to the default
+    // joiner columns 13-16, so a map with a custom joiner zone couldn't save
+    // its AI fleet in the zone's other tiles (seen on Base Sepolia map 67).
+    it("follows the map's custom joiner zone instead of the default columns", async function () {
+      const { aiEncounters, maps } = await loadFixture(deployFixture);
+      await aiEncounters.write.createAIShipConfig([
+        "Scout",
+        defaultEquipment,
+        defaultTraits,
+        defaultArchetype,
+      ]);
+      await maps.write.setJoinerZone([
+        1n,
+        [
+          { row: 5, col: 10 },
+          { row: 4, col: 11 },
+          { row: 0, col: 13 },
+        ],
+      ]);
+
+      await aiEncounters.write.setMapPlacements([
+        1n,
+        [
+          { row: 5, col: 10 },
+          { row: 0, col: 13 },
+          { row: 4, col: 11 },
+        ],
+        [1n, 1n, 1n],
+      ]);
+      // Returned row-major regardless of input order.
+      const [positions] = await aiEncounters.read.getMapPlacements([1n]);
+      expect(positions).to.deep.equal([
+        { row: 0, col: 13 },
+        { row: 4, col: 11 },
+        { row: 5, col: 10 },
+      ]);
+
+      // A default-band tile outside the custom zone is rejected now.
+      await expect(
+        aiEncounters.write.setMapPlacement([1n, 1, 14, 1n]),
+      ).to.be.rejectedWith("InvalidPosition");
+    });
+
+    it("can still clear a placement after the zone is edited to exclude it", async function () {
+      const { aiEncounters, maps } = await loadFixture(deployFixture);
+      await aiEncounters.write.createAIShipConfig([
+        "Scout",
+        defaultEquipment,
+        defaultTraits,
+        defaultArchetype,
+      ]);
+      await aiEncounters.write.setMapPlacements([
+        1n,
+        [
+          { row: 2, col: 14 },
+          { row: 3, col: 15 },
+        ],
+        [1n, 1n],
+      ]);
+      await maps.write.setJoinerZone([1n, [{ row: 9, col: 9 }]]);
+
+      await aiEncounters.write.setMapPlacement([1n, 2, 14, 0n]);
+      expect(await aiEncounters.read.mapPlacementCount([1n])).to.equal(1n);
+      await aiEncounters.write.setMapPlacements([1n, [], []]);
+      expect(await aiEncounters.read.mapPlacementCount([1n])).to.equal(0n);
+      expect(await aiEncounters.read.mapPlacements([1n, 3, 15])).to.equal(0n);
+    });
+
+    it("removing a middle placement keeps the rest intact and in row-major order", async function () {
+      const { aiEncounters } = await loadFixture(deployFixture);
+      await aiEncounters.write.createAIShipConfig([
+        "Scout",
+        defaultEquipment,
+        defaultTraits,
+        defaultArchetype,
+      ]);
+      await aiEncounters.write.createAIShipConfig([
+        "Bruiser",
+        defaultEquipment,
+        defaultTraits,
+        defaultArchetype,
+      ]);
+      await aiEncounters.write.setMapPlacement([1n, 6, 16, 2n]);
+      await aiEncounters.write.setMapPlacement([1n, 1, 13, 1n]);
+      await aiEncounters.write.setMapPlacement([1n, 3, 14, 1n]);
+      await aiEncounters.write.setMapPlacement([1n, 1, 13, 0n]);
+      await aiEncounters.write.setMapPlacement([1n, 0, 15, 2n]);
+
+      const [positions, configIds] = await aiEncounters.read.getMapPlacements([1n]);
+      expect(positions).to.deep.equal([
+        { row: 0, col: 15 },
+        { row: 3, col: 14 },
+        { row: 6, col: 16 },
+      ]);
+      expect(configIds).to.deep.equal([2n, 1n, 2n]);
+      // The removed cell can be re-added (its index entry was cleared).
+      await aiEncounters.write.setMapPlacement([1n, 1, 13, 1n]);
+      expect(await aiEncounters.read.mapPlacementCount([1n])).to.equal(4n);
+    });
+
     it("reverts ConfigNotFound when placing a nonexistent config id", async function () {
       const { aiEncounters } = await loadFixture(deployFixture);
       await expect(

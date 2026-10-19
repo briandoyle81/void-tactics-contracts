@@ -13,6 +13,7 @@ import {
   parseEventLogs,
   createWalletClient,
   http,
+  parseAbi,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
@@ -286,6 +287,30 @@ function computePoolId(key: {
     [key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks],
   );
   return keccak256(encoded);
+}
+
+// Total in-range liquidity of a pool, read straight from PoolManager storage
+// via extsload -- the same slots v4-core's StateLibrary.getLiquidity reads:
+// pools[poolId] lives at keccak256(poolId . POOLS_SLOT(6)), and its uint128
+// liquidity at offset 3. 0 for a pool that isn't initialized yet.
+// extsload is overloaded in PoolManager's ABI, so use the one-slot form alone.
+const EXTSLOAD_ABI = parseAbi(["function extsload(bytes32 slot) view returns (bytes32)"]);
+
+async function readPoolLiquidity(
+  publicClient: any,
+  poolId: `0x${string}`,
+): Promise<bigint> {
+  const stateSlot = BigInt(
+    keccak256(concatHex([poolId, `0x${(6n).toString(16).padStart(64, "0")}`])),
+  );
+  const slot = `0x${(stateSlot + 3n).toString(16).padStart(64, "0")}` as `0x${string}`;
+  const value = (await publicClient.readContract({
+    address: POOL_MANAGER,
+    abi: EXTSLOAD_ABI,
+    functionName: "extsload",
+    args: [slot],
+  })) as `0x${string}`;
+  return BigInt(value) & ((1n << 128n) - 1n);
 }
 
 function buildClientFromKey(rawKey: string) {
@@ -658,6 +683,40 @@ async function main() {
     ? lpSeedUcTarget
     : lpSeedUcTarget + smokeTestSellUc;
 
+  // ---- Step 10 (computed early): liquidityDelta for a full-range position --
+  const amount0Wei = (lpSeedUcTarget * tierPriceWei) / mintAmountUC;
+  const liquidityDelta = getLiquidityForAmounts(
+    sqrtPriceX96,
+    MIN_SQRT_PRICE,
+    MAX_SQRT_PRICE,
+    amount0Wei,
+    lpSeedUcTarget,
+  );
+  console.log(
+    `Liquidity math: amount0 (ETH) = ${formatEther(amount0Wei)}, amount1 (UC) = ${formatEther(lpSeedUcTarget)}, liquidityDelta = ${liquidityDelta.toString()}`,
+  );
+
+  // Re-run safety (2026-10-17): this script is re-run after failures (by
+  // hand, or by ignition-deploy-retry.sh --with-lottery-pool), and step 12
+  // isn't idempotent on its own -- a failure after it (e.g. an RPC blip
+  // during the grant in step 13) would otherwise source more UC and add a
+  // second seed. Skip sourcing/approve/add when the pool already holds at
+  // least ~our seed. Compared against our own seed size rather than "> 0",
+  // since anyone can add dust liquidity through PoolModifyLiquidityTest once
+  // the pool is initialized, and that must not make us skip seeding. The 90%
+  // margin absorbs a re-fetched ETH/USD price between runs (it's cached 24h).
+  const existingLiquidity = await readPoolLiquidity(publicClient, poolId);
+  const seedAlreadyAdded = existingLiquidity * 10n >= liquidityDelta * 9n;
+  if (seedAlreadyAdded) {
+    console.log(
+      `Pool already holds ${existingLiquidity.toString()} liquidity (seed is ${liquidityDelta.toString()}) ` +
+        "-- skipping LP-seed sourcing, approve, and add-liquidity (a prior run already did them).",
+    );
+  }
+  const ucNeeded = seedAlreadyAdded
+    ? (SKIP_SMOKE_TEST ? 0n : smokeTestSellUc)
+    : sourcingTarget;
+
   let ucBalance = (await publicClient.readContract({
     address: universalCreditsAddress,
     abi: ucAbi,
@@ -666,7 +725,7 @@ async function main() {
   })) as bigint;
   console.log("Current UC balance:", formatEther(ucBalance));
 
-  while (ucBalance < sourcingTarget) {
+  while (ucBalance < ucNeeded) {
     console.log(
       `Sourcing more UC via purchaseUTCWithFlow(tier ${sourcingTierIndex}, ` +
         `+${formatEther(sourcingTierMintUC)} UC)...`,
@@ -694,7 +753,7 @@ async function main() {
   console.log("UC sourced. Balance now:", formatEther(ucBalance));
 
   // ---- Step 9: approve UC to PoolModifyLiquidityTest ----------------------
-  {
+  if (!seedAlreadyAdded) {
     const { request } = await publicClient.simulateContract({
       address: universalCreditsAddress,
       abi: ucAbi,
@@ -705,19 +764,6 @@ async function main() {
     const hash = await wallet.writeContract(request);
     await publicClient.waitForTransactionReceipt({ hash });
   }
-
-  // ---- Step 10: compute liquidityDelta for a full-range position --------
-  const amount0Wei = (lpSeedUcTarget * tierPriceWei) / mintAmountUC;
-  const liquidityDelta = getLiquidityForAmounts(
-    sqrtPriceX96,
-    MIN_SQRT_PRICE,
-    MAX_SQRT_PRICE,
-    amount0Wei,
-    lpSeedUcTarget,
-  );
-  console.log(
-    `Liquidity math: amount0 (ETH) = ${formatEther(amount0Wei)}, amount1 (UC) = ${formatEther(lpSeedUcTarget)}, liquidityDelta = ${liquidityDelta.toString()}`,
-  );
 
   // ---- Step 11: initialize the pool --------------------------------------
   // See this script's header comment: the first successful call here
@@ -812,7 +858,7 @@ async function main() {
   }
 
   // ---- Step 12: add liquidity ---------------------------------------------
-  {
+  if (!seedAlreadyAdded) {
     const { request } = await publicClient.simulateContract({
       address: POOL_MODIFY_LIQUIDITY_TEST,
       abi: poolModifyLiquidityTestAbi,

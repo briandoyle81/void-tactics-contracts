@@ -628,11 +628,8 @@ const DeployModule = buildModule("DeployModule", (m) => {
     shipAttributes,
     100, // healToPercent placeholder (full heal) — tune via setHealToPercent
   ]);
-  const shipGrantWinEffect = m.contract("ShipGrantWinEffect", [
-    ships,
-    1, // shipVariant placeholder (0 is invalid — Ships.createShips requires >= 1) — tune via setShipConfig
-    0, // shipTier placeholder — tune via setShipConfig
-  ]);
+  // Grants nothing until a ship is configured per node via setGrant.
+  const shipGrantWinEffect = m.contract("ShipGrantWinEffect", [ships]);
 
   // ShipsRouter.lobbyAddress used to point straight at SinglePlayerMatch,
   // whose isSinglePlayerOrchestrator is a hardcoded `== address(this)`
@@ -1941,6 +1938,13 @@ const DeployModule = buildModule("DeployModule", (m) => {
     2,
     shatteredHiveMedal,
   ]);
+  // Node reward ships go to any winner, whatever the variant (2026-10-19).
+  const exemptShipGrantWinEffectCall = m.call(
+    variantPurchaseGate,
+    "setExemptMinter",
+    [shipGrantWinEffect, true],
+    { id: "ExemptShipGrantWinEffectFromVariantGate" },
+  );
 
   // Variant 2 AI kills pay DEC. Variant 1 intentionally has no reward token
   // registered yet — DestroyRewardLib pays nothing for those kills until one
@@ -2653,7 +2657,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
 
     m.call(variantPurchaseGate, "transferOwnership", [MAP_EDITOR], {
       id: "TransferVariantPurchaseGateOwnership",
-      after: [setVariant2GateCall],
+      after: [setVariant2GateCall, exemptShipGrantWinEffectCall],
     });
 
     m.call(factionRewardTokenRegistry, "transferOwnership", [MAP_EDITOR], {

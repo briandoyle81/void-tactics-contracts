@@ -6,13 +6,11 @@ pragma solidity ^0.8.28;
 // Mode-agnostic: originally built for the roguelike campaign
 // (RoguelikeMatch.onGameEnded dispatches to every resolver configured for
 // the node just won, via RoguelikeNodeMap.getNodeWinEffects/
-// setNodeWinEffects), now also dispatched by PvPMatch.onGameEnded (on a
-// PvP match win) and Tournament.finalize (for the tournament champion).
-// `contextId`'s meaning is caller-defined — a roguelike node id, a PvP
-// game id, or a tournament id — resolvers that don't need it simply ignore
-// it, the same way the three existing concrete resolvers
-// (DECBonusWinEffect, HealAboveFloorWinEffect, ShipGrantWinEffect) already
-// ignore it today. Each resolver owns its own config/authorization — e.g.
+// setNodeWinEffects). PvP and Tournament no longer dispatch win effects
+// (docs/audit-3.md HA6-27). `contextId`'s meaning is caller-defined — for
+// RoguelikeMatch it's the node id. DECBonusWinEffect and
+// HealAboveFloorWinEffect ignore it; ShipGrantWinEffect keys its
+// per-node reward ship by it (2026-10-19). Each resolver owns its own config/authorization — e.g.
 // a DEC-bonus resolver holds its own bonus amount and needs
 // DroneEnergyCores.authorizedToMint, a ship-grant resolver needs
 // Ships.isAllowedToCreateShips — callers stay completely agnostic to what

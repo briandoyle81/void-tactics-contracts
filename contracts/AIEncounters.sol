@@ -36,32 +36,31 @@ contract AIEncounters is Ownable {
     // addition to the owner) — same pattern as Maps.isMapEditor.
     mapping(address => bool) public isEncounterEditor;
 
-    // presetMapId => row => col => configId (0 = empty cell). Placements are
-    // only ever valid in the joiner-side column window Fleets.createFleet
-    // already enforces for every joiner ship (Fleets.sol:78-85) — the AI is
-    // always the joiner — so writes are bounds-checked against that window
-    // directly, and reads only ever scan that window, not the full grid.
+    // presetMapId => row => col => configId (0 = empty cell). The AI is
+    // always the joiner, so a placement must be a tile of the map's joiner
+    // deployment zone — the same Maps.isValidDeploymentTile check
+    // Fleets.createFleet applies when the AI fleet is created. (Fixed
+    // 2026-10-19: this used to hardcode the default joiner columns 13-16,
+    // so a map with a custom joiner zone couldn't save placements in the
+    // zone's other tiles.)
     mapping(uint => mapping(int16 => mapping(int16 => uint)))
         public mapPlacements;
-    // presetMapId => count of currently-non-zero placement cells, kept in
-    // sync by _setMapPlacementInternal/_clearMapPlacements so
-    // getMapPlacements/mapHasPlacements and the maxPlacementsPerMap bound
-    // are both O(1)/exact-sized, no scan.
-    mapping(uint => uint) public mapPlacementCount;
+    // presetMapId => occupied cells (row * GRID_WIDTH + col), and each
+    // cell's 1-based index in that list. Lets clears and reads touch only
+    // the occupied cells (at most maxPlacementsPerMap) instead of scanning
+    // a zone that can now be anywhere on the grid.
+    mapping(uint => uint16[]) private placedCells;
+    mapping(uint => mapping(uint16 => uint)) private placedCellIndex;
 
     int16 public constant GRID_HEIGHT = 11;
-    // Mirrors Fleets.sol's joiner-side column window (Fleets.sol:81) —
-    // duplicated rather than imported since Fleets.sol has no public
-    // constant for it; keep in sync if that window ever changes.
-    int16 public constant JOINER_COL_MIN = 13;
-    int16 public constant JOINER_COL_MAX = 16;
+    int16 public constant GRID_WIDTH = 17;
     // Owner-tunable rather than a fixed constant: this bounds how many AI
     // ships SinglePlayerMatch._mintAIFleet mints in one startNodeMatch
     // transaction (the whole fleet mints in a single loop, unlike
     // takeAITurn which is already one-ship-per-call), so it's a gas/pacing
     // knob, not a value anything else structurally depends on — the
-    // joiner-side spawn window (4 cols x 11 rows = 44 cells) supports far
-    // more than the default of 8.
+    // default joiner zone (4 cols x 11 rows = 44 cells) supports far more
+    // than the default of 8.
     uint public maxPlacementsPerMap = 8;
 
     error NotEncounterEditor();
@@ -240,19 +239,19 @@ contract AIEncounters is Ownable {
         }
     }
 
-    /// @dev Empties every placement on _mapId (bounded to the 44-cell
-    /// joiner window, same bound getMapPlacements already scans) so
-    /// setMapPlacements can give its input full-replace semantics.
+    /// @dev Empties every placement on _mapId so setMapPlacements can give
+    /// its input full-replace semantics.
     function _clearMapPlacements(uint _mapId) internal {
-        for (int16 row = 0; row < GRID_HEIGHT; row++) {
-            for (int16 col = JOINER_COL_MIN; col <= JOINER_COL_MAX; col++) {
-                if (mapPlacements[_mapId][row][col] != 0) {
-                    mapPlacements[_mapId][row][col] = 0;
-                    emit MapPlacementSet(_mapId, row, col, 0);
-                }
-            }
+        uint16[] storage cells = placedCells[_mapId];
+        for (uint i = 0; i < cells.length; i++) {
+            uint16 cell = cells[i];
+            int16 row = int16(cell / uint16(GRID_WIDTH));
+            int16 col = int16(cell % uint16(GRID_WIDTH));
+            mapPlacements[_mapId][row][col] = 0;
+            delete placedCellIndex[_mapId][cell];
+            emit MapPlacementSet(_mapId, row, col, 0);
         }
-        mapPlacementCount[_mapId] = 0;
+        delete placedCells[_mapId];
     }
 
     function _setMapPlacementInternal(
@@ -262,48 +261,70 @@ contract AIEncounters is Ownable {
         uint _configId
     ) internal {
         if (!maps.mapExists(_mapId)) revert MapNotFound();
+        if (_row < 0 || _row >= GRID_HEIGHT || _col < 0 || _col >= GRID_WIDTH)
+            revert InvalidPosition();
+        // Only new placements need to be in the zone: clearing a cell must
+        // still work after the map's zone is edited to exclude it.
         if (
-            _row < 0 ||
-            _row >= GRID_HEIGHT ||
-            _col < JOINER_COL_MIN ||
-            _col > JOINER_COL_MAX
+            _configId != 0 &&
+            !maps.isValidDeploymentTile(_mapId, _row, _col, false)
         ) revert InvalidPosition();
         if (_configId != 0 && _configId > aiShipConfigCount)
             revert ConfigNotFound();
 
+        uint16 cell = uint16(_row) * uint16(GRID_WIDTH) + uint16(_col);
         uint existing = mapPlacements[_mapId][_row][_col];
         if (existing == 0 && _configId != 0) {
-            if (mapPlacementCount[_mapId] >= maxPlacementsPerMap)
+            if (placedCells[_mapId].length >= maxPlacementsPerMap)
                 revert TooManyPlacements();
-            mapPlacementCount[_mapId]++;
+            placedCells[_mapId].push(cell);
+            placedCellIndex[_mapId][cell] = placedCells[_mapId].length;
         } else if (existing != 0 && _configId == 0) {
-            mapPlacementCount[_mapId]--;
+            uint16[] storage cells = placedCells[_mapId];
+            uint idx = placedCellIndex[_mapId][cell] - 1;
+            uint16 last = cells[cells.length - 1];
+            cells[idx] = last;
+            placedCellIndex[_mapId][last] = idx + 1;
+            cells.pop();
+            delete placedCellIndex[_mapId][cell];
         }
 
         mapPlacements[_mapId][_row][_col] = _configId;
         emit MapPlacementSet(_mapId, _row, _col, _configId);
     }
 
+    /// @dev Returned in row-major order (row, then col), as before the
+    /// 2026-10-19 change — the AI fleet's ship order follows it.
     function getMapPlacements(
         uint _mapId
     ) external view returns (Position[] memory positions, uint[] memory configIds) {
-        uint count = mapPlacementCount[_mapId];
-        positions = new Position[](count);
-        configIds = new uint[](count);
-        uint idx;
-        for (int16 row = 0; row < GRID_HEIGHT; row++) {
-            for (int16 col = JOINER_COL_MIN; col <= JOINER_COL_MAX; col++) {
-                uint configId = mapPlacements[_mapId][row][col];
-                if (configId != 0) {
-                    positions[idx] = Position({row: row, col: col});
-                    configIds[idx] = configId;
-                    idx++;
-                }
+        uint16[] memory cells = placedCells[_mapId];
+        // Insertion sort: at most maxPlacementsPerMap cells.
+        for (uint i = 1; i < cells.length; i++) {
+            uint16 c = cells[i];
+            uint j = i;
+            while (j > 0 && cells[j - 1] > c) {
+                cells[j] = cells[j - 1];
+                j--;
             }
+            cells[j] = c;
+        }
+        positions = new Position[](cells.length);
+        configIds = new uint[](cells.length);
+        for (uint i = 0; i < cells.length; i++) {
+            int16 row = int16(cells[i] / uint16(GRID_WIDTH));
+            int16 col = int16(cells[i] % uint16(GRID_WIDTH));
+            positions[i] = Position({row: row, col: col});
+            configIds[i] = mapPlacements[_mapId][row][col];
         }
     }
 
+    /// @dev Number of occupied placement cells on _mapId.
+    function mapPlacementCount(uint _mapId) public view returns (uint) {
+        return placedCells[_mapId].length;
+    }
+
     function mapHasPlacements(uint _mapId) external view returns (bool) {
-        return mapPlacementCount[_mapId] > 0;
+        return placedCells[_mapId].length > 0;
     }
 }

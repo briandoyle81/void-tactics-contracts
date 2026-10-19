@@ -190,6 +190,8 @@ Retry helper for interrupted Ignition deploys:
 ./scripts/ignition-deploy-retry.sh --network base-sepolia --deploy-script ignition/modules/DeployAndConfig.ts
 ```
 
+Add `--with-lottery-pool` to also run `scripts/deployUTCLotteryPool.ts` (the Uniswap lottery hook and pool) once the Ignition deploy succeeds, with the same retries.
+
 ## Repository Structure
 
 - `contracts/` — core game contracts and token/NFT logic

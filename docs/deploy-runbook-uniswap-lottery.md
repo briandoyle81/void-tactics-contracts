@@ -158,6 +158,22 @@ The script is idempotent-by-state-inspection — safe to re-run from the top if
 it fails partway (it re-checks bytecode presence, `poolLocked` state, and
 current balances before doing anything it's already done).
 
+**Updated 2026-10-17:** both phases can run from one command, with Phase 2
+retried like Phase 1:
+
+```bash
+./scripts/ignition-deploy-retry.sh --network base-sepolia \
+  --deploy-script ignition/modules/DeployAndConfig.ts --with-lottery-pool
+```
+
+`--with-lottery-pool` runs this script only after the Ignition deploy
+succeeds. Its env vars (`MAP_EDITOR_KEY`, `SKIP_SMOKE_TEST`, ...) pass straight
+through. Before this date, re-running after a failure *after* the add-liquidity
+step (step 12) would source more UC and add a second LP seed. The script now
+skips sourcing, approve, and add-liquidity when the pool already holds at least
+~90% of its seed. It reads that from PoolManager storage, so the check
+can't be fooled by someone adding dust liquidity.
+
 ### 2.3 What it does
 
 Mines a CREATE2 salt against the real canonical deployment proxy, deploys

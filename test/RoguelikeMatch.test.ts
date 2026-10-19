@@ -219,6 +219,49 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     await otherRoguelikeMatch.write.takeAITurn([gameId]);
   }
 
+  // A fully specified ShipGrantWinEffect grant (reworked 2026-10-19).
+  // Variant 2 on purpose: it's medal-gated for purchases, and the grant
+  // must still reach a player without the medal.
+  function sampleShipGrant(overrides: Record<string, unknown> = {}) {
+    return {
+      name: "Node Reward",
+      equipment: { mainWeapon: 1, armor: 0, shields: 2, special: 0 },
+      colors: { h1: 10, s1: 20, l1: 30, h2: 40, s2: 50, l2: 60, h3: 70, s3: 80, l3: 90 },
+      variant: 2,
+      accuracy: 2,
+      hull: 1,
+      speed: 0,
+      shipsDestroyed: 30,
+      shiny: true,
+      isFreeShip: false,
+      oncePerAddress: false,
+      ...overrides,
+    };
+  }
+
+  // Starts a fresh run with ship 1, enters the root node and wins it. The
+  // root has no children, so each win also ends that run.
+  async function runAndWinRoot(fx: any, campaignId: bigint, rootNodeId: bigint) {
+    const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } = fx;
+    await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+    await humanRoguelikeMatch.write.enterCombatNode([
+      rootNodeId,
+      [{ row: 0, col: 0 }],
+    ]);
+    const { activeGameId } = await deployed.roguelikeRun.read.getRun([
+      human.account.address,
+    ]);
+    await winCombatNode(
+      deployed.game,
+      humanGame,
+      otherRoguelikeMatch,
+      owner,
+      human,
+      activeGameId,
+      1n,
+    );
+  }
+
   // Launches and wins the root combat mission, so the run is free to move
   // on — leaving a combat node requires having won it (CurrentNodeNotCleared).
   async function clearRoot(fx: any, rootNodeId: bigint) {
@@ -1693,7 +1736,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       expect(decAfter - decBefore).to.equal(bonusAmount);
     });
 
-    it("grants a free ship to the player on a combat-node win", async function () {
+    it("grants the node's configured ship, with every property, to a player without the variant's gate NFT", async function () {
       const {
         deployed,
         owner,
@@ -1713,6 +1756,14 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         rootNodeId,
         [deployed.shipGrantWinEffect.address],
       ]);
+      await deployed.shipGrantWinEffect.write.setGrant([
+        rootNodeId,
+        sampleShipGrant(),
+      ]);
+      // The human holds no Shattered Hive medal, so buying variant 2 would fail.
+      expect(
+        await deployed.shatteredHiveMedal.read.balanceOf([human.account.address]),
+      ).to.equal(0n);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       const shipCountBefore = await ships.read.shipCount();
@@ -1739,7 +1790,173 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       expect(grantedShip.owner.toLowerCase()).to.equal(
         human.account.address.toLowerCase(),
       );
-      expect(grantedShip.shipData.isFreeShip).to.equal(true);
+      expect(grantedShip.name).to.equal("Node Reward");
+      expect(grantedShip.equipment).to.deep.equal({
+        mainWeapon: 1,
+        armor: 0,
+        shields: 2,
+        special: 0,
+      });
+      expect(grantedShip.traits.colors).to.deep.equal(sampleShipGrant().colors);
+      expect(grantedShip.traits.variant).to.equal(2);
+      expect(grantedShip.traits.accuracy).to.equal(2);
+      expect(grantedShip.traits.hull).to.equal(1);
+      expect(grantedShip.traits.speed).to.equal(0);
+      expect(grantedShip.shipData.shipsDestroyed).to.equal(30);
+      expect(grantedShip.shipData.shiny).to.equal(true);
+      expect(grantedShip.shipData.isFreeShip).to.equal(false);
+      expect(grantedShip.shipData.constructed).to.equal(true);
+    });
+
+    it("once-per-address grants one ship across runs; unlimited grants one per win", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human } = fx;
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } = deployed;
+      const { campaignId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      await roguelikeNodeMap.write.setNodeWinEffects([
+        rootNodeId,
+        [deployed.shipGrantWinEffect.address],
+      ]);
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+
+      await deployed.shipGrantWinEffect.write.setGrant([
+        rootNodeId,
+        sampleShipGrant({ oncePerAddress: true }),
+      ]);
+      const start = await ships.read.shipCount();
+      await runAndWinRoot(fx, campaignId, rootNodeId);
+      expect(await ships.read.shipCount()).to.equal(start + 1n);
+      expect(
+        await deployed.shipGrantWinEffect.read.hasClaimed([
+          rootNodeId,
+          human.account.address,
+        ]),
+      ).to.equal(true);
+      await runAndWinRoot(fx, campaignId, rootNodeId);
+      expect(await ships.read.shipCount()).to.equal(start + 1n);
+
+      // resetClaim lets the same address receive it once more.
+      await deployed.shipGrantWinEffect.write.resetClaim([
+        rootNodeId,
+        human.account.address,
+      ]);
+      await runAndWinRoot(fx, campaignId, rootNodeId);
+      expect(await ships.read.shipCount()).to.equal(start + 2n);
+
+      await deployed.shipGrantWinEffect.write.setGrant([
+        rootNodeId,
+        sampleShipGrant({ oncePerAddress: false }),
+      ]);
+      await runAndWinRoot(fx, campaignId, rootNodeId);
+      await runAndWinRoot(fx, campaignId, rootNodeId);
+      expect(await ships.read.shipCount()).to.equal(start + 4n);
+    });
+
+    it("a node with the effect but no configured grant mints nothing and reports WinEffectFailed", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human, publicClient } = fx;
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager } = deployed;
+      const { campaignId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      await roguelikeNodeMap.write.setNodeWinEffects([
+        rootNodeId,
+        [deployed.shipGrantWinEffect.address],
+      ]);
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      const start = await ships.read.shipCount();
+      const fromBlock = await publicClient.getBlockNumber();
+
+      await runAndWinRoot(fx, campaignId, rootNodeId);
+
+      expect(await ships.read.shipCount()).to.equal(start);
+      const run = await deployed.roguelikeRun.read.getRun([human.account.address]);
+      expect(run.status).to.equal(2); // Won
+      const events = await deployed.roguelikeMatch.getEvents.WinEffectFailed(
+        undefined,
+        { fromBlock, toBlock: "latest" },
+      );
+      expect(events).to.have.length(1);
+    });
+
+    it("heal-above-floor and the ship grant both apply on the same node win", async function () {
+      const fx = await loadFixture(deployFixture);
+      const { deployed, human } = fx;
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, game } = deployed;
+      const { campaignId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      await roguelikeNodeMap.write.setCampaignAutoHealPercent([campaignId, 10]);
+      await roguelikeNodeMap.write.setNodeWinEffects([
+        rootNodeId,
+        [
+          deployed.healAboveFloorWinEffect.address,
+          deployed.shipGrantWinEffect.address,
+        ],
+      ]);
+      await deployed.shipGrantWinEffect.write.setGrant([
+        rootNodeId,
+        sampleShipGrant(),
+      ]);
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      const start = await ships.read.shipCount();
+
+      await runAndWinRoot(fx, campaignId, rootNodeId);
+
+      const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
+      const attrs = await game.read.getShipAttributes([gameId, 1n]);
+      expect(attrs.hullPoints).to.be.lessThan(attrs.maxHullPoints);
+      expect(
+        await deployed.roguelikeRun.read.getShipHP([human.account.address, 1n]),
+      ).to.equal(attrs.maxHullPoints);
+      expect(await ships.read.shipCount()).to.equal(start + 1n);
+    });
+
+    it("setGrant is owner-only and validates the ship", async function () {
+      const { deployed, human } = await loadFixture(deployFixture);
+      const effect = deployed.shipGrantWinEffect;
+      await expect(
+        effect.write.setGrant([1n, sampleShipGrant()], { account: human.account }),
+      ).to.be.rejectedWith("OwnableUnauthorizedAccount");
+      await expect(
+        effect.write.setGrant([1n, sampleShipGrant({ accuracy: 3 })]),
+      ).to.be.rejectedWith("InvalidTraitValue");
+      await expect(
+        effect.write.setGrant([1n, sampleShipGrant({ variant: 0 })]),
+      ).to.be.rejectedWith("InvalidVariant");
+      await expect(
+        effect.write.setGrant([1n, sampleShipGrant({ variant: 3 })]),
+      ).to.be.rejectedWith("InvalidVariant");
+      await expect(
+        effect.write.setGrant([
+          1n,
+          sampleShipGrant({ equipment: { mainWeapon: 0, armor: 1, shields: 1, special: 0 } }),
+        ]),
+      ).to.be.rejectedWith("ArmorAndShieldsBothSet");
+
+      await effect.write.setGrant([1n, sampleShipGrant()]);
+      expect(await effect.read.hasGrant([1n])).to.equal(true);
+      expect((await effect.read.getGrant([1n])).name).to.equal("Node Reward");
+      await effect.write.clearGrant([1n]);
+      expect(await effect.read.hasGrant([1n])).to.equal(false);
+    });
+
+    it("onWin can only be called by an allowed trigger", async function () {
+      const { deployed, human } = await loadFixture(deployFixture);
+      await deployed.shipGrantWinEffect.write.setGrant([1n, sampleShipGrant()]);
+      await expect(
+        deployed.shipGrantWinEffect.write.onWin([human.account.address, 1n], {
+          account: human.account,
+        }),
+      ).to.be.rejectedWith("NotAllowedToTrigger");
     });
 
     it("heals a survivor above the campaign's ordinary auto-heal floor when configured on the node", async function () {
@@ -1831,6 +2048,10 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
           brokenEffect.address,
           deployed.shipGrantWinEffect.address,
         ],
+      ]);
+      await deployed.shipGrantWinEffect.write.setGrant([
+        rootNodeId,
+        sampleShipGrant(),
       ]);
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);

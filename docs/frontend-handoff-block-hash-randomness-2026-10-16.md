@@ -1,5 +1,7 @@
 # Frontend Handoff: Ship Randomness Now Comes From the Mint Block's Hash
 
+> **2026-10-17:** merged into `frontend-handoff-2026-10-17.md` with the other current handoffs. Work from that doc; this one is kept for history.
+
 _Written 2026-10-16; updated the same day for the EIP-2935 window (8191 blocks instead of 256). Not deployed yet; takes effect at the next redeploy of RandomManager (and Ships, Tournament). Background: `docs/audit-3.md` HA6-19._
 
 ## What changed

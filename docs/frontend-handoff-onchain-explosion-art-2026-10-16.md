@@ -1,5 +1,7 @@
 # Frontend Handoff: Destroyed and Unconstructed Ships Render On-Chain Art
 
+> **2026-10-17:** merged into `frontend-handoff-2026-10-17.md` with the other current handoffs. Work from that doc; this one is kept for history.
+
 _Written 2026-10-16 (updated the same day to add unconstructed art). Not deployed yet; takes effect at the next redeploy of ImageRenderer, ImageRendererV2 and RenderMetadata (and Ships, which points at RenderMetadata)._
 
 ## What changed

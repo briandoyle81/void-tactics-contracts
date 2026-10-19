@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  ./ignition-deploy-retry.sh --network <network-name> [--deploy-script <path/to/Module.ts>]
+  ./ignition-deploy-retry.sh --network <network-name> [--deploy-script <path/to/Module.ts>] [--with-lottery-pool]
 
 If --deploy-script is omitted, every module in ignition/modules/*.ts is deployed
 (in alphabetical order), each with its own retry loop. Paths are resolved from
@@ -15,6 +15,12 @@ Options:
   --skip-verify        Do not pass `--verify` to hardhat ignition deploy
   --no-auto-confirm   Do not auto-answer "y" to any deploy confirmation prompts
   --sleep-seconds <n> Sleep seconds between retries on transient errors (see retry conditions below)
+  --with-lottery-pool After the Ignition deploy succeeds, run
+                      scripts/deployUTCLotteryPool.ts (UTCLotteryHook + its
+                      Uniswap v4 pool) with the same retry handling. Its env
+                      vars (MAP_EDITOR_KEY, SKIP_SMOKE_TEST, DRY_RUN_ONLY, ...)
+                      pass straight through; see that script's header. Safe to
+                      retry: every step skips work a prior run already did.
 
 Environment variables:
   LOG_FILE            Log file to write (default: ignition_deploy_retry.log)
@@ -44,6 +50,7 @@ NETWORK=""
 DEPLOY_SCRIPT=""
 VERIFY=1
 AUTO_CONFIRM=1
+WITH_LOTTERY_POOL=0
 SLEEP_SECONDS_DEFAULT="5"
 
 LOG_FILE="${LOG_FILE:-ignition_deploy_retry.log}"
@@ -70,6 +77,10 @@ while [[ $# -gt 0 ]]; do
     --sleep-seconds)
       SLEEP_SECONDS="${2:-}"
       shift 2
+      ;;
+    --with-lottery-pool)
+      WITH_LOTTERY_POOL=1
+      shift 1
       ;;
     -h|--help)
       usage
@@ -140,6 +151,25 @@ deploy_with_retry() {
   if [[ "$VERIFY" -eq 1 ]]; then
     CMD+=(--verify)
   fi
+  run_with_retry "$script" "${CMD[@]}"
+}
+
+# Runs scripts/deployUTCLotteryPool.ts (added 2026-10-17). It reads the
+# Ignition deployment's deployed_addresses.json, so it only runs after the
+# Ignition deploy above succeeds. Re-running it is safe: it skips the hook
+# deploy, pool initialize, LP seed, and grants when a prior run already did
+# them.
+deploy_lottery_pool_with_retry() {
+  local script="scripts/deployUTCLotteryPool.ts"
+  run_with_retry "$script" npx hardhat run "$script" --network "$NETWORK"
+}
+
+# Runs a command with an automatic retry loop on transient errors.
+# Usage: run_with_retry <label> <command...>
+run_with_retry() {
+  local script="$1"
+  shift
+  local CMD=("$@")
 
   # Exponential backoff, but only for the RPC-provider-outage case ("no
   # backend is currently healthy to serve traffic" -- seen against
@@ -202,6 +232,7 @@ retry = (
     or "Please try rerunning Hardhat Ignition." in s
     or retry_ign411
     or "transaction underpriced" in s
+    or "nonce too low" in s.lower()  # viem wording, from deployUTCLotteryPool.ts
 )
 sys.exit(0 if retry else 1)
 '
@@ -222,6 +253,9 @@ sys.exit(0 if retry else 1)
 
 if [[ -n "$DEPLOY_SCRIPT" ]]; then
   deploy_with_retry "$DEPLOY_SCRIPT" || exit $?
+  if [[ "$WITH_LOTTERY_POOL" -eq 1 ]]; then
+    deploy_lottery_pool_with_retry || exit $?
+  fi
   exit 0
 fi
 
@@ -247,3 +281,7 @@ for module in "${MODULES[@]}"; do
 done
 
 echo "ALL MODULES DEPLOYED"
+
+if [[ "$WITH_LOTTERY_POOL" -eq 1 ]]; then
+  deploy_lottery_pool_with_retry || exit $?
+fi

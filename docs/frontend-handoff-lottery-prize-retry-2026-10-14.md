@@ -1,5 +1,7 @@
 # Frontend Handoff — Lottery Draw and Prize Delivery Changes
 
+> **2026-10-17:** merged into `frontend-handoff-2026-10-17.md` with the other current handoffs. Work from that doc; this one is kept for history.
+
 _Written 2026-10-14. These changes are not deployed yet; they take effect at the next redeploy of Ships, VariantPurchaseGate and UTCLotteryHook. Background: `docs/audit-3.md` HA6-04 to HA6-07. This doc supersedes `uniswap-lottery-selfie-check-frontend-integration.md` §4.5–4.6 and the `PrizeMintFailed` note in `frontend-handoff-engine-registry-and-redeploy-2026-09-30.md` §6._
 
 ## How a draw works now
