@@ -110,5 +110,9 @@
   "RenderMetadata@0x5418c92a46e44475:0x5789e1c0d5ac6c10": {
     "hash": "0x75e7ae02f88095c8648a0da10cd9df917c5d223cf2c2ac4b4298e0a38f046118",
     "address": "0xd73720aD5C39b483Cd4e1F9dbA99ad31554cEea8"
+  },
+  "RenderSpecial1@0x9c1e5eb745333072:0x518674ab2b227e5f": {
+    "hash": "0xd77ce2d890782683f98538e25ba4f0a92e5edb13e6f3da958711c33c4fae63da",
+    "address": "0x82AcB425cbFd87Ed61C3545F2436D94EBdE9bBCa"
   }
 }

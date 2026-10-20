@@ -146,6 +146,12 @@ function blendValues(
 // written out here rather than calling blendValues, since only its
 // saturation > 40 branch is reachable now, and the unused branch's bytecode
 // pushed RenderArmor3 over the 24 KiB limit.
+// Changed again 2026-10-20: the muted colors kept the art's lightness and
+// ignored the ship's, so changing l barely did anything. Now they move
+// halfway toward white (l > 50) or black (l < 50), in proportion to how far
+// l is from 50, which keeps the panel shading at both ends. l 50-99 is
+// squeezed into 50-85 first, since the brightest ships otherwise washed
+// out to flat pastel.
 function blendHSL(
     uint h,
     uint s,
@@ -154,7 +160,11 @@ function blendHSL(
 ) pure returns (string memory) {
     (uint h2, uint s2, uint l2) = parseHSL(hslStringIn);
     if (s2 <= 40) {
-        return hslString(h, s, l2);
+        if (l > 50) {
+            l = 50 + ((l - 50) * 35) / 49;
+            return hslString(h, s, l2 + ((100 - l2) * (l - 50)) / 100);
+        }
+        return hslString(h, s, l2 - (l2 * (50 - l)) / 100);
     }
     return
         hslString(

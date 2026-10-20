@@ -74,8 +74,19 @@ All 28 new contracts are verified on BaseScan, and their addresses are in `ignit
 - **`deployed_addresses.json` still lists the old `RenderMetadata` and `ImageRenderer`.** Ignition's file isn't updated by the redeploy script. Anything that calls the renderers directly must use the new addresses, or better, read the current one from `Ships.config().metadataRenderer` (then `RenderMetadata.imageRenderer()`). The old contracts still exist and still render the old colors.
 - **Clear cached ship images.** `Ships.tokenURI` returns the new art straight away, but any image the frontend or an indexer cached is stale for variant 1 shinies. Marketplaces need a manual "refresh metadata" for the current collection; the live `Ships` can't signal it (see §4).
 - **If the frontend previews shiny colors itself** (for example a customization preview that recolors SVGs client-side instead of calling the contract), update it to the new rule. For each `hsl(H2, S2%, L2%)` in variant 1 art, with the ship's `colors.h1/s1/l1` as `h, s, l` and integer division:
-  - `S2 <= 40`: `hsl(h, s%, L2%)`
+  - ~~`S2 <= 40`: `hsl(h, s%, L2%)`~~ _(superseded 2026-10-20 by the lightness follow-up below)_
   - `S2 > 40`: `hsl((H2*95 + h*5)/100, (S2*95 + s*5)/100%, (L2*85 + l*15)/100%)` (unchanged)
+
+### Follow-up: the ship's lightness now affects the hull (not deployed yet)
+
+With the rule above, a variant 1 shiny's hull ignored the ship's lightness (`l1`), so ships with different lightness looked almost the same. A follow-up change, also dated 2026-10-20, fixes this in `RenderUtils.blendHSL`.
+
+- **Not live yet.** It takes effect at the next run of `scripts/redeployVariant1Renderers.ts` plus `Ships.setConfig`. That run produces new `RenderMetadata` / `ImageRenderer` addresses again, replacing the ones in the table above. Read them from `Ships.config()` rather than hardcoding them.
+- **What changes:** hull and structure colors (`S2 <= 40`) move halfway toward black for dark ships and toward white for light ones. Lightness 50 looks the same as today. Above 50 the effect is squeezed so `l` 99 looks like 85 would, which keeps the brightest ships from washing out. Accent glows (`S2 > 40`) are unchanged.
+- **Client-side preview:** for `S2 <= 40`, integer division:
+  - `l <= 50`: `hsl(h, s%, (L2 - L2*(50 - l)/100)%)`
+  - `l > 50`: let `l' = 50 + (l - 50)*35/49`, then `hsl(h, s%, (L2 + (100 - L2)*(l' - 50)/100)%)`
+- **Every variant 1 shiny changes brightness** again, except those with `l1` of exactly 50. Clear cached images again after the redeploy.
 
 ---
 
@@ -106,4 +117,5 @@ The live `Ships` doesn't have this; it takes effect at the next `Ships` deploy, 
 - [ ] Switch to the new `RenderMetadata` / `ImageRenderer` addresses, ideally read from `Ships.config()` (§3).
 - [ ] Clear cached variant 1 ship images (§3).
 - [ ] Update any client-side shiny preview to the new color rule (§3).
+- [ ] After the next variant 1 renderer redeploy: re-read renderer addresses from `Ships.config()`, clear cached images again, and use the lightness rule in any client-side preview (§3 follow-up).
 - [ ] Optional: invalidate cached ship art on `BatchMetadataUpdate`, from the next `Ships` deploy (§4).
