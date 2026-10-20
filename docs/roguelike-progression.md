@@ -4,6 +4,8 @@
 
 **Update (2026-09-23):** the map-redesign pass gave every roguelike Combat node its own dedicated map (not just the first five) — see "How it is built" below, rewritten for this. The mission → variant rule itself, and everything under "Things to know", are unaffected.
 
+**Update (2026-10-20):** the story is being rewritten and the seed files are the source of truth while it is. In the current seed, a new `m05 → d01` edge makes `d01` ("Sneak Attack") mission 5, and through it `s01` (reached from `d03`) mission 8; both keep their variant 1 rosters. `test/RoguelikeProgression.test.ts` exempts them by key (`RULE_EXEMPT_NODE_KEYS`) rather than failing; remove them from that list once the story settles. The mission 3 row below predates this.
+
 ## The rule
 
 **The first three missions on any path fight variant 1 ships. Every later mission fights variant 2.**

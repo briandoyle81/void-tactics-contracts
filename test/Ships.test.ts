@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import hre from "hardhat";
-import { parseEther, keccak256, toBytes, getAddress } from "viem";
+import { parseEther, keccak256, toBytes, getAddress, maxUint256 } from "viem";
 import { deployShipsFixture } from "./fixtures/deployShipsFixture";
 import { attributeParams, costsParams } from "./fixtures/attributeTables";
 import {
@@ -442,6 +442,21 @@ describe("Ships", function () {
       expect(config[0].toString().toLowerCase()).to.equal(
         user1.account.address.toLowerCase(),
       );
+    });
+
+    it("Should emit an ERC-4906 BatchMetadataUpdate for every token on setConfig", async function () {
+      const { ships, publicClient } = await loadFixture(deployShipsFixture);
+      const zero = "0x0000000000000000000000000000000000000000";
+
+      const hash = await ships.write.setConfig([
+        zero, zero, zero, zero, zero, zero, zero, zero, zero, zero,
+      ]);
+      await publicClient.waitForTransactionReceipt({ hash });
+
+      const events = await ships.getEvents.BatchMetadataUpdate();
+      expect(events.length).to.equal(1);
+      expect(events[0].args._fromTokenId).to.equal(0n);
+      expect(events[0].args._toTokenId).to.equal(maxUint256);
     });
 
     it("Should allow owner to set paused state", async function () {

@@ -4,6 +4,8 @@ _Written 2026-10-19. Covers every contract change since `frontend-handoff-2026-1
 
 _Tests: the full suite passed on 2026-10-19 (902 passing, 0 failing)._
 
+_**Update (2026-10-20):** both changes below are now live on Base Sepolia; the 2026-10-19 redeploy included them. See `frontend-handoff-2026-10-20.md` for that and later changes._
+
 ---
 
 ## 1. AI fleet placements follow the map's joiner zone

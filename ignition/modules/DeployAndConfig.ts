@@ -2075,6 +2075,44 @@ const DeployModule = buildModule("DeployModule", (m) => {
     },
   );
 
+  // ---- Roguelike reward ships ----------------------------------------------
+  // Optional seed field (2026-10-20), written by the frontend's mission seed
+  // export: `shipGrant` on a roguelike node is its ShipGrantWinEffect.ShipGrant
+  // (the ship a win there mints). Nodes without it get no grant. After
+  // setMaxVariant, since setGrant rejects variants above Ships.maxVariant().
+  const roguelikeShipGrantCalls: ReturnType<typeof m.call>[] = [];
+  roguelikeContent.nodes.forEach((node: any) => {
+    const g = node.shipGrant;
+    if (!g) return;
+    const capitalizedKey = `${node.key[0].toUpperCase()}${node.key.slice(1)}`;
+    roguelikeShipGrantCalls.push(
+      m.call(
+        shipGrantWinEffect,
+        "setGrant",
+        [
+          roguelikeNodeIds[node.key],
+          {
+            name: g.name,
+            equipment: g.equipment,
+            colors: g.colors,
+            variant: g.variant,
+            accuracy: g.accuracy,
+            hull: g.hull,
+            speed: g.speed,
+            shipsDestroyed: g.shipsDestroyed,
+            shiny: g.shiny,
+            isFreeShip: g.isFreeShip,
+            oncePerAddress: g.oncePerAddress,
+          },
+        ],
+        {
+          id: `SetRoguelike${capitalizedKey}ShipGrant`,
+          after: [roguelikeNodeCalls[node.key], setMaxVariantForTutorialShipsCall],
+        },
+      ),
+    );
+  });
+
   // Enable minting for UniversalCredits
   const setMintIsActiveCall = m.call(universalCredits, "setMintIsActive", [
     true,
@@ -2639,6 +2677,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
       id: "TransferShipGrantWinEffectOwnership",
       after: [
         allowRoguelikeMatchToTriggerShipGrantCall,
+        ...roguelikeShipGrantCalls,
       ],
     });
 

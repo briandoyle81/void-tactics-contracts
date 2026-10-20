@@ -67,6 +67,14 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
     uint16 public maxVariant = 1;
 
     event MetadataUpdate(uint256 _tokenId);
+    // ERC-4906 batch form, emitted by setConfig for every token (0 to max, as
+    // the EIP specifies for "all") so marketplaces re-fetch art after a
+    // renderer swap, which goes through setConfig. A RenderMetadata name
+    // change doesn't touch Ships, so to refresh after one, call setConfig
+    // again with the current values. Emitted from setConfig rather than its
+    // own function because a separate function put Ships over 24 KiB.
+    // Added 2026-10-20.
+    event BatchMetadataUpdate(uint256 _fromTokenId, uint256 _toTokenId);
 
     // ERC-5192 Minimal Soulbound extension (no extra storage required)
     // See: https://eips.ethereum.org/EIPS/eip-5192
@@ -640,6 +648,7 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
         universalCredits = IUniversalCredits(_universalCredits);
         droneEnergyCores = IDroneEnergyCores(_droneEnergyCores);
         purchaseGate = _purchaseGate;
+        emit BatchMetadataUpdate(0, type(uint256).max);
     }
 
     function setPaused(bool _paused) external onlyOwner {

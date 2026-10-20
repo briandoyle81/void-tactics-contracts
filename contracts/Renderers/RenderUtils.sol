@@ -135,6 +135,17 @@ function blendValues(
     blendedL = (l2 * 85 + l * 15) / 100;
 }
 
+// Variant 1's shiny tint. Muted art colors (saturation <= 40: the whole
+// grey/blue hull and structure) take the ship's own hue and saturation and
+// keep their lightness, so shading survives. Changed 2026-10-20: these used
+// to go through blendValues' 50/50 hue average, and since every one of them
+// sits at hue ~213-225 the result was stuck between ~106 (green) and ~292
+// (purple) -- red, orange and gold shinies were impossible, and hue 0 vs
+// 359 (both red) came out green vs purple. Vivid accents (shield/engine
+// glows, saturation > 40) keep blendValues' gentle tint, same as before --
+// written out here rather than calling blendValues, since only its
+// saturation > 40 branch is reachable now, and the unused branch's bytecode
+// pushed RenderArmor3 over the 24 KiB limit.
 function blendHSL(
     uint h,
     uint s,
@@ -142,15 +153,15 @@ function blendHSL(
     string memory hslStringIn
 ) pure returns (string memory) {
     (uint h2, uint s2, uint l2) = parseHSL(hslStringIn);
-    (uint blendedH, uint blendedS, uint blendedL) = blendValues(
-        h,
-        s,
-        l,
-        h2,
-        s2,
-        l2
-    );
-    return hslString(blendedH, blendedS, blendedL);
+    if (s2 <= 40) {
+        return hslString(h, s, l2);
+    }
+    return
+        hslString(
+            (h2 * 95 + h * 5) / 100,
+            (s2 * 95 + s * 5) / 100,
+            (l2 * 85 + l * 15) / 100
+        );
 }
 
 // True for colors in variant 2's dense orange/amber accent-highlight range

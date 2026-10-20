@@ -34,6 +34,14 @@ the next wait would exceed 3 minutes. Every other known-transient error
 (nonce mismatch, IGN411, underpriced gas) keeps retrying at the fixed
 --sleep-seconds interval with no limit, unchanged.
 
+IGN411 with "Please use a block explorer to find the hash of the
+transaction with nonce N" (2026-10-19): the script checks the account's
+pending nonce on chain (scripts/checkNonceUnused.ts, read-only). If it is
+still N, the send never landed, so there is no hash for track-tx: the script
+runs `npx hardhat ignition wipe chain-<id> <futureId>` on the stuck future
+and retries, which sends it fresh (up to 5 times in a row per future).
+Otherwise it stops and prints the `ignition track-tx` command to run.
+
 PRODUCTION flag handling: for any --network other than "hardhat"/"localhost",
 this script sets `const PRODUCTION = true;` in
 ignition/modules/DeployAndConfig.ts before deploying (that flag gates
@@ -181,6 +189,12 @@ run_with_retry() {
   # 40, 80, 160...), and gives up once the *next* wait would exceed the cap
   # rather than actually waiting that long.
   local backend_wait=5
+
+  # IGN411 auto-wipe (see below): stop if the same future keeps failing to
+  # send, rather than wiping and resending it forever.
+  local last_wiped_future=""
+  local wipe_count=0
+  local MAX_WIPES_PER_FUTURE=5
   local BACKEND_WAIT_CAP_SECONDS=180
 
   while true; do
@@ -244,6 +258,59 @@ sys.exit(0 if retry else 1)
       sleep "$SLEEP_SECONDS"
       backend_wait=5 # reset the outage backoff; this retry wasn't one
       continue
+    fi
+
+    # IGN411 with the "use a block explorer" hint: Ignition journaled a
+    # nonce for a future, then the send failed, so the journal holds a nonce
+    # with no transaction. On every resume Ignition throws IGN411 again for
+    # that (a plain retry loops forever), and track-tx needs a hash that
+    # doesn't exist if the send never reached the chain. So: if the chain
+    # confirms the nonce is unused, `ignition wipe` the stuck future (an
+    # append-only journal entry; it refuses if anything depends on the
+    # future) and retry, which sends it fresh. If the nonce was used, stop so
+    # the tx can be added with track-tx (see scripts/checkNonceUnused.ts).
+    if grep -qF "IGN411" "$LOG_FILE" && grep -qF "Please use a block explorer" "$LOG_FILE"; then
+      local stuck stuck_future
+      stuck="$(grep -oE "with nonce [0-9]+ sent from account 0x[0-9a-fA-F]{40}" "$LOG_FILE" | head -n1 || true)"
+      stuck_future="$(grep -oE "transaction for future [^ ]+\." "$LOG_FILE" | head -n1 | sed -E 's/^transaction for future //; s/\.$//' || true)"
+      if [[ -n "$stuck" && -n "$stuck_future" ]]; then
+        local stuck_nonce stuck_account
+        stuck_nonce="$(echo "$stuck" | awk '{print $3}')"
+        stuck_account="$(echo "$stuck" | awk '{print $7}')"
+        # Give a just-sent tx time to show up in the pending pool first.
+        echo "IGN411: checking whether nonce $stuck_nonce from $stuck_account was ever used (in ${SLEEP_SECONDS}s)..."
+        sleep "$SLEEP_SECONDS"
+        set +e
+        local check_out
+        check_out="$(NONCE_CHECK_ACCOUNT="$stuck_account" NONCE_CHECK_NONCE="$stuck_nonce" \
+          npx hardhat run scripts/checkNonceUnused.ts --network "$NETWORK" 2>&1)"
+        local nonce_check=$?
+        set -e
+        echo "$check_out" | grep -E "^(checkNonceUnused|CHAIN_ID=)" || true
+        local chain_id
+        chain_id="$(echo "$check_out" | grep -oE "^CHAIN_ID=[0-9]+" | head -n1 | cut -d= -f2 || true)"
+        if [[ "$nonce_check" -eq 0 && -n "$chain_id" ]]; then
+          if [[ "$stuck_future" == "$last_wiped_future" ]]; then
+            wipe_count=$((wipe_count + 1))
+          else
+            last_wiped_future="$stuck_future"
+            wipe_count=1
+          fi
+          if [[ "$wipe_count" -gt "$MAX_WIPES_PER_FUTURE" ]]; then
+            echo "Stopping: $stuck_future failed to send $MAX_WIPES_PER_FUTURE times in a row; check the RPC/account."
+            return "$ec"
+          fi
+          echo "Nonce $stuck_nonce was never used; wiping $stuck_future (chain-$chain_id) and retrying ($wipe_count/$MAX_WIPES_PER_FUTURE)..."
+          if ! npx hardhat ignition wipe "chain-$chain_id" "$stuck_future"; then
+            echo "Stopping: ignition wipe failed for $stuck_future"
+            return "$ec"
+          fi
+          backend_wait=5
+          continue
+        fi
+        echo "Nonce $stuck_nonce was used (or the check failed). Find that tx and run:"
+        echo "  npx hardhat ignition track-tx <txHash> <deploymentId> --network $NETWORK"
+      fi
     fi
 
     echo "Stopping due to non-retryable error in $script (exit code: $ec)"
