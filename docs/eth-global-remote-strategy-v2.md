@@ -192,8 +192,8 @@ no budgeted fallback if this pick doesn't ship.
 **Build:**
 
 1. Deploy a UTC/ETH Uniswap v4 pool.
-2. Seed initial liquidity from the UC/ETH already sitting in `ShipPurchaser` (withdrawable via the
-   existing `withdrawUC()`/`withdrawFlow()`) — an allocation decision between committing to an LP
+2. Seed initial liquidity from the UTC/ETH already sitting in `ShipPurchaser` (withdrawable via the
+   existing `withdrawUTC()`/`withdrawFlow()`) — an allocation decision between committing to an LP
    position and keeping funds spendable for giveaways/prizes, not a new revenue mechanism.
 3. **Price ceiling:** relies entirely on the existing passive arbitrage — anyone can mint UTC at
    `ShipPurchaser`'s fixed tier price and sell into the pool for profit whenever pool price rises
@@ -308,7 +308,7 @@ no budgeted fallback if this pick doesn't ship.
      against `Ships.owner()` at runtime rather than assuming it matches.
    - **LP seed sizing decision:** not precision-critical, per explicit direction ("we can mint at
      will and we'll likely redeploy several times in testing") — defaults to a live-computed
-     ~$10-equivalent of UC, sourced through `ShipPurchaser.purchaseUTCWithFlow` (not a direct
+     ~$10-equivalent of UTC, sourced through `ShipPurchaser.purchaseUTCWithFlow` (not a direct
      authorized mint) so the pool's initial price is automatically consistent with the real
      mint-rate ceiling this design already relies on.
    - Full step-by-step plan: `/Users/briandoyle/.claude/plans/gentle-launching-naur.md` (local

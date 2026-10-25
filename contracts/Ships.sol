@@ -93,7 +93,7 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
     // on what; that's owner-configured entirely inside the gate contract, so
     // future gated variants need zero Ships.sol changes.
     address purchaseGate;
-    uint public recycleReward = 0.1 ether; // 0.1 UC tokens
+    uint public recycleReward = 0.1 ether; // 0.1 UTC tokens
 
     // Only Owner TODO
     // Withdrawal
@@ -120,7 +120,7 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
      * @dev PUBLIC
      */
 
-    // For purchases with ERC20s such as Universal Credits
+    // For purchases with ERC20s such as Universal Time Credits (UTC)
     // or anything else I think of
 
     function createShips(

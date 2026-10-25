@@ -209,11 +209,11 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // mints UTC here (unlike a human destroying an AI ship, which now pays
     // out in DEC instead — see DestroyRewardLib) with no way for this
     // contract to otherwise spend or move it. Lets the owner claim it out.
-    function withdrawUC() external onlyOwner {
+    function withdrawUTC() external onlyOwner {
         uint balance = universalCredits.balanceOf(address(this));
         require(
             universalCredits.transfer(owner(), balance),
-            "UC withdrawal failed"
+            "UTC withdrawal failed"
         );
     }
 

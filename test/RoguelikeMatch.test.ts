@@ -2471,7 +2471,10 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       );
       const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
       await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
-      await deployed.roguelikeResupply.write.setRepairCostPerHP([10n]);
+      // The deploy prices repair at 1 UTC per 100 HP.
+      expect(await deployed.roguelikeResupply.read.repairCostPerHP()).to.equal(
+        parseEther("1") / 100n,
+      );
 
       await purchaseAndConstructHumanShips(ships, randomManager, human);
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
@@ -2500,7 +2503,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
 
       await humanRoguelikeMatch.write.enterResupplyNode([resupplyNode]);
 
-      const expectedCost = BigInt(missing) * 10n;
+      const expectedCost = (BigInt(missing) * parseEther("1")) / 100n;
       await universalCredits.write.setAuthorizedToMint(
         [owner.account.address, true],
         { account: owner.account },
@@ -2529,6 +2532,73 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         1n,
       ]);
       expect(persistedHP).to.equal(Number(attrsAfterCombat.maxHullPoints));
+    });
+
+    it("reverts resupplyRepair with InsufficientFunds when the player can't pay", async function () {
+      const { deployed, owner, human, humanRoguelikeMatch, humanRoguelikeResupply, otherRoguelikeMatch, humanGame, humanUniversalCredits } =
+        await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, game, universalCredits } =
+        deployed;
+      const { campaignId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const resupplyNode = await createResupplyNode(roguelikeNodeMap, campaignId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, resupplyNode]);
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+      const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
+      await winCombatNode(
+        game,
+        humanGame,
+        otherRoguelikeMatch,
+        owner,
+        human,
+        gameId,
+        1n,
+      );
+      const attrs = await game.read.getShipAttributes([gameId, 1n]);
+      const missing = Number(attrs.maxHullPoints) - Number(attrs.hullPoints);
+      expect(missing).to.be.greaterThan(0);
+
+      await humanRoguelikeMatch.write.enterResupplyNode([resupplyNode]);
+
+      // Leave the player 1 wei short of the repair price.
+      const cost = (BigInt(missing) * parseEther("1")) / 100n;
+      const balance = await universalCredits.read.balanceOf([
+        human.account.address,
+      ]);
+      if (balance > 0n) {
+        await humanUniversalCredits.write.transfer([
+          "0x000000000000000000000000000000000000dEaD",
+          balance,
+        ]);
+      }
+      await universalCredits.write.setAuthorizedToMint(
+        [owner.account.address, true],
+        { account: owner.account },
+      );
+      await universalCredits.write.mint([human.account.address, cost - 1n], {
+        account: owner.account,
+      });
+      await humanUniversalCredits.write.approve([
+        deployed.roguelikeResupply.address,
+        cost,
+      ]);
+
+      await expect(
+        humanRoguelikeResupply.write.resupplyRepair([[1n]]),
+      ).to.be.rejectedWith("InsufficientFunds");
+      // The ship stays damaged.
+      expect(
+        await deployed.roguelikeRun.read.getShipHP([human.account.address, 1n]),
+      ).to.equal(Number(attrs.hullPoints));
     });
 
     it("reverts resupplyRepair when not at a resupply node", async function () {

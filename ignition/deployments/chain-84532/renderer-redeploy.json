@@ -114,5 +114,113 @@
   "RenderSpecial1@0x9c1e5eb745333072:0x518674ab2b227e5f": {
     "hash": "0xd77ce2d890782683f98538e25ba4f0a92e5edb13e6f3da958711c33c4fae63da",
     "address": "0x82AcB425cbFd87Ed61C3545F2436D94EBdE9bBCa"
+  },
+  "RenderSpecial2@0xf551254fb956bfa8:0x518674ab2b227e5f": {
+    "hash": "0x8583dc233d03d2b2e6cf03e6b271d2f0cc75e87664d46dd0e2e1bf0b9d6ce2da",
+    "address": "0x16e1e61EeC1d68453A7e391Ff6c078EDa7E197d2"
+  },
+  "RenderSpecial3@0x514921987dce32a5:0x518674ab2b227e5f": {
+    "hash": "0xe454080d0c4b39011b36fcf1fac04611ccbb73e2e6a5f9f1f58264cc94052eee",
+    "address": "0x58B1237cDFcE66f6319312b27d980cDF64B30385"
+  },
+  "RenderSpecial@0xb4666eaf012b4f04:0xd53f0bed0b58adaf": {
+    "hash": "0x2078b948cb33bf58eb68e3b95060a082e44c8d55c05907a73c4f98938f99d593",
+    "address": "0xB179F6238130785d86FF3b07eBc194f26074E19f"
+  },
+  "RenderAft0@0xd8992143457c2913:0x518674ab2b227e5f": {
+    "hash": "0x60d55990d6f872718800ac7856d7300d68a52de18ba60d53539fdee25a50e02e",
+    "address": "0x453BbDD5a9BdD4CC2079E3D50e13ca8Bc8440604"
+  },
+  "RenderAft1@0xdc918810a7077578:0x518674ab2b227e5f": {
+    "hash": "0x074d05889281620ae62ecfd1557dd85b68ef8b485f89149c55f5a24413b5c9d8",
+    "address": "0x8E9FCE8dE3d23315262d2fD0b4CeD0a222f2297b"
+  },
+  "RenderAft2@0x32127e038bad12b4:0x518674ab2b227e5f": {
+    "hash": "0xc6f248394aa7dfba0c81c72089b2d59239636e1297a0358eef97e673017dd6ff",
+    "address": "0xffaA5f39eD7Dc608229a06Ef131CD57782C19529"
+  },
+  "RenderAft@0xdf052b509a1c2d0e:0x9f8c65e2e512f79d": {
+    "hash": "0x9d0fed6af799a16f1808683af16db007e022899efff2a40f9950c13e5d50c54a",
+    "address": "0x399cCA7b200418Ca90e1A0cD319e0b3761387c9C"
+  },
+  "RenderWeapon1@0xa022c16130356d99:0x518674ab2b227e5f": {
+    "hash": "0x659e4d8bfc109cf71b0d949e95fcc409aba9a128546d1120dcd3a279e1cc952c",
+    "address": "0xA4bD0DEb94F4579b038713a31507c2e952ce0ea8"
+  },
+  "RenderWeapon2@0x26ed29c36c2e7e1e:0x518674ab2b227e5f": {
+    "hash": "0x170f2cbd2b1645fa0ff6aa29f6b3b89f935e2993c72285c06c153011d41474b2",
+    "address": "0xf76b9Ae0b172454Ea85eCC36491270f4FFb89Ba5"
+  },
+  "RenderWeapon3@0xe26ab8e60a108886:0x518674ab2b227e5f": {
+    "hash": "0xc58732999a71910be03532391c857445b37e9a327520dea265aaf82413bf99bc",
+    "address": "0x4E927AA2E969FfA5302daaAb06b092B24f28ef30"
+  },
+  "RenderWeapon4@0x468cda5dbeb4c15a:0x518674ab2b227e5f": {
+    "hash": "0xe3a459fbd7bddc78453e2dc8f40f02ac99ac4c72f0af1e22505bdb1a3d8ae47b",
+    "address": "0xa8659816273660fCD0c57bc2Bc3254AeffC715B1"
+  },
+  "RenderWeapon@0x809407f9512b7629:0xae06cbaba3a543b9": {
+    "hash": "0x73fb499c00a7bc192c082ed7c26f6ec2360308f7ea6a89030a2bfa02ca262d29",
+    "address": "0x3Da0EE6dD06c672aa46eC273Bf4e95A836eCeeE9"
+  },
+  "RenderBaseBody@0xc81c0d898a6930f9:0x518674ab2b227e5f": {
+    "hash": "0xd4b495a809811e53a167664301a35f487ab27b6816b2f884a67bd752c98f36db",
+    "address": "0xED31181C7B1A264fBfdDdBEa06f1779A49d18994"
+  },
+  "RenderShield1@0x39e3ba261879357b:0x518674ab2b227e5f": {
+    "hash": "0x2720672463001daf72602032e476f106616fe72c6f7aabaa74ffb256ff5becf5",
+    "address": "0x055a7D0b100261A1A1EAdE5f8135C71d3A2A0F09"
+  },
+  "RenderShield2@0x6529640d4f7c3f6c:0x518674ab2b227e5f": {
+    "hash": "0x9d9c9ba3228cd227e8d1742b6987dcf6a69a41ec0dc466d56782d04b909eec9c",
+    "address": "0xd22fd6e13cb5e7CC777f966c2838d9C5eb839FA2"
+  },
+  "RenderShield3@0xf9ac4347d6ae4052:0x518674ab2b227e5f": {
+    "hash": "0xc29273a9062281799ddc91e61498806fcb6ee477fd4b28432634bdae0b3476d6",
+    "address": "0x62Af2BaE2b9d610108716bBE0995840731575e4e"
+  },
+  "RenderArmor1@0x4cfdfca09941c381:0x518674ab2b227e5f": {
+    "hash": "0x1fa2dbc9e82aab8d596c062911a145aa86310bc094ea65ae424756181ebab389",
+    "address": "0x75e6207778b3b9284Cb4d519fd8F080aBBF23B9a"
+  },
+  "RenderArmor2@0x06fdc825dfe65381:0x518674ab2b227e5f": {
+    "hash": "0xdca332d095fcca6970f3ec8f65d1878e326ae5747d5010a6c84d7e3422aabd5f",
+    "address": "0xC53eA96fF010f33CF44Cca75a47Db87f946a6E20"
+  },
+  "RenderArmor3@0xbbc5219f7200d413:0x518674ab2b227e5f": {
+    "hash": "0xfb4917dd1a5d9d1b0c475758c436e408e2299ae8db02784f7b48aa0f8b4a0147",
+    "address": "0x549970ED22218372cE24EADf7DC95E5a9F25Cc1B"
+  },
+  "RenderBody@0xa31292bafaeadcc6:0x4ed63f6aaca43555": {
+    "hash": "0x789d36cfb5aee4ad169ab9a7f9b0335e58a5979743f44a8a1492b4aa083781c0",
+    "address": "0x3848e843B728A8B772B61E4aDC4954FB707cA15c"
+  },
+  "RenderFore0@0x56f65e854dcb83d9:0x518674ab2b227e5f": {
+    "hash": "0x5fd66b43381902100090b543dbcd4948e47afd8106a13eaa0d6e7a80a9768f32",
+    "address": "0x93fA303b63F06240aeDCc82a1C1Fa741DC290CbF"
+  },
+  "RenderFore1@0xcec3a77d2a55f619:0x518674ab2b227e5f": {
+    "hash": "0x6ce60dcb0727be1d47392a25a7e103699437725f8859af51756088485f921dce",
+    "address": "0x1928FD242090bCA143595ea4689c3D025D7E56cD"
+  },
+  "RenderFore2@0x6bc6d94e6606662d:0x518674ab2b227e5f": {
+    "hash": "0x49abaec4b6b3aefc8dc131b5b07cab183eb5b312f122f0a7947664ad75e49e75",
+    "address": "0x4DA109021e8F1E992381f51D5653994CCd8Dac62"
+  },
+  "RenderForePerfect@0x25a26998afd3a8ae:0x518674ab2b227e5f": {
+    "hash": "0x38a25764ed2a3ad15b252b760f269b6a41678d540693053a3ec023f6034a3978",
+    "address": "0x2BD181d4e6aA6E72F9eB8FDe9e82E4c560332990"
+  },
+  "RenderFore@0x507ca825c7a16c23:0xe1b753d648056bb5": {
+    "hash": "0x7cb49297dc924cbf03059ef2a5ddf7993a103370d9b6e447013a506b122b8b61",
+    "address": "0x205E774e6E6cB57563774Eb0016b3FB2650eb233"
+  },
+  "ImageRenderer@0xb8dc417cc4435b91:0x1232ea841b21a480": {
+    "hash": "0x6efbc2ca412750a63cd63297a15c635828f23a718729e4c594d5333df7e6b619",
+    "address": "0xa382C8E76332CB567Ca338201d365892BfC845ac"
+  },
+  "RenderMetadata@0x5418c92a46e44475:0x58ab77a3cec37c16": {
+    "hash": "0xad3bccdfc9d73ed73685b9e4caf13a6796fb76aa2eaa87be2b9adcd051c07a80",
+    "address": "0x745B5Bfbcf5de5bE26Dc8b7831387Ada06570A71"
   }
 }

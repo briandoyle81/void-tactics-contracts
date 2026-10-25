@@ -4,6 +4,8 @@ _Written 2026-10-20. Covers every change since `frontend-handoff-2026-10-19.md`;
 
 _Tests: the full suite passed on 2026-10-20 (903 passing, 0 failing)._
 
+_**Update (2026-10-23):** see `frontend-handoff-2026-10-23.md` for later changes (UTC pack prices, repair price, UC → UTC rename)._
+
 ---
 
 ## 1. The 2026-10-19 Base Sepolia redeploy is live
@@ -64,8 +66,10 @@ The renderer addresses are immutable, so the variant 1 renderer tree was redeplo
 
 | Contract | New address | Old address (don't use) |
 |---|---|---|
-| `RenderMetadata` | `0xd73720aD5C39b483Cd4e1F9dbA99ad31554cEea8` | `0x6A5AC91d11985D9edDE6C2297133F56E79efd7d9` |
-| `ImageRenderer` (variant 1) | `0x68E65eE5FAf143d1Ebc19e0117C125CC9F52d409` | `0x7a2089bBa6Cfb1681757631B2f21427798043c59` |
+| `RenderMetadata` | `0x745B5Bfbcf5de5bE26Dc8b7831387Ada06570A71` | `0xd73720aD5C39b483Cd4e1F9dbA99ad31554cEea8` (first 10-20 redeploy), `0x6A5AC91d11985D9edDE6C2297133F56E79efd7d9` |
+| `ImageRenderer` (variant 1) | `0xa382C8E76332CB567Ca338201d365892BfC845ac` | `0x68E65eE5FAf143d1Ebc19e0117C125CC9F52d409` (first 10-20 redeploy), `0x7a2089bBa6Cfb1681757631B2f21427798043c59` |
+
+_Updated 2026-10-20: the renderers were redeployed a second time the same day for the lightness follow-up below. The table shows the current addresses._
 
 All 28 new contracts are verified on BaseScan, and their addresses are in `ignition/deployments/chain-84532/renderer-redeploy.json`. `ImageRendererV2` is unchanged. The new `RenderMetadata` has the same display names and is owned by MAP_EDITOR, as before.
 
@@ -77,16 +81,16 @@ All 28 new contracts are verified on BaseScan, and their addresses are in `ignit
   - ~~`S2 <= 40`: `hsl(h, s%, L2%)`~~ _(superseded 2026-10-20 by the lightness follow-up below)_
   - `S2 > 40`: `hsl((H2*95 + h*5)/100, (S2*95 + s*5)/100%, (L2*85 + l*15)/100%)` (unchanged)
 
-### Follow-up: the ship's lightness now affects the hull (not deployed yet)
+### Follow-up: the ship's lightness now affects the hull (live)
 
 With the rule above, a variant 1 shiny's hull ignored the ship's lightness (`l1`), so ships with different lightness looked almost the same. A follow-up change, also dated 2026-10-20, fixes this in `RenderUtils.blendHSL`.
 
-- **Not live yet.** It takes effect at the next run of `scripts/redeployVariant1Renderers.ts` plus `Ships.setConfig`. That run produces new `RenderMetadata` / `ImageRenderer` addresses again, replacing the ones in the table above. Read them from `Ships.config()` rather than hardcoding them.
+- **Live on Base Sepolia** since the second renderer redeploy on 2026-10-20 (`Ships.setConfig` tx `0x54d9a357d9ab119b4ff477c78cb938b4346536ac320d5c66a6ae79dea7526df7`). The address table above is current. Read the addresses from `Ships.config()` rather than hardcoding them.
 - **What changes:** hull and structure colors (`S2 <= 40`) move halfway toward black for dark ships and toward white for light ones. Lightness 50 looks the same as today. Above 50 the effect is squeezed so `l` 99 looks like 85 would, which keeps the brightest ships from washing out. Accent glows (`S2 > 40`) are unchanged.
 - **Client-side preview:** for `S2 <= 40`, integer division:
   - `l <= 50`: `hsl(h, s%, (L2 - L2*(50 - l)/100)%)`
   - `l > 50`: let `l' = 50 + (l - 50)*35/49`, then `hsl(h, s%, (L2 + (100 - L2)*(l' - 50)/100)%)`
-- **Every variant 1 shiny changes brightness** again, except those with `l1` of exactly 50. Clear cached images again after the redeploy.
+- **Every variant 1 shiny changes brightness** again, except those with `l1` of exactly 50. Clear cached images again.
 
 ---
 
@@ -117,5 +121,5 @@ The live `Ships` doesn't have this; it takes effect at the next `Ships` deploy, 
 - [ ] Switch to the new `RenderMetadata` / `ImageRenderer` addresses, ideally read from `Ships.config()` (§3).
 - [ ] Clear cached variant 1 ship images (§3).
 - [ ] Update any client-side shiny preview to the new color rule (§3).
-- [ ] After the next variant 1 renderer redeploy: re-read renderer addresses from `Ships.config()`, clear cached images again, and use the lightness rule in any client-side preview (§3 follow-up).
+- [ ] Lightness follow-up (live): use the current renderer addresses from §3, clear cached images again, and use the lightness rule in any client-side preview (§3 follow-up).
 - [ ] Optional: invalidate cached ship art on `BatchMetadataUpdate`, from the next `Ships` deploy (§4).

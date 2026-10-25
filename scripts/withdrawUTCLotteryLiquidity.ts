@@ -22,7 +22,7 @@ import {
 // PoolModifyLiquidityTest.sol) settles a negative liquidityDelta by calling
 // `.take(manager, data.sender, ...)` -- data.sender is whoever calls
 // modifyLiquidity, so calling it again with a negative delta for the same
-// PoolKey/tick-range/salt returns the underlying ETH+UC to that caller. The
+// PoolKey/tick-range/salt returns the underlying ETH+UTC to that caller. The
 // position itself is tracked inside PoolManager under
 // PoolModifyLiquidityTest's own address (not the original depositor's), so
 // this only reads back correctly for the same key/tick-range/salt the
@@ -181,10 +181,10 @@ async function main() {
   const ethBefore = await publicClient.getBalance({
     address: wallet.account.address,
   });
-  const ucAbi = (await hre.artifacts.readArtifact("UniversalCredits")).abi as any;
-  const ucBefore = (await publicClient.readContract({
+  const utcAbi = (await hre.artifacts.readArtifact("UniversalCredits")).abi as any;
+  const utcBefore = (await publicClient.readContract({
     address: universalCreditsAddress,
-    abi: ucAbi,
+    abi: utcAbi,
     functionName: "balanceOf",
     args: [wallet.account.address],
   })) as bigint;
@@ -215,9 +215,9 @@ async function main() {
   const ethAfter = await publicClient.getBalance({
     address: wallet.account.address,
   });
-  const ucAfter = (await publicClient.readContract({
+  const utcAfter = (await publicClient.readContract({
     address: universalCreditsAddress,
-    abi: ucAbi,
+    abi: utcAbi,
     functionName: "balanceOf",
     args: [wallet.account.address],
   })) as bigint;
@@ -225,10 +225,10 @@ async function main() {
 
   console.log(
     `Received: ${formatEther(ethAfter - ethBefore + gasCost)} ETH (net of gas), ` +
-      `${formatEther(ucAfter - ucBefore)} UC.`,
+      `${formatEther(utcAfter - utcBefore)} UTC.`,
   );
   console.log(
-    "Note: the ETH:UC ratio returned reflects the pool's CURRENT price, which may differ " +
+    "Note: the ETH:UTC ratio returned reflects the pool's CURRENT price, which may differ " +
       "from what was originally deposited if the price moved since (e.g. from the earlier " +
       "oversized smoke-test trade) -- total value should be roughly conserved modulo the " +
       "0.3% pool fee, not the original deposit ratio.",

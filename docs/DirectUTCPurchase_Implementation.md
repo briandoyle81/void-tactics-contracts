@@ -19,15 +19,15 @@ Added `purchaseUTCWithFlow()` function to `ShipPurchaser.sol` that allows player
 
 ### Tier Rates
 
-The function calculates UTC amounts based on the recycling reward (0.1 UC per ship):
+The function calculates UTC amounts based on the recycling reward (0.1 UTC per ship):
 
-| Tier | Ships | Price (FLOW) | UTC Amount | Rate (FLOW/UC) |
+| Tier | Ships | Price (FLOW) | UTC Amount | Rate (FLOW/UTC) |
 | ---- | ----- | ------------ | ---------- | -------------- |
-| 0    | 5     | 4.99         | 0.5 UC     | 9.98           |
-| 1    | 11    | 9.99         | 1.1 UC     | 9.08           |
-| 2    | 28    | 24.99        | 2.8 UC     | 8.93           |
-| 3    | 60    | 49.99        | 6.0 UC     | 8.33           |
-| 4    | 125   | 99.99        | 12.5 UC    | 8.00           |
+| 0    | 5     | 4.99         | 0.5 UTC     | 9.98           |
+| 1    | 11    | 9.99         | 1.1 UTC     | 9.08           |
+| 2    | 28    | 24.99        | 2.8 UTC     | 8.93           |
+| 3    | 60    | 49.99        | 6.0 UTC     | 8.33           |
+| 4    | 125   | 99.99        | 12.5 UTC    | 8.00           |
 
 **Calculation:** `UTC Amount = tierShips[_tier] × 0.1 ether`
 
@@ -38,21 +38,21 @@ The function calculates UTC amounts based on the recycling reward (0.1 UC per sh
 - Player spends: 99.99 FLOW (Tier 4)
 - 50% Referrer gets: 49.995 FLOW
 - Owner gets: 49.995 FLOW
-- Player recycles: Gets 12.5 UC
-- **Player net: -49.995 FLOW, +12.5 UC**
+- Player recycles: Gets 12.5 UTC
+- **Player net: -49.995 FLOW, +12.5 UTC**
 
 **Direct Purchase Path:**
 
 - Player spends: 99.99 FLOW (Tier 4)
 - Owner gets: 99.99 FLOW (full amount, no referral)
-- Player gets: 12.5 UC (minted directly)
-- **Player net: -99.99 FLOW, +12.5 UC**
+- Player gets: 12.5 UTC (minted directly)
+- **Player net: -99.99 FLOW, +12.5 UTC**
 
 **Key Difference:**
 
 - Direct purchase matches the **gross cost** (full purchase price)
 - Owner gets **2x more FLOW** (99.99 vs 49.995)
-- Same UTC minted (12.5 UC)
+- Same UTC minted (12.5 UTC)
 - **Better economics for owner** - no referral commission paid
 
 ### Additional Changes

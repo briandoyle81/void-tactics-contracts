@@ -309,7 +309,7 @@ Two tests were rewritten because they relied on the callback:
 - **RoguelikeMatch:** `game`, `aiShips`, `humanShips`, `fleets`, `maps`, `nodeMap`, `runLedger`.
 - **RoguelikeResupply:** `humanShips`, `fleets`, `nodeMap`, `runLedger`.
 
-Both roguelike contracts lock once any run has started, using a new `RoguelikeRun.runsStarted` counter. A run can be live before any match starts, so a match counter wouldn't do. Setters only used when a game starts (encounters, registries, UC, ship attributes) stay free. A new engine goes through `GameEngineRegistry`.
+Both roguelike contracts lock once any run has started, using a new `RoguelikeRun.runsStarted` counter. A run can be live before any match starts, so a match counter wouldn't do. Setters only used when a game starts (encounters, registries, UTC, ship attributes) stay free. A new engine goes through `GameEngineRegistry`.
 - **Sizes:** RoguelikeMatch 23.914 KiB, **86 bytes left**. RoguelikeResupply 8.041 KiB, RoguelikeRun 4.051 KiB, SinglePlayerMatch 15.966 KiB.
 - **Tests:** single-player and roguelike "locks the live-state address setters" tests: configurable before, reverts after.
 
@@ -455,8 +455,8 @@ _Note 2026-10-14: the lottery no longer uses RandomManager, so this now affects 
 
 **Status: Fixed 2026-10-16.** AI destroyers no longer trigger any reward; the only recipient was an orchestrator contract. The SinglePlayerMatch withdraw-UTC test is replaced by "mints no UTC when the AI destroys a human ship".
 - **Files:** `DestroyRewardLib.sol:39-52`, `ShipsRouter.sol:121-134` · **Confirmed**
-- **What happens:** roguelike AI ships are owned by `RoguelikeMatch`. When one kills a human ship, UTC is minted to `RoguelikeMatch`, which has no `withdrawUC` (SinglePlayerMatch does). That inflates `totalSupply`.
-- **Fix:** skip the mint when the destroyer's owner is a registered orchestrator, or add `withdrawUC`.
+- **What happens:** roguelike AI ships are owned by `RoguelikeMatch`. When one kills a human ship, UTC is minted to `RoguelikeMatch`, which has no `withdrawUTC` (SinglePlayerMatch does). That inflates `totalSupply`.
+- **Fix:** skip the mint when the destroyer's owner is a registered orchestrator, or add `withdrawUTC`.
 
 ### ~~HA6-22 — Owner Footguns That Freeze Live Games or Draws~~
 

@@ -13,8 +13,8 @@
 - Player spends: 100 FLOW
 - 50% Referrer gets: 50 FLOW
 - Owner gets: 50 FLOW
-- Player recycles: Gets 12.5 UC
-- **Player net: Spent 50 FLOW (after referral), got 12.5 UC**
+- Player recycles: Gets 12.5 UTC
+- **Player net: Spent 50 FLOW (after referral), got 12.5 UTC**
 
 ### Proposed: Direct UTC Purchase
 
@@ -34,9 +34,9 @@
 **Recycling Path:**
 
 - Owner receives: 50 FLOW (50% of 100 FLOW purchase)
-- Recycling mints: 12.5 UC (to player)
-- Owner must burn: 12.5 UC (to maintain price)
-- **Owner net: 50 FLOW, -12.5 UC burned**
+- Recycling mints: 12.5 UTC (to player)
+- Owner must burn: 12.5 UTC (to maintain price)
+- **Owner net: 50 FLOW, -12.5 UTC burned**
 
 **Direct Purchase Path (if you mint):**
 
@@ -52,16 +52,16 @@
 **Recycling Path (125 ships for 100 FLOW):**
 
 - Owner receives: 50 FLOW
-- Player gets: 12.5 UC from recycling
-- Owner must burn: 12.5 UC to maintain price
-- **Owner net: 50 FLOW, -12.5 UC**
+- Player gets: 12.5 UTC from recycling
+- Owner must burn: 12.5 UTC to maintain price
+- **Owner net: 50 FLOW, -12.5 UTC**
 
 **Direct Purchase (125 UTC for 100 FLOW):**
 
 - Owner receives: 100 FLOW
 - Owner mints: 125 UTC
 - Owner must burn: 125 UTC to maintain price
-- **Owner net: 100 FLOW, -125 UC**
+- **Owner net: 100 FLOW, -125 UTC**
 
 **These are NOT equivalent!** The direct purchase gives you 2x the FLOW but requires 10x the burn.
 
@@ -73,8 +73,8 @@ The user might be saying: **"If I offer 125 UTC for 100 FLOW, it's the same as i
 
 - Player spends: 100 FLOW
 - You get: 50 FLOW (after 50% referral)
-- Player gets: 12.5 UC (from recycling)
-- You must burn: 12.5 UC
+- Player gets: 12.5 UTC (from recycling)
+- You must burn: 12.5 UTC
 
 **Direct Purchase Path:**
 
@@ -93,14 +93,14 @@ The user might be saying: **"If I offer 125 UTC for 100 FLOW, it's the same as i
 
 **What rate makes it equivalent?**
 
-If recycling gives player 12.5 UC for 50 FLOW net cost:
+If recycling gives player 12.5 UTC for 50 FLOW net cost:
 
-- Rate: 50 FLOW / 12.5 UC = 4 FLOW per UC
-- So 125 UC should cost: 125 × 4 = 500 FLOW
+- Rate: 50 FLOW / 12.5 UTC = 4 FLOW per UTC
+- So 125 UTC should cost: 125 × 4 = 500 FLOW
 
 **But the user says "125 UTC for 100 FLOW"** which is:
 
-- Rate: 100 FLOW / 125 UC = 0.8 FLOW per UC
+- Rate: 100 FLOW / 125 UTC = 0.8 FLOW per UTC
 
 **This is 5x better for the player!**
 
@@ -113,9 +113,9 @@ If recycling gives player 12.5 UC for 50 FLOW net cost:
 **From Owner's Perspective:**
 
 - Owner receives: 50 FLOW (after 50% referral paid out)
-- Player gets: 12.5 UC (minted from recycling)
-- Owner must burn: 12.5 UC (to maintain price)
-- **Owner net: 50 FLOW, -12.5 UC**
+- Player gets: 12.5 UTC (minted from recycling)
+- Owner must burn: 12.5 UTC (to maintain price)
+- **Owner net: 50 FLOW, -12.5 UTC**
 
 ### Direct Purchase Path (125 UTC for 100 FLOW)
 
@@ -124,7 +124,7 @@ If recycling gives player 12.5 UC for 50 FLOW net cost:
 - Owner receives: 100 FLOW (no referral paid)
 - Owner mints: 125 UTC (to player)
 - Owner must burn: 125 UTC (to maintain price)
-- **Owner net: 100 FLOW, -125 UC**
+- **Owner net: 100 FLOW, -125 UTC**
 
 ### The Key Insight
 
@@ -144,20 +144,20 @@ If recycling gives player 12.5 UC for 50 FLOW net cost:
 
 **Option 1: Match the net cost to player**
 
-- Player net cost via recycling: 50 FLOW for 12.5 UC
-- Rate: 4 FLOW per UC
+- Player net cost via recycling: 50 FLOW for 12.5 UTC
+- Rate: 4 FLOW per UTC
 - So offer: 12.5 UTC for 50 FLOW (not 125 UTC for 100 FLOW)
 
 **Option 2: Match the gross cost to player**
 
-- Player gross cost via recycling: 100 FLOW for 12.5 UC
-- Rate: 8 FLOW per UC
+- Player gross cost via recycling: 100 FLOW for 12.5 UTC
+- Rate: 8 FLOW per UTC
 - So offer: 12.5 UTC for 100 FLOW (not 125 UTC for 100 FLOW)
 
 **Option 3: Match your net revenue**
 
 - You get 50 FLOW from recycling path
-- You must burn 12.5 UC
+- You must burn 12.5 UTC
 - To get 50 FLOW from direct purchase, offer: 12.5 UTC for 50 FLOW
 - This matches the recycling economics
 
@@ -169,7 +169,7 @@ If recycling gives player 12.5 UC for 50 FLOW net cost:
 
 **From UTC perspective:** You must burn 10x more UTC (125 vs 12.5) ✗
 
-**This is NOT economically equivalent** - you're giving players a much better rate (0.8 FLOW per UC vs 4 FLOW per UC net, or 8 FLOW per UC gross).
+**This is NOT economically equivalent** - you're giving players a much better rate (0.8 FLOW per UTC vs 4 FLOW per UTC net, or 8 FLOW per UTC gross).
 
 **To make it equivalent, you should offer:**
 

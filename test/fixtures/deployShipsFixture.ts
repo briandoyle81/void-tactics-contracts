@@ -3,7 +3,7 @@ import { parseEther } from "viem";
 import DeployModule from "../../ignition/modules/DeployAndConfig";
 
 /**
- * Full stack from Ignition DeployModule + UC mints and user contract handles.
+ * Full stack from Ignition DeployModule + UTC mints and user contract handles.
  * Shared by Ships tests and cost/version integration tests.
  */
 export async function deployShipsFixture() {

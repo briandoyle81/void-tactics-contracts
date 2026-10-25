@@ -157,7 +157,7 @@ owner, never more than one clean recycle (100%) would have paid. No new/free UTC
 redistribution of one purchase's backing.
 
 **Residual item spun out of this analysis, since closed:** an earlier pass of this section flagged
-`ShipPurchaser.purchaseWithUC`'s pricing as inconsistent with this mint peg (tracked as ECON-06).
+`ShipPurchaser.purchaseWithUTC`'s pricing as inconsistent with this mint peg (tracked as ECON-06).
 That comparison used the wrong benchmark — see ECON-06 under "Reviewed, no issue found" for the
 corrected analysis.
 
@@ -224,8 +224,8 @@ ECON-06.
 Every UTC mint path is either purchase-backed (`purchaseUTCWithFlow`, buy-then-recycle) or
 grind-backed (`shipBreaker` recycling, `DestroyRewardLib`'s PvP kill reward) — none of them are
 paired with an enforced removal. The only sinks that exist are owner-discretionary:
-`ShipPurchaser.withdrawUC`/`burnCollected` and `DroneYard.withdraw`/`burnCollected`, fed by real,
-ongoing volume from `purchaseWithUC` sales and `DroneYard` modification fees. Nothing forces
+`ShipPurchaser.withdrawUTC`/`burnCollected` and `DroneYard.withdraw`/`burnCollected`, fed by real,
+ongoing volume from `purchaseWithUTC` sales and `DroneYard` modification fees. Nothing forces
 either contract's owner to ever call them. Contrast with DEC, which has a genuinely automatic,
 enforced sink (`DroneStorefront.turnInCores` calls `burnFrom` directly — verified during the
 design-review pass). Left unmanaged, UTC supply has a one-directional upward bias from ordinary
@@ -247,7 +247,7 @@ it already exists in the deployed contracts — no new function was needed.
   the exact move being corrected, especially since the same pool is where ECON-01-style arbitrage
   dumps also land.
 - The lever is bounded by how much UTC has actually been collected — can't sell or burn past that,
-  so a fast, sustained one-directional move that outpaces `purchaseWithUC`/`DroneYard` inflow could
+  so a fast, sustained one-directional move that outpaces `purchaseWithUTC`/`DroneYard` inflow could
   outrun the available intervention.
 - How much a given intervention moves price depends on treasury size relative to pool depth — worth
   knowing which regime this is operating in (shallow pool = high leverage but frequent intervention
@@ -263,20 +263,20 @@ it already exists in the deployed contracts — no new function was needed.
 - **`ShipPurchaser.purchaseUTCWithFlow`** — its mint formula is exactly the protocol's own peg
   definition, not exploitable against itself; it takes no referral parameter at all, so ECON-01's
   mechanism can't occur on this path directly.
-- **ECON-06 — `ShipPurchaser.purchaseWithUC`'s pricing** (originally flagged, then reassessed —
-  see `contracts/ShipPurchaser.sol` `purchaseWithUC` 54-81, `Ships.sol` `recycleReward` 88) — an
-  earlier pass compared `purchaseWithUC`'s price table against `purchaseUTCWithFlow`'s mint peg
+- **ECON-06 — `ShipPurchaser.purchaseWithUTC`'s pricing** (originally flagged, then reassessed —
+  see `contracts/ShipPurchaser.sol` `purchaseWithUTC` 54-81, `Ships.sol` `recycleReward` 88) — an
+  earlier pass compared `purchaseWithUTC`'s price table against `purchaseUTCWithFlow`'s mint peg
   and flagged a mismatch. That was the wrong benchmark: the mint peg is calibrated to mirror
   recycling's own rate (its doc comment says so directly), and recycling is *intentionally* a
   lossy "dust" mechanic by design — a player recycling 10 unwanted ships should net roughly enough
   UTC for 1 new ship, the same shape as disenchant/shard systems in gacha-style games, not a
-  break-even round trip. Checked `purchaseWithUC` against that actual target instead
-  (`recycleReward` = 0.1 UTC/ship flat): tier 0 (5 ships / 4.99 UC) works out to 0.998 UTC/ship,
+  break-even round trip. Checked `purchaseWithUTC` against that actual target instead
+  (`recycleReward` = 0.1 UTC/ship flat): tier 0 (5 ships / 4.99 UTC) works out to 0.998 UTC/ship,
   a ~9.98:1 ratio against the 0.1 UTC/ship recycle rate — almost exactly the intended 10:1.
-  Larger tiers drift toward ~8.3:1 (tier 4: 60 ships / 49.99 UC = 0.833 UTC/ship), a mild,
+  Larger tiers drift toward ~8.3:1 (tier 4: 60 ships / 49.99 UTC = 0.833 UTC/ship), a mild,
   consistent bulk discount for buying bigger packs — standard store/gacha pricing shape, not a
   miscalibration. Also re-checked the exploit-safety question under this corrected framing
-  (native-token → UTC via `purchaseUTCWithFlow` → ships via `purchaseWithUC`, compared to buying
+  (native-token → UTC via `purchaseUTCWithFlow` → ships via `purchaseWithUTC`, compared to buying
   ships directly): still not exploitable, and by a wider margin than the original (wrong-benchmark)
   analysis suggested — routing through UTC this way costs roughly 5-20x more per ship than buying
   directly, even at ECON-01's ~50%-referral floor. Current pricing needs no change.

@@ -10,7 +10,7 @@ A referrer at 50% commission can exploit the system by purchasing ships and imme
 
 ### 1. Ship Purchasing - Two Methods
 
-#### Method A: Purchase with UTC (`ShipPurchaser.purchaseWithUC`)
+#### Method A: Purchase with UTC (`ShipPurchaser.purchaseWithUTC`)
 
 **Flow:**
 
@@ -32,7 +32,7 @@ A referrer at 50% commission can exploit the system by purchasing ships and imme
 
 **Purchase Tiers (Same for both methods):**
 
-- Tier 0: 5 ships for 4.99 (UC or FLOW)
+- Tier 0: 5 ships for 4.99 (UTC or FLOW)
 - Tier 1: 11 ships for 9.99
 - Tier 2: 28 ships for 24.99
 - Tier 3: 60 ships for 49.99
@@ -69,8 +69,8 @@ A referrer at 50% commission can exploit the system by purchasing ships and imme
 **Mechanics:**
 
 - Recycles ships and **MINTS new UTC** to the recycler
-- Undestroyed ships: `0.1 UC` per ship
-- Destroyed ships: `0.05 UC` per ship (half reward)
+- Undestroyed ships: `0.1 UTC` per ship
+- Destroyed ships: `0.05 UTC` per ship (half reward)
 
 **Key Point:** Recycling **creates new UTC supply** - it does not use existing supply.
 
@@ -104,92 +104,92 @@ A referrer at 50% commission tier:
 
 #### Scenario A: Purchasing with UTC
 
-#### Tier 0: 5 ships for 4.99 UC
+#### Tier 0: 5 ships for 4.99 UTC
 
 **Initial State:**
 
-- Referrer spends: 4.99 UC
+- Referrer spends: 4.99 UTC
 - Ships received: 5
 
 **After Purchase:**
 
-- Referrer receives referral: 4.99 × 0.5 = **2.495 UC**
-- ShipPurchaser contract balance: 4.99 - 2.495 = **2.495 UC** (net inflow)
+- Referrer receives referral: 4.99 × 0.5 = **2.495 UTC**
+- ShipPurchaser contract balance: 4.99 - 2.495 = **2.495 UTC** (net inflow)
 
 **After Recycling:**
 
-- Recycling reward: 5 × 0.1 = **0.5 UC** (minted)
-- Referrer net position: 2.495 + 0.5 - 4.99 = **-1.995 UC** (loss)
+- Recycling reward: 5 × 0.1 = **0.5 UTC** (minted)
+- Referrer net position: 2.495 + 0.5 - 4.99 = **-1.995 UTC** (loss)
 
 **UTC Supply Impact:**
 
 - UTC burned: 0 (none - just transferred)
-- UTC minted: 0.5 UC
-- **Net UTC inflation: +0.5 UC per cycle**
+- UTC minted: 0.5 UTC
+- **Net UTC inflation: +0.5 UTC per cycle**
 
-#### Tier 1: 11 ships for 9.99 UC
-
-**After Purchase:**
-
-- Referral: 9.99 × 0.5 = **4.995 UC**
-- Contract balance: 9.99 - 4.995 = **4.995 UC**
-
-**After Recycling:**
-
-- Recycling: 11 × 0.1 = **1.1 UC** (minted)
-- Referrer net: 4.995 + 1.1 - 9.99 = **-3.895 UC** (loss)
-
-**UTC Supply Impact:**
-
-- **Net UTC inflation: +1.1 UC per cycle**
-
-#### Tier 2: 28 ships for 24.99 UC
+#### Tier 1: 11 ships for 9.99 UTC
 
 **After Purchase:**
 
-- Referral: 24.99 × 0.5 = **12.495 UC**
-- Contract balance: 24.99 - 12.495 = **12.495 UC**
+- Referral: 9.99 × 0.5 = **4.995 UTC**
+- Contract balance: 9.99 - 4.995 = **4.995 UTC**
 
 **After Recycling:**
 
-- Recycling: 28 × 0.1 = **2.8 UC** (minted)
-- Referrer net: 12.495 + 2.8 - 24.99 = **-9.695 UC** (loss)
+- Recycling: 11 × 0.1 = **1.1 UTC** (minted)
+- Referrer net: 4.995 + 1.1 - 9.99 = **-3.895 UTC** (loss)
 
 **UTC Supply Impact:**
 
-- **Net UTC inflation: +2.8 UC per cycle**
+- **Net UTC inflation: +1.1 UTC per cycle**
 
-#### Tier 3: 60 ships for 49.99 UC
+#### Tier 2: 28 ships for 24.99 UTC
 
 **After Purchase:**
 
-- Referral: 49.99 × 0.5 = **24.995 UC**
-- Contract balance: 49.99 - 24.995 = **24.995 UC**
+- Referral: 24.99 × 0.5 = **12.495 UTC**
+- Contract balance: 24.99 - 12.495 = **12.495 UTC**
 
 **After Recycling:**
 
-- Recycling: 60 × 0.1 = **6.0 UC** (minted)
-- Referrer net: 24.995 + 6.0 - 49.99 = **-18.995 UC** (loss)
+- Recycling: 28 × 0.1 = **2.8 UTC** (minted)
+- Referrer net: 12.495 + 2.8 - 24.99 = **-9.695 UTC** (loss)
 
 **UTC Supply Impact:**
 
-- **Net UTC inflation: +6.0 UC per cycle**
+- **Net UTC inflation: +2.8 UTC per cycle**
 
-#### Tier 4: 125 ships for 99.99 UC
+#### Tier 3: 60 ships for 49.99 UTC
 
 **After Purchase:**
 
-- Referral: 99.99 × 0.5 = **49.995 UC**
-- Contract balance: 99.99 - 49.995 = **49.995 UC**
+- Referral: 49.99 × 0.5 = **24.995 UTC**
+- Contract balance: 49.99 - 24.995 = **24.995 UTC**
 
 **After Recycling:**
 
-- Recycling: 125 × 0.1 = **12.5 UC** (minted)
-- Referrer net: 49.995 + 12.5 - 99.99 = **-37.495 UC** (loss)
+- Recycling: 60 × 0.1 = **6.0 UTC** (minted)
+- Referrer net: 24.995 + 6.0 - 49.99 = **-18.995 UTC** (loss)
 
 **UTC Supply Impact:**
 
-- **Net UTC inflation: +12.5 UC per cycle**
+- **Net UTC inflation: +6.0 UTC per cycle**
+
+#### Tier 4: 125 ships for 99.99 UTC
+
+**After Purchase:**
+
+- Referral: 99.99 × 0.5 = **49.995 UTC**
+- Contract balance: 99.99 - 49.995 = **49.995 UTC**
+
+**After Recycling:**
+
+- Recycling: 125 × 0.1 = **12.5 UTC** (minted)
+- Referrer net: 49.995 + 12.5 - 99.99 = **-37.495 UTC** (loss)
+
+**UTC Supply Impact:**
+
+- **Net UTC inflation: +12.5 UTC per cycle**
 
 #### Scenario B: Purchasing with FLOW ⚠️ **CRITICAL**
 
@@ -207,15 +207,15 @@ A referrer at 50% commission tier:
 
 **After Recycling:**
 
-- Recycling reward: 125 × 0.1 = **12.5 UC** (minted - NEW SUPPLY!)
+- Recycling reward: 125 × 0.1 = **12.5 UTC** (minted - NEW SUPPLY!)
 - Referrer net FLOW position: 49.995 - 99.99 = **-49.995 FLOW** (loss)
-- Referrer net UTC position: **+12.5 UC** (pure gain!)
+- Referrer net UTC position: **+12.5 UTC** (pure gain!)
 
 **UTC Supply Impact:**
 
 - UTC spent: **0** (none - they used FLOW!)
-- UTC minted: 12.5 UC
-- **Net UTC inflation: +12.5 UC per cycle (PURE INFLATION)**
+- UTC minted: 12.5 UTC
+- **Net UTC inflation: +12.5 UTC per cycle (PURE INFLATION)**
 
 **Key Difference from Scenario A:**
 
@@ -255,20 +255,20 @@ A referrer at 50% commission tier:
 
 **Per Cycle:**
 
-- Purchase price: 99.99 UC
-- **50% Referrer receives: 49.995 UC** (50% of purchase price)
-- **Owner receives: 49.995 UC** (50% of purchase price)
-- Recycling mints: 12.5 UC (to the recycler, not owner)
-- **Burn needed to maintain price: 12.5 UC** (owner must burn this)
-- **Owner profit: 49.995 - 12.5 = 37.495 UC per cycle**
+- Purchase price: 99.99 UTC
+- **50% Referrer receives: 49.995 UTC** (50% of purchase price)
+- **Owner receives: 49.995 UTC** (50% of purchase price)
+- Recycling mints: 12.5 UTC (to the recycler, not owner)
+- **Burn needed to maintain price: 12.5 UTC** (owner must burn this)
+- **Owner profit: 49.995 - 12.5 = 37.495 UTC per cycle**
 
 **Profit Margin: 37.495 / 99.99 = 37.5% per cycle**
 
 **If 1,000 cycles occur:**
 
-- Owner receives: 49,995 UC
-- Must burn: 12,500 UC (to maintain price)
-- **Net profit: 37,495 UC**
+- Owner receives: 49,995 UTC
+- Must burn: 12,500 UTC (to maintain price)
+- **Net profit: 37,495 UTC**
 
 #### Scenario B: FLOW Purchases
 
@@ -277,15 +277,15 @@ A referrer at 50% commission tier:
 - Purchase price: 99.99 FLOW
 - **50% Referrer receives: 49.995 FLOW** (50% of purchase price)
 - **Owner receives: 49.995 FLOW** (50% of purchase price)
-- Recycling mints: 12.5 UC (to the recycler, not owner)
-- **Burn needed to maintain price: 12.5 UC** (owner must buy and burn this)
-- **Owner profit: 49.995 FLOW - (cost to buy 12.5 UC on market)**
+- Recycling mints: 12.5 UTC (to the recycler, not owner)
+- **Burn needed to maintain price: 12.5 UTC** (owner must buy and burn this)
+- **Owner profit: 49.995 FLOW - (cost to buy 12.5 UTC on market)**
 
 **Profit depends on UTC/FLOW exchange rate:**
 
-- If 1 UC = 1 FLOW: Profit = 49.995 - 12.5 = **37.495 FLOW per cycle**
-- If 1 UC = 2 FLOW: Profit = 49.995 - 25 = **24.995 FLOW per cycle**
-- If 1 UC = 0.5 FLOW: Profit = 49.995 - 6.25 = **43.745 FLOW per cycle**
+- If 1 UTC = 1 FLOW: Profit = 49.995 - 12.5 = **37.495 FLOW per cycle**
+- If 1 UTC = 2 FLOW: Profit = 49.995 - 25 = **24.995 FLOW per cycle**
+- If 1 UTC = 0.5 FLOW: Profit = 49.995 - 6.25 = **43.745 FLOW per cycle**
 
 **Key Point:** The referrer always gets 50% (in the payment currency), and the owner always gets 50% (in the payment currency). The recycling reward is always in UTC, so the owner must account for this when calculating profit.
 
@@ -293,11 +293,11 @@ A referrer at 50% commission tier:
 
 | Tier | Purchase Price | Owner Receives | Recycling Mints | Burn Needed | **Owner Profit** | **Profit Margin** |
 | ---- | -------------- | -------------- | --------------- | ----------- | ---------------- | ----------------- |
-| 0    | 4.99 UC        | 2.495 UC       | 0.5 UC          | 0.5 UC      | **1.995 UC**     | **40.0%**         |
-| 1    | 9.99 UC        | 4.995 UC       | 1.1 UC          | 1.1 UC      | **3.895 UC**     | **39.0%**         |
-| 2    | 24.99 UC       | 12.495 UC      | 2.8 UC          | 2.8 UC      | **9.695 UC**     | **38.8%**         |
-| 3    | 49.99 UC       | 24.995 UC      | 6.0 UC          | 6.0 UC      | **18.995 UC**    | **38.0%**         |
-| 4    | 99.99 UC       | 49.995 UC      | 12.5 UC         | 12.5 UC     | **37.495 UC**    | **37.5%**         |
+| 0    | 4.99 UTC        | 2.495 UTC       | 0.5 UTC          | 0.5 UTC      | **1.995 UTC**     | **40.0%**         |
+| 1    | 9.99 UTC        | 4.995 UTC       | 1.1 UTC          | 1.1 UTC      | **3.895 UTC**     | **39.0%**         |
+| 2    | 24.99 UTC       | 12.495 UTC      | 2.8 UTC          | 2.8 UTC      | **9.695 UTC**     | **38.8%**         |
+| 3    | 49.99 UTC       | 24.995 UTC      | 6.0 UTC          | 6.0 UTC      | **18.995 UTC**    | **38.0%**         |
+| 4    | 99.99 UTC       | 49.995 UTC      | 12.5 UTC         | 12.5 UTC     | **37.495 UTC**    | **37.5%**         |
 
 ### Key Insights
 
@@ -321,16 +321,16 @@ A referrer at 50% commission tier:
 
 **Per 1,000 cycles:**
 
-- Total purchases: 99,990 UC
-- Owner receives: 49,995 UC (50% of all purchases - same regardless of referrer)
-- Total recycling mints: 12,500 UC
-- **Burn needed to maintain price: 12,500 UC**
-- **Owner profit: 37,495 UC**
+- Total purchases: 99,990 UTC
+- Owner receives: 49,995 UTC (50% of all purchases - same regardless of referrer)
+- Total recycling mints: 12,500 UTC
+- **Burn needed to maintain price: 12,500 UTC**
+- **Owner profit: 37,495 UTC**
 
 **To maintain price stability:**
 
-- Burn exactly 12,500 UC (12.5% of what you receive)
-- Keep 37,495 UC as profit (37.5% of purchase volume)
+- Burn exactly 12,500 UTC (12.5% of what you receive)
+- Keep 37,495 UTC as profit (37.5% of purchase volume)
 
 **Key Point:** Even if 100% of users are doing this attack with 50% referrers, **you still profit 37.5%** because:
 
@@ -353,13 +353,13 @@ A referrer at 50% commission tier:
 
 - Burn more than what gets minted
 - Profit: Lower, but price increases
-- Example: Burn 20 UC per cycle → Profit: 29.995 UC, but price goes up
+- Example: Burn 20 UTC per cycle → Profit: 29.995 UTC, but price goes up
 
 **Option 3: Allow Some Inflation**
 
 - Burn less than what gets minted
 - Profit: Higher, but price decreases
-- Example: Burn 10 UC per cycle → Profit: 39.995 UC, but price goes down
+- Example: Burn 10 UTC per cycle → Profit: 39.995 UTC, but price goes down
 
 ### Recommendation
 
@@ -377,7 +377,7 @@ A referrer at 50% commission tier:
 
 **Key Point:** The owner controls all UTC from purchases and can:
 
-- Withdraw UTC from `ShipPurchaser` contract via `withdrawUC()`
+- Withdraw UTC from `ShipPurchaser` contract via `withdrawUTC()`
 - Withdraw FLOW from `Ships` contract via `withdraw()`
 - **Burn UTC** to reduce supply and offset inflation
 - **Sell UTC on open market** to manage price (though this adds supply to market)
@@ -390,7 +390,7 @@ A referrer at 50% commission tier:
 - **Owner receives:** Purchase price minus referral = 50% of purchase price in UTC
 - **Owner can burn this UTC** to offset recycling inflation
 - **Net Impact:** If owner burns the received UTC, inflation is partially offset
-- Example (Tier 4): Owner gets 49.995 UC, can burn it. Recycling mints 12.5 UC. Net: -37.495 UC supply reduction (good!)
+- Example (Tier 4): Owner gets 49.995 UTC, can burn it. Recycling mints 12.5 UTC. Net: -37.495 UTC supply reduction (good!)
 
 **Scenario B (FLOW Purchase):**
 
@@ -407,29 +407,29 @@ A referrer at 50% commission tier:
 
 **Scenario A (UTC Purchase) - WITH OWNER BURNING:**
 
-- Recycling mints: +12.5 UC per cycle (Tier 4)
-- Owner receives: 49.995 UC (50% of purchase price)
-- **If owner burns received UTC:** Net supply change = +12.5 - 49.995 = **-37.495 UC** (deflation!)
-- **If owner doesn't burn:** Net supply change = +12.5 UC (inflation)
+- Recycling mints: +12.5 UTC per cycle (Tier 4)
+- Owner receives: 49.995 UTC (50% of purchase price)
+- **If owner burns received UTC:** Net supply change = +12.5 - 49.995 = **-37.495 UTC** (deflation!)
+- **If owner doesn't burn:** Net supply change = +12.5 UTC (inflation)
 - **Conclusion:** Owner burning offsets and actually creates deflation
 
 **Scenario A (UTC Purchase) - WITHOUT OWNER BURNING:**
 
-- Recycling mints: +12.5 UC per cycle
-- Owner holds: 49.995 UC (not burned)
-- Net supply change: +12.5 UC (inflation)
+- Recycling mints: +12.5 UTC per cycle
+- Owner holds: 49.995 UTC (not burned)
+- Net supply change: +12.5 UTC (inflation)
 - **Owner can sell on market** to manage price, but this adds supply to market
 
 **Scenario B (FLOW Purchase) - REQUIRES ACTIVE MANAGEMENT:**
 
-- Recycling mints: +12.5 UC per cycle (Tier 4)
+- Recycling mints: +12.5 UTC per cycle (Tier 4)
 - Owner receives: 49.995 FLOW (not UTC)
 - **No automatic UTC burn** - owner must actively intervene
 - **Owner options:**
   1. Use FLOW to buy UTC on market, then burn it
   2. Sell UTC on market to maintain price (but adds supply)
   3. Do nothing → pure inflation occurs
-- **Net Impact:** +12.5 UC inflation per cycle until owner intervenes
+- **Net Impact:** +12.5 UTC inflation per cycle until owner intervenes
 
 **Formula:** `Inflation per cycle = (shipsPerTier × recycleReward)`
 
@@ -442,7 +442,7 @@ A referrer at 50% commission tier:
 - Inflow: Purchase price from buyers (in UTC)
 - Outflow: Referral payments (in UTC)
 - Net retained: `purchasePrice × (1 - referralPercentage)` = 50% for 50% referrer
-- **Owner can withdraw via `withdrawUC()`** and burn to offset inflation
+- **Owner can withdraw via `withdrawUTC()`** and burn to offset inflation
 
 **Ships Contract (FLOW Purchases):**
 
@@ -457,14 +457,14 @@ A referrer at 50% commission tier:
 
 **Scenario A (UTC Purchase + Owner Burning):**
 
-- Recycling mints: +12,500 UC (1,000 cycles)
-- Owner burns: -49,995 UC (from purchases)
-- **Net supply change: -37,495 UC** (deflation - price support!)
+- Recycling mints: +12,500 UTC (1,000 cycles)
+- Owner burns: -49,995 UTC (from purchases)
+- **Net supply change: -37,495 UTC** (deflation - price support!)
 - **Price impact: Positive** (supply reduction)
 
 **Scenario B (FLOW Purchase + Owner Intervention):**
 
-- Recycling mints: +12,500 UC (1,000 cycles)
+- Recycling mints: +12,500 UTC (1,000 cycles)
 - Owner must buy/burn UTC using FLOW proceeds
 - **Requires active market operations**
 - **Price impact: Depends on owner's market activity**
@@ -473,13 +473,13 @@ A referrer at 50% commission tier:
 
 **Scenario A (UTC Purchase, No Burning):**
 
-- Net supply increase: +12,500 UC (1,000 cycles)
-- Assuming initial supply of 100,000 UC: **12.5% supply increase**
+- Net supply increase: +12,500 UTC (1,000 cycles)
+- Assuming initial supply of 100,000 UTC: **12.5% supply increase**
 - Price impact: Potentially **10-15% depreciation**
 
 **Scenario B (FLOW Purchase, No Intervention):**
 
-- Net supply increase: +12,500 UC (1,000 cycles)
+- Net supply increase: +12,500 UTC (1,000 cycles)
 - **Pure inflation** - no offsetting mechanism
 - Price impact: Potentially **10-15% depreciation** (or more)
 
@@ -536,8 +536,8 @@ A referrer at 50% commission tier:
 
 **Change:** Lower `recycleReward` to make recycling less profitable
 
-- **Current:** 0.1 UC per ship
-- **Suggested:** 0.05 UC or lower
+- **Current:** 0.1 UTC per ship
+- **Suggested:** 0.05 UTC or lower
 - **Impact:** Reduces inflation per cycle
 
 ### 3. Cap Referral Percentage
@@ -581,13 +581,13 @@ A 50% referrer can create UTC inflation through recycling loops, but **owner con
 
 1. **UTC Purchase Path (Scenario A):**
 
-   - **With owner burning:** Creates **deflation** (net -37.495 UC per Tier 4 cycle)
-   - **Without owner burning:** Creates inflation (+12.5 UC per cycle)
+   - **With owner burning:** Creates **deflation** (net -37.495 UTC per Tier 4 cycle)
+   - **Without owner burning:** Creates inflation (+12.5 UTC per cycle)
    - **Owner has direct control** via burning received UTC
 
 2. **FLOW Purchase Path (Scenario B):**
 
-   - Creates pure UTC inflation (+12.5 UC per cycle)
+   - Creates pure UTC inflation (+12.5 UTC per cycle)
    - **Requires active owner management** to offset
    - Owner must use FLOW proceeds to buy/burn UTC on market
    - **FLOW costs real money** - attacker has real cost
@@ -622,12 +622,12 @@ A 50% referrer can create UTC inflation through recycling loops, but **owner con
 
 ## Appendix: Code References
 
-- `ShipPurchaser.purchaseWithUC()`: Lines 53-82 (UTC purchases)
+- `ShipPurchaser.purchaseWithUTC()`: Lines 53-82 (UTC purchases)
 - `Ships.purchaseWithFlow()`: Lines 139-161 (FLOW purchases)
 - `ShipPurchaser._processReferral()`: Lines 84-107 (UTC referral payments)
 - `Ships._processReferral()`: Lines 358-378 (FLOW referral payments)
 - `Ships.shipBreaker()`: Lines 579-613 (recycling - mints UTC)
-- `Ships.recycleReward`: Line 94 (0.1 UC)
-- `ShipPurchaser.withdrawUC()`: Lines 137-143 (owner can withdraw UTC)
+- `Ships.recycleReward`: Line 94 (0.1 UTC)
+- `ShipPurchaser.withdrawUTC()`: Lines 137-143 (owner can withdraw UTC)
 - `Ships.withdraw()`: Lines 469-474 (owner can withdraw FLOW)
 - Referral percentages: `ShipPurchaser.sol` Line 20, `Ships.sol` Line 35

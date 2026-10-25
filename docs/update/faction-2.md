@@ -100,7 +100,7 @@ Not functionally motivated — `Ships.sol` was up against Ethereum's 24KB contra
 
 This was asked about separately and confirmed already working, included here for completeness since it's directly relevant to faction 2:
 
-- Both ship-bundle purchases (`ShipPurchaser.purchaseWithUC`, `Ships.purchaseWithFlow`) and free claims (`FreeShipClaim.claimFreeShips`) take an explicit `_variant` parameter — the player picks their faction per-transaction, nothing is inferred.
+- Both ship-bundle purchases (`ShipPurchaser.purchaseWithUTC`, `Ships.purchaseWithFlow`) and free claims (`FreeShipClaim.claimFreeShips`) take an explicit `_variant` parameter — the player picks their faction per-transaction, nothing is inferred.
 - Every mint path funnels through `Ships._mintShip`, which enforces `VariantPurchaseGate.checkGate(variant, recipient)`. Currently only variant 2 is gated, to the Shattered Hive medal NFT (`ShatteredHiveMedal`) — attempting to mint/claim variant 2 without holding it reverts `GateRequirementNotMet`. Variant 1 is ungated.
 - The gate checks the **recipient's** holdings (`_to`), not `msg.sender` — relevant if you ever support minting/claiming to an address other than the caller.
 

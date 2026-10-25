@@ -15,7 +15,7 @@ tierPrices = [
     49.99 ether,  // Tier 3
     99.99 ether   // Tier 4
 ];
-recycleReward = 0.1 ether;  // 0.1 UC per ship
+recycleReward = 0.1 ether;  // 0.1 UTC per ship
 ```
 
 **Referral System:**
@@ -47,8 +47,8 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 
 ```solidity
 // For 125 ships:
-// Reward = 125 × 0.1 UC = 12.5 UC
-// universalCredits.mint(msg.sender, 12.5 UC)
+// Reward = 125 × 0.1 UTC = 12.5 UTC
+// universalCredits.mint(msg.sender, 12.5 UTC)
 ```
 
 **Complete Flow:**
@@ -56,15 +56,15 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 - Player spends: 99.99 FLOW
 - 50% Referrer gets: 49.995 FLOW
 - Owner gets: 49.995 FLOW (in contract)
-- Player gets: 12.5 UC (minted)
-- **Player net: -49.995 FLOW, +12.5 UC**
-- **Effective rate: 49.995 FLOW / 12.5 UC = 3.9996 FLOW per UC ≈ 4 FLOW per UC**
+- Player gets: 12.5 UTC (minted)
+- **Player net: -49.995 FLOW, +12.5 UTC**
+- **Effective rate: 49.995 FLOW / 12.5 UTC = 3.9996 FLOW per UTC ≈ 4 FLOW per UTC**
 
 ---
 
 ## Proposed: Direct UTC Purchase
 
-### Option 1: Match Net Cost to Player (4 FLOW per UC)
+### Option 1: Match Net Cost to Player (4 FLOW per UTC)
 
 **Offer: 12.5 UTC for 50 FLOW**
 
@@ -73,15 +73,15 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 - Receive: 50 FLOW
 - Mint: 12.5 UTC (to player)
 - Must burn: 12.5 UTC (to maintain price)
-- **Net: 50 FLOW, -12.5 UC**
+- **Net: 50 FLOW, -12.5 UTC**
 
 **Comparison to Recycling:**
 
-- Recycling: Owner gets 49.995 FLOW, must burn 12.5 UC
-- Direct purchase: Owner gets 50 FLOW, must burn 12.5 UC
+- Recycling: Owner gets 49.995 FLOW, must burn 12.5 UTC
+- Direct purchase: Owner gets 50 FLOW, must burn 12.5 UTC
 - **Result: Economically equivalent!** ✓
 
-### Option 2: Match Gross Cost to Player (8 FLOW per UC)
+### Option 2: Match Gross Cost to Player (8 FLOW per UTC)
 
 **Offer: 12.5 UTC for 100 FLOW**
 
@@ -90,12 +90,12 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 - Receive: 100 FLOW
 - Mint: 12.5 UTC (to player)
 - Must burn: 12.5 UTC (to maintain price)
-- **Net: 100 FLOW, -12.5 UC**
+- **Net: 100 FLOW, -12.5 UTC**
 
 **Comparison to Recycling:**
 
-- Recycling: Owner gets 49.995 FLOW, must burn 12.5 UC
-- Direct purchase: Owner gets 100 FLOW, must burn 12.5 UC
+- Recycling: Owner gets 49.995 FLOW, must burn 12.5 UTC
+- Direct purchase: Owner gets 100 FLOW, must burn 12.5 UTC
 - **Result: Owner gets 2x FLOW, same UTC burn - BETTER for owner!** ✓
 
 ### Option 3: What You Suggested (125 UTC for 100 FLOW)
@@ -107,18 +107,18 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 - Receive: 100 FLOW
 - Mint: 125 UTC (to player)
 - Must burn: 125 UTC (to maintain price)
-- **Net: 100 FLOW, -125 UC**
+- **Net: 100 FLOW, -125 UTC**
 
 **Comparison to Recycling:**
 
-- Recycling: Owner gets 49.995 FLOW, must burn 12.5 UC
-- Direct purchase: Owner gets 100 FLOW, must burn 125 UC
+- Recycling: Owner gets 49.995 FLOW, must burn 12.5 UTC
+- Direct purchase: Owner gets 100 FLOW, must burn 125 UTC
 - **Result: Owner gets 2x FLOW, but must burn 10x UTC - NOT equivalent!** ✗
 
 **Player gets:**
 
-- Recycling: 12.5 UC for 49.995 FLOW net = 4 FLOW per UC
-- Direct purchase: 125 UC for 100 FLOW = 0.8 FLOW per UC
+- Recycling: 12.5 UTC for 49.995 FLOW net = 4 FLOW per UTC
+- Direct purchase: 125 UTC for 100 FLOW = 0.8 FLOW per UTC
 - **Player gets 5x better rate!**
 
 ---
@@ -134,15 +134,15 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 - Player spends: 99.99 FLOW
 - Referrer gets: 49.995 FLOW
 - Owner gets: 49.995 FLOW
-- Recycling mints: 12.5 UC
-- Owner must burn: 12.5 UC
+- Recycling mints: 12.5 UTC
+- Owner must burn: 12.5 UTC
 
 **1,000 players:**
 
 - Owner receives: 49,995 FLOW
-- Total recycling mints: 12,500 UC
-- Owner must burn: 12,500 UC
-- **Owner net: 49,995 FLOW, -12,500 UC**
+- Total recycling mints: 12,500 UTC
+- Owner must burn: 12,500 UTC
+- **Owner net: 49,995 FLOW, -12,500 UTC**
 
 #### Direct Purchase Option 1 (12.5 UTC for 50 FLOW)
 
@@ -150,15 +150,15 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 
 - Player spends: 50 FLOW
 - Owner gets: 50 FLOW
-- Owner mints: 12.5 UC
-- Owner must burn: 12.5 UC
+- Owner mints: 12.5 UTC
+- Owner must burn: 12.5 UTC
 
 **1,000 players:**
 
 - Owner receives: 50,000 FLOW
-- Total UTC minted: 12,500 UC
-- Owner must burn: 12,500 UC
-- **Owner net: 50,000 FLOW, -12,500 UC**
+- Total UTC minted: 12,500 UTC
+- Owner must burn: 12,500 UTC
+- **Owner net: 50,000 FLOW, -12,500 UTC**
 
 **Comparison:** Nearly identical to recycling ✓
 
@@ -168,15 +168,15 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 
 - Player spends: 100 FLOW
 - Owner gets: 100 FLOW
-- Owner mints: 12.5 UC
-- Owner must burn: 12.5 UC
+- Owner mints: 12.5 UTC
+- Owner must burn: 12.5 UTC
 
 **1,000 players:**
 
 - Owner receives: 100,000 FLOW
-- Total UTC minted: 12,500 UC
-- Owner must burn: 12,500 UC
-- **Owner net: 100,000 FLOW, -12,500 UC**
+- Total UTC minted: 12,500 UTC
+- Owner must burn: 12,500 UTC
+- **Owner net: 100,000 FLOW, -12,500 UTC**
 
 **Comparison:** Owner gets 2x FLOW, same UTC burn - MUCH BETTER! ✓✓
 
@@ -186,15 +186,15 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 
 - Player spends: 100 FLOW
 - Owner gets: 100 FLOW
-- Owner mints: 125 UC
-- Owner must burn: 125 UC
+- Owner mints: 125 UTC
+- Owner must burn: 125 UTC
 
 **1,000 players:**
 
 - Owner receives: 100,000 FLOW
-- Total UTC minted: 125,000 UC
-- Owner must burn: 125,000 UC
-- **Owner net: 100,000 FLOW, -125,000 UC**
+- Total UTC minted: 125,000 UTC
+- Owner must burn: 125,000 UTC
+- **Owner net: 100,000 FLOW, -125,000 UTC**
 
 **Comparison:** Owner gets 2x FLOW, but must burn 10x UTC - WORSE! ✗
 
@@ -207,14 +207,14 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 **Why:**
 
 - Owner gets 2x FLOW (100 vs 50)
-- Same UTC burn requirement (12.5 UC)
+- Same UTC burn requirement (12.5 UTC)
 - Player pays same gross amount (100 FLOW)
 - **Owner profit increases significantly**
 
 **Implementation:**
 
 - Offer direct purchase at: **12.5 UTC for 100 FLOW**
-- Rate: **8 FLOW per UC** (matches gross cost via recycling)
+- Rate: **8 FLOW per UTC** (matches gross cost via recycling)
 - This is economically BETTER for owner than recycling
 
 ### Alternative: Match Net Cost (12.5 UTC for 50 FLOW)
@@ -229,14 +229,14 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 **Implementation:**
 
 - Offer direct purchase at: **12.5 UTC for 50 FLOW**
-- Rate: **4 FLOW per UC** (matches net cost via recycling)
+- Rate: **4 FLOW per UTC** (matches net cost via recycling)
 - This is economically EQUIVALENT to recycling
 
 ### Avoid: 125 UTC for 100 FLOW
 
 **Why:**
 
-- Player gets 5x better rate (0.8 FLOW per UC vs 4 FLOW per UC)
+- Player gets 5x better rate (0.8 FLOW per UTC vs 4 FLOW per UTC)
 - Owner must burn 10x more UTC (125 vs 12.5)
 - **Economically disadvantageous for owner**
 
@@ -246,19 +246,19 @@ recycleReward = 0.1 ether;  // 0.1 UC per ship
 
 **To maintain economic balance:**
 
-1. **Best option:** Offer **12.5 UTC for 100 FLOW** (8 FLOW per UC)
+1. **Best option:** Offer **12.5 UTC for 100 FLOW** (8 FLOW per UTC)
 
    - Owner gets 2x FLOW, same UTC burn
    - Better than recycling for owner
 
-2. **Equivalent option:** Offer **12.5 UTC for 50 FLOW** (4 FLOW per UC)
+2. **Equivalent option:** Offer **12.5 UTC for 50 FLOW** (4 FLOW per UTC)
 
    - Same economics as recycling
    - Player pays same net cost
 
-3. **Avoid:** Offering **125 UTC for 100 FLOW** (0.8 FLOW per UC)
+3. **Avoid:** Offering **125 UTC for 100 FLOW** (0.8 FLOW per UTC)
    - Gives players 5x better rate
    - Requires 10x more UTC burn
    - Economically disadvantageous
 
-**The key insight:** The effective recycling rate is **4 FLOW per UC** (net cost to player) or **8 FLOW per UC** (gross cost). Offering 125 UTC for 100 FLOW is **0.8 FLOW per UC**, which is 5-10x better for players and requires 10x more UTC burn.
+**The key insight:** The effective recycling rate is **4 FLOW per UTC** (net cost to player) or **8 FLOW per UTC** (gross cost). Offering 125 UTC for 100 FLOW is **0.8 FLOW per UTC**, which is 5-10x better for players and requires 10x more UTC burn.

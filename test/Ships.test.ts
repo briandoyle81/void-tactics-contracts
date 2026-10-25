@@ -1994,7 +1994,7 @@ describe("Ships", function () {
   });
 
   describe("Token-based Purchasing", function () {
-    it("Should purchase tier 0 with UC tokens", async function () {
+    it("Should purchase tier 0 with UTC tokens", async function () {
       const {
         ships,
         user1,
@@ -2008,7 +2008,7 @@ describe("Ships", function () {
         user1.account.address,
       ]);
 
-      await user1Purchaser.write.purchaseWithUC([
+      await user1Purchaser.write.purchaseWithUTC([
         user1.account.address,
         0n,
         user2.account.address,
@@ -2020,7 +2020,7 @@ describe("Ships", function () {
       ]);
       const shipCount = await ships.read.shipCount();
 
-      // Check that 4.99 UC tokens were spent
+      // Check that 4.99 UTC tokens were spent
       expect(initialBalance - finalBalance).to.equal(parseEther("4.99"));
       // Check that 5 ships were minted
       expect(shipCount).to.equal(5n);
@@ -2035,7 +2035,7 @@ describe("Ships", function () {
       }
     });
 
-    it("Should process referral payment correctly with UC tokens", async function () {
+    it("Should process referral payment correctly with UTC tokens", async function () {
       const {
         user1,
         user2,
@@ -2049,7 +2049,7 @@ describe("Ships", function () {
         user2.account.address,
       ]);
 
-      await user1Purchaser.write.purchaseWithUC([
+      await user1Purchaser.write.purchaseWithUTC([
         user1.account.address,
         0n,
         user2.account.address,
@@ -2070,11 +2070,11 @@ describe("Ships", function () {
       expect(referralCount).to.equal(5n);
     });
 
-    it("Should revert with insufficient UC balance", async function () {
+    it("Should revert with insufficient UTC balance", async function () {
       const { user1, user2, universalCredits, user1Purchaser } =
         await loadFixture(deployShipsFixture);
 
-      // Burn all UC tokens from user1
+      // Burn all UTC tokens from user1
       await universalCredits.write.transfer(
         ["0x000000000000000000000000000000000000dEaD", parseEther("1000")],
         {
@@ -2083,7 +2083,7 @@ describe("Ships", function () {
       );
 
       await expect(
-        user1Purchaser.write.purchaseWithUC([
+        user1Purchaser.write.purchaseWithUTC([
           user1.account.address,
           0n,
           user2.account.address,
@@ -2092,26 +2092,26 @@ describe("Ships", function () {
       ).to.be.rejectedWith("InsufficientFunds");
     });
 
-    it("Should retain full UC when referral is zero address", async function () {
+    it("Should retain full UTC when referral is zero address", async function () {
       const { user1, user1Purchaser, universalCredits, shipPurchaser } =
         await loadFixture(deployShipsFixture);
 
       const price = parseEther("4.99");
-      const initialPurchaserUC = await universalCredits.read.balanceOf([
+      const initialPurchaserUTC = await universalCredits.read.balanceOf([
         shipPurchaser.address,
       ]);
 
-      await user1Purchaser.write.purchaseWithUC([
+      await user1Purchaser.write.purchaseWithUTC([
         user1.account.address,
         0n,
         "0x0000000000000000000000000000000000000000",
         1,
       ]);
 
-      const finalPurchaserUC = await universalCredits.read.balanceOf([
+      const finalPurchaserUTC = await universalCredits.read.balanceOf([
         shipPurchaser.address,
       ]);
-      expect(finalPurchaserUC - initialPurchaserUC).to.equal(price);
+      expect(finalPurchaserUTC - initialPurchaserUTC).to.equal(price);
     });
 
     it("Should allow owner to update purchase info", async function () {
@@ -2153,11 +2153,80 @@ describe("Ships", function () {
       ).to.be.rejectedWith("OwnableUnauthorizedAccount");
     });
 
-    it("Should allow owner to withdraw UC tokens", async function () {
+    // 2026-10-23: purchaseWithUTC (UTC) and purchaseUTCWithFlow (native
+    // token) used to share one tierPrices array, so a production deploy's
+    // ETH prices (~0.002 per pack) also became the UTC price.
+    it("Keeps UTC pack prices separate from native-token prices", async function () {
+      const { shipPurchaser, user1, user1Purchaser, universalCredits, owner } =
+        await loadFixture(deployShipsFixture);
+
+      const ethPrices = [
+        parseEther("0.002"),
+        parseEther("0.004"),
+        parseEther("0.008"),
+        parseEther("0.014"),
+        parseEther("0.02"),
+      ];
+      await shipPurchaser.write.setFlowTierPrices([ethPrices], {
+        account: owner.account,
+      });
+
+      const [, utcPrices] = await shipPurchaser.read.getPurchaseInfo();
+      expect(utcPrices[0]).to.equal(parseEther("4.99"));
+      const [flowShips, flowPrices] =
+        await shipPurchaser.read.getFlowPurchaseInfo();
+      expect(flowShips).to.deep.equal([5, 11, 22, 40, 60]);
+      expect(flowPrices).to.deep.equal(ethPrices);
+
+      // A UTC pack still costs the UTC price.
+      const before = await universalCredits.read.balanceOf([
+        user1.account.address,
+      ]);
+      await user1Purchaser.write.purchaseWithUTC([
+        user1.account.address,
+        0n,
+        "0x0000000000000000000000000000000000000000",
+        1,
+      ]);
+      const after = await universalCredits.read.balanceOf([
+        user1.account.address,
+      ]);
+      expect(before - after).to.equal(parseEther("4.99"));
+
+      // purchaseUTCWithFlow takes the new native price, not the UTC one.
+      await expect(
+        shipPurchaser.write.purchaseUTCWithFlow([user1.account.address, 0n], {
+          value: parseEther("4.99"),
+          account: user1.account,
+        }),
+      ).to.be.rejectedWith("InvalidPurchase");
+      await shipPurchaser.write.purchaseUTCWithFlow(
+        [user1.account.address, 0n],
+        { value: ethPrices[0], account: user1.account },
+      );
+    });
+
+    it("Should only let the owner set native-token prices, one per tier", async function () {
+      const { shipPurchaser, owner, user1 } =
+        await loadFixture(deployShipsFixture);
+
+      await expect(
+        shipPurchaser.write.setFlowTierPrices([[1n, 2n, 3n, 4n, 5n]], {
+          account: user1.account,
+        }),
+      ).to.be.rejectedWith("OwnableUnauthorizedAccount");
+      await expect(
+        shipPurchaser.write.setFlowTierPrices([[1n, 2n]], {
+          account: owner.account,
+        }),
+      ).to.be.rejectedWith("ArrayLengthMismatch");
+    });
+
+    it("Should allow owner to withdraw UTC tokens", async function () {
       const { shipPurchaser, universalCredits, owner, user1 } =
         await loadFixture(deployShipsFixture);
 
-      // Purchase some ships to get UC tokens in the contract
+      // Purchase some ships to get UTC tokens in the contract
       await universalCredits.write.approve(
         [shipPurchaser.address, parseEther("100")],
         {
@@ -2165,7 +2234,7 @@ describe("Ships", function () {
         },
       );
 
-      await shipPurchaser.write.purchaseWithUC(
+      await shipPurchaser.write.purchaseWithUTC(
         [user1.account.address, 0n, owner.account.address, 1],
         {
           account: user1.account,
@@ -2175,7 +2244,7 @@ describe("Ships", function () {
       const initialBalance = await universalCredits.read.balanceOf([
         owner.account.address,
       ]);
-      await shipPurchaser.write.withdrawUC({ account: owner.account });
+      await shipPurchaser.write.withdrawUTC({ account: owner.account });
       const finalBalance = await universalCredits.read.balanceOf([
         owner.account.address,
       ]);
@@ -2183,11 +2252,11 @@ describe("Ships", function () {
       expect(finalBalance > initialBalance).to.be.true;
     });
 
-    it("Should not allow non-owner to withdraw UC tokens", async function () {
+    it("Should not allow non-owner to withdraw UTC tokens", async function () {
       const { shipPurchaser, user1 } = await loadFixture(deployShipsFixture);
 
       await expect(
-        shipPurchaser.write.withdrawUC({ account: user1.account }),
+        shipPurchaser.write.withdrawUTC({ account: user1.account }),
       ).to.be.rejectedWith("OwnableUnauthorizedAccount");
     });
   });
@@ -2218,7 +2287,7 @@ describe("Ships", function () {
       ).to.be.rejectedWith("OwnableUnauthorizedAccount");
     });
 
-    it("Should allow users to recycle their ships and receive UC tokens", async function () {
+    it("Should allow users to recycle their ships and receive UTC tokens", async function () {
       const { ships, universalCredits, user1, user2, shipPurchaser } =
         await loadFixture(deployShipsFixture);
 
@@ -2230,14 +2299,14 @@ describe("Ships", function () {
         },
       );
 
-      await shipPurchaser.write.purchaseWithUC(
+      await shipPurchaser.write.purchaseWithUTC(
         [user1.account.address, 1n, user2.account.address, 1],
         {
           account: user1.account,
         },
       );
 
-      // Get initial UC balance
+      // Get initial UTC balance
       const initialBalance = await universalCredits.read.balanceOf([
         user1.account.address,
       ]);
@@ -2250,7 +2319,7 @@ describe("Ships", function () {
         account: user1.account,
       });
 
-      // Check final UC balance (should have received 0.1 UC per ship)
+      // Check final UTC balance (should have received 0.1 UTC per ship)
       const finalBalance = await universalCredits.read.balanceOf([
         user1.account.address,
       ]);
@@ -2309,7 +2378,7 @@ describe("Ships", function () {
         },
       );
 
-      await shipPurchaser.write.purchaseWithUC(
+      await shipPurchaser.write.purchaseWithUTC(
         [user1.account.address, 1n, user2.account.address, 1],
         {
           account: user1.account,
@@ -2406,7 +2475,7 @@ describe("Ships", function () {
         },
       );
 
-      await shipPurchaser.write.purchaseWithUC(
+      await shipPurchaser.write.purchaseWithUTC(
         [user1.account.address, 1n, user2.account.address, 1],
         {
           account: user1.account,
@@ -2498,7 +2567,7 @@ describe("Ships", function () {
         },
       );
 
-      await shipPurchaser.write.purchaseWithUC(
+      await shipPurchaser.write.purchaseWithUTC(
         [user1.account.address, 1n, user2.account.address, 1],
         {
           account: user1.account,
@@ -2538,7 +2607,7 @@ describe("Ships", function () {
         account: user1.account,
       });
 
-      // Check UC balance increased
+      // Check UTC balance increased
       const finalBalance = await universalCredits.read.balanceOf([
         user1.account.address,
       ]);
@@ -2941,7 +3010,7 @@ describe("Ships", function () {
         },
       );
 
-      await shipPurchaser.write.purchaseWithUC(
+      await shipPurchaser.write.purchaseWithUTC(
         [user1.account.address, 1n, user2.account.address, 1],
         {
           account: user1.account,
@@ -2996,7 +3065,7 @@ describe("Ships", function () {
   });
 
   describe("Direct UTC Purchase with Flow", function () {
-    it("Should purchase UTC for tier 0 (0.5 UC for 4.99 FLOW, matching 5 ships recycled)", async function () {
+    it("Should purchase UTC for tier 0 (0.5 UTC for 4.99 FLOW, matching 5 ships recycled)", async function () {
       const { shipPurchaser, universalCredits, user1, publicClient } =
         await loadFixture(deployShipsFixture);
 
@@ -3019,7 +3088,7 @@ describe("Ships", function () {
         address: shipPurchaser.address,
       });
 
-      // Check that 0.5 UC was minted (5 ships x 0.1 recycle reward)
+      // Check that 0.5 UTC was minted (5 ships x 0.1 recycle reward)
       expect(finalBalance - initialBalance).to.equal(parseEther("0.5"));
       // Check that FLOW was received by contract
       expect(finalContractBalance - initialContractBalance).to.equal(
@@ -3027,7 +3096,7 @@ describe("Ships", function () {
       );
     });
 
-    it("Should purchase UTC for tier 1 (1.1 UC for 9.99 FLOW, matching 11 ships recycled)", async function () {
+    it("Should purchase UTC for tier 1 (1.1 UTC for 9.99 FLOW, matching 11 ships recycled)", async function () {
       const { shipPurchaser, universalCredits, user1 } =
         await loadFixture(deployShipsFixture);
 
@@ -3044,11 +3113,11 @@ describe("Ships", function () {
         user1.account.address,
       ]);
 
-      // Check that 1.1 UC was minted (11 ships x 0.1 recycle reward)
+      // Check that 1.1 UTC was minted (11 ships x 0.1 recycle reward)
       expect(finalBalance - initialBalance).to.equal(parseEther("1.1"));
     });
 
-    it("Should purchase UTC for tier 2 (2.2 UC for 19.99 FLOW, matching 22 ships recycled)", async function () {
+    it("Should purchase UTC for tier 2 (2.2 UTC for 19.99 FLOW, matching 22 ships recycled)", async function () {
       const { shipPurchaser, universalCredits, user1 } =
         await loadFixture(deployShipsFixture);
 
@@ -3065,11 +3134,11 @@ describe("Ships", function () {
         user1.account.address,
       ]);
 
-      // Check that 2.2 UC was minted (22 ships x 0.1 recycle reward)
+      // Check that 2.2 UTC was minted (22 ships x 0.1 recycle reward)
       expect(finalBalance - initialBalance).to.equal(parseEther("2.2"));
     });
 
-    it("Should purchase UTC for tier 3 (4 UC for 34.99 FLOW, matching 40 ships recycled)", async function () {
+    it("Should purchase UTC for tier 3 (4 UTC for 34.99 FLOW, matching 40 ships recycled)", async function () {
       const { shipPurchaser, universalCredits, user1 } =
         await loadFixture(deployShipsFixture);
 
@@ -3086,11 +3155,11 @@ describe("Ships", function () {
         user1.account.address,
       ]);
 
-      // Check that 4 UC was minted (40 ships x 0.1 recycle reward)
+      // Check that 4 UTC was minted (40 ships x 0.1 recycle reward)
       expect(finalBalance - initialBalance).to.equal(parseEther("4"));
     });
 
-    it("Should purchase UTC for tier 4 (6 UC for 49.99 FLOW, matching 60 ships recycled)", async function () {
+    it("Should purchase UTC for tier 4 (6 UTC for 49.99 FLOW, matching 60 ships recycled)", async function () {
       const { shipPurchaser, universalCredits, user1 } =
         await loadFixture(deployShipsFixture);
 
@@ -3107,7 +3176,7 @@ describe("Ships", function () {
         user1.account.address,
       ]);
 
-      // Check that 6 UC was minted (60 ships x 0.1 recycle reward)
+      // Check that 6 UTC was minted (60 ships x 0.1 recycle reward)
       expect(finalBalance - initialBalance).to.equal(parseEther("6"));
     });
 
@@ -3260,7 +3329,7 @@ describe("Ships", function () {
       const utcReceivedRecycle = finalBalanceRecycle - initialBalanceRecycle;
 
       // Direct purchase mints the same UTC a player would net from buying +
-      // recycling tier 4's 60 ships (60 x 0.1 UC recycle reward)
+      // recycling tier 4's 60 ships (60 x 0.1 UTC recycle reward)
       expect(utcReceivedDirect).to.equal(parseEther("6"));
       expect(utcReceivedRecycle).to.equal(parseEther("6"));
       expect(utcReceivedDirect).to.equal(utcReceivedRecycle);
@@ -3372,7 +3441,7 @@ describe("Ships", function () {
         user1.account.address,
       ]);
 
-      // Should have 1 UC total (0.5 + 0.5, tier 0's 5 ships x 0.1 recycle reward, twice)
+      // Should have 1 UTC total (0.5 + 0.5, tier 0's 5 ships x 0.1 recycle reward, twice)
       expect(finalBalance - initialBalance).to.equal(parseEther("1"));
     });
 
@@ -3394,7 +3463,7 @@ describe("Ships", function () {
         user2.account.address,
       ]);
 
-      // User2 should receive the UTC (6 UC for tier 4, 60 ships x 0.1 recycle reward)
+      // User2 should receive the UTC (6 UTC for tier 4, 60 ships x 0.1 recycle reward)
       expect(finalBalanceUser2 - initialBalanceUser2).to.equal(
         parseEther("6"),
       );

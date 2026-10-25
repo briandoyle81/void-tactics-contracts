@@ -58,7 +58,7 @@ describe("UTCLotteryHook — real swap integration", function () {
       ships.address,
       { client: { wallet: ownerClient } },
     );
-    const ucAsOwner = await hre.viem.getContractAt(
+    const utcAsOwner = await hre.viem.getContractAt(
       "UniversalCredits",
       universalCredits.address,
       { client: { wallet: ownerClient } },
@@ -114,29 +114,29 @@ describe("UTCLotteryHook — real swap integration", function () {
 
     // Fund LP + trader with real UTC, temporarily authorizing the owner to
     // mint it directly rather than routing through ShipPurchaser.
-    await ucAsOwner.write.setAuthorizedToMint([ownerClient.account.address, true]);
-    await ucAsOwner.write.mint([lp.account.address, parseEther("10000")]);
+    await utcAsOwner.write.setAuthorizedToMint([ownerClient.account.address, true]);
+    await utcAsOwner.write.mint([lp.account.address, parseEther("10000")]);
     for (const t of [trader, trader2, trader3]) {
-      await ucAsOwner.write.mint([t.account.address, parseEther("1000")]);
+      await utcAsOwner.write.mint([t.account.address, parseEther("1000")]);
     }
 
-    const ucAsLp = await hre.viem.getContractAt(
+    const utcAsLp = await hre.viem.getContractAt(
       "UniversalCredits",
       universalCredits.address,
       { client: { wallet: lp } },
     );
-    await ucAsLp.write.approve([liquidityRouter.address, parseEther("10000")]);
+    await utcAsLp.write.approve([liquidityRouter.address, parseEther("10000")]);
 
-    const [ucAsTrader, ucAsTrader2, ucAsTrader3] = await Promise.all(
+    const [utcAsTrader, utcAsTrader2, utcAsTrader3] = await Promise.all(
       [trader, trader2, trader3].map((t) =>
         hre.viem.getContractAt("UniversalCredits", universalCredits.address, {
           client: { wallet: t },
         }),
       ),
     );
-    await ucAsTrader.write.approve([swapRouter.address, parseEther("1000")]);
-    await ucAsTrader2.write.approve([swapRouter.address, parseEther("1000")]);
-    await ucAsTrader3.write.approve([swapRouter.address, parseEther("1000")]);
+    await utcAsTrader.write.approve([swapRouter.address, parseEther("1000")]);
+    await utcAsTrader2.write.approve([swapRouter.address, parseEther("1000")]);
+    await utcAsTrader3.write.approve([swapRouter.address, parseEther("1000")]);
 
     const key = {
       currency0: zeroAddress,

@@ -565,8 +565,8 @@ logic, no redeem function) — worth revisiting the "biggest lift of the three" 
 Chainlink VRF and Ledger once liquidity seeding is scoped.~~
 
 **Superseded 2026-09-10 — the fee-to-treasury hook above is dropped entirely, not just
-re-routed.** Checked `ShipPurchaser.sol:157-178` directly: it already has `withdrawUC()` (pulls
-the UC balance the contract has accumulated from real `purchaseWithUC` sales, net of referrals) and
+re-routed.** Checked `ShipPurchaser.sol:157-178` directly: it already has `withdrawUTC()` (pulls
+the UTC balance the contract has accumulated from real `purchaseWithUTC` sales, net of referrals) and
 `withdrawFlow()` (same, for ETH from `purchaseUTCWithFlow` sales). Both owner-gated, both already
 shipped, both already economy-sourced. Goal 1 (a UTC/fundraising reserve built from real activity,
 not fiat minting) is already fully met by existing code — a swap-fee hook would have duplicated it.
@@ -601,15 +601,15 @@ was extra scope:
 ~~**Final design (resolved 2026-09-10): no hook at all.**
 
 1. Deploy a UTC/ETH Uniswap v4 pool — no custom hook, vanilla pool.
-2. Seed initial liquidity from the UC/ETH already sitting in `ShipPurchaser`, withdrawable today
-   via `withdrawUC()`/`withdrawFlow()` — an allocation decision (how much of the existing,
+2. Seed initial liquidity from the UTC/ETH already sitting in `ShipPurchaser`, withdrawable today
+   via `withdrawUTC()`/`withdrawFlow()` — an allocation decision (how much of the existing,
    already-economy-sourced treasury becomes an LP position vs. stays spendable for
    giveaways/events/prizes/fundraising), not a new revenue mechanism.
 3. Ceiling relies entirely on the existing passive `purchaseUTCWithFlow` arbitrage — zero new
    code. Deliberately not pinned tight; occasional excursions above the mint rate are accepted by
    design, not a defect to correct.
 4. Goal 1 (economy-sourced reserve for giveaways/fundraising) needs no new mechanism — already
-   served by `withdrawUC()`/`withdrawFlow()`.
+   served by `withdrawUTC()`/`withdrawFlow()`.
 5. `FEEDBACK.md` + Uniswap Developer Feedback Form submission, per the track's qualification
    requirements — unchanged.
 

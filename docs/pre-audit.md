@@ -450,13 +450,13 @@ After a draw, `game.metadata.winner` is set to `address(0)`. The guard `if (game
 **Severity:** Low  
 **Status:** Not a bug (2026-07-16) — self-referral confirmed acceptable by design; no separate UTC-drain vector found. No fix needed.
 
-`purchaseWithUC` does not check `_referral != msg.sender` or `_referral != _to`. A buyer can pass their own address as referral and — once `referralCount[self] >= 1000` — receive a 10% discount on all future purchases funded from the protocol's own UTC balance.
+`purchaseWithUTC` does not check `_referral != msg.sender` or `_referral != _to`. A buyer can pass their own address as referral and — once `referralCount[self] >= 1000` — receive a 10% discount on all future purchases funded from the protocol's own UTC balance.
 
 **Resolution (2026-07-16):** Self-referral itself is accepted as intended (same conclusion as H-08's self-referral half). Separately traced whether the referral mechanism allows draining UTC beyond what's deposited — it doesn't:
 
-- `_processReferral` is `internal`, reachable only from `purchaseWithUC`, and only *after* `universalCredits.transferFrom(msg.sender, address(this), price)` has already succeeded (`ShipPurchaser.sol:70-73`) — every payout is preceded by a real, full-price deposit in the same transaction.
+- `_processReferral` is `internal`, reachable only from `purchaseWithUTC`, and only *after* `universalCredits.transferFrom(msg.sender, address(this), price)` has already succeeded (`ShipPurchaser.sol:70-73`) — every payout is preceded by a real, full-price deposit in the same transaction.
 - The payout percentage is capped at `referralPercentages = [0, 10, 20, 35, 50]` — 50% maximum, at the top volume tier. There's no path to exceed 50% of that transaction's own price back.
-- The payout is plain OpenZeppelin `ERC20.transfer` (no recipient hook), so no reentrancy vector via a malicious `_referral` contract; `purchaseWithUC` is also `nonReentrant`.
+- The payout is plain OpenZeppelin `ERC20.transfer` (no recipient hook), so no reentrancy vector via a malicious `_referral` contract; `purchaseWithUTC` is also `nonReentrant`.
 - `referralCount` only increments inside `_processReferral`, i.e., only alongside a real paid purchase — no way to inflate it for free.
 - If the contract's live UTC balance is ever too thin for a pending payout, `transfer` returns `false` and the whole purchase reverts cleanly (no partial state, no overpayment).
 
@@ -653,7 +653,7 @@ Positions are first validated for column bounds (creator: 0–3, joiner: 13–16
 | ~~L-04~~ | Game | `flee` | Low | ~~Edge Case~~ (Fixed) |
 | ~~L-05~~ | ShipAttributes | Multiple setters | Low | ~~Missing Events~~ (Fixed) |
 | ~~L-06~~ | Ships | `claimFreeShips` | Low | ~~Logic / Documentation~~ (Not a bug) |
-| ~~L-07~~ | ShipPurchaser | `purchaseWithUC` | Low | ~~Missing Validation~~ (Not a bug) |
+| ~~L-07~~ | ShipPurchaser | `purchaseWithUTC` | Low | ~~Missing Validation~~ (Not a bug) |
 | ~~L-08~~ | Game | `_endGame` | Low | ~~Double-Invocation~~ (Fixed) |
 | I-01 | Game | debug functions | Info | Production Readiness |
 | I-02 | Multiple | Owner functions | Info | Centralisation |
@@ -875,7 +875,7 @@ function calculateShipAttributes(uint _gameId, uint _shipId) public {
 **Category:** Reentrancy
 **Status:** Fixed 2026-08-26
 
-`claimFreeShips` checks `lastClaimTimestamp[msg.sender]`, calls `ships.createShips(msg.sender, ...)` (which `_safeMint`s ERC-721 ships — `Ships.sol:504`), and only writes `lastClaimTimestamp[msg.sender] = currentTime` **after** that call returns. `Ships.createShips` has no reentrancy guard. Every sibling claim path in the codebase (`TutorialClaim`, `ShipPurchaser.purchaseWithUC`, `DroneYard.modifyShip`) either sets its claimed-flag before the external call or carries `nonReentrant` (or both); `FreeShipClaim` is the one outlier missing both.
+`claimFreeShips` checks `lastClaimTimestamp[msg.sender]`, calls `ships.createShips(msg.sender, ...)` (which `_safeMint`s ERC-721 ships — `Ships.sol:504`), and only writes `lastClaimTimestamp[msg.sender] = currentTime` **after** that call returns. `Ships.createShips` has no reentrancy guard. Every sibling claim path in the codebase (`TutorialClaim`, `ShipPurchaser.purchaseWithUTC`, `DroneYard.modifyShip`) either sets its claimed-flag before the external call or carries `nonReentrant` (or both); `FreeShipClaim` is the one outlier missing both.
 
 **Exploit:** A contract implementing `onERC721Received` calls `claimFreeShips`. The first `_safeMint` inside `createShips`'s loop invokes the caller's `onERC721Received` callback before `lastClaimTimestamp` is written, letting it call `claimFreeShips` again with the cooldown check still reading stale state — recursing until gas limits, netting many multiples of the intended 10(+bonus)-ship batch in a single transaction.
 
@@ -1436,7 +1436,7 @@ libraries/Hooks.sol:178-182`: `self.callHook(abi.encodeCall(IHooks.beforeInitial
 called `PoolManager.initialize` externally, not `PoolManager` itself).
 
 **Exploit:** `scripts/deployUTCLotteryPool.ts` deploys the hook (step 7) and calls
-`PoolManager.initialize` (step 11) as **two separate transactions**, with UC-sourcing/approval/
+`PoolManager.initialize` (step 11) as **two separate transactions**, with UTC-sourcing/approval/
 liquidity-math steps in between — a real, multi-transaction window against the live, shared Base
 Sepolia `PoolManager`. The hook's address is necessarily mineable/predictable in advance (that's
 the whole point of `scripts/hookMiner.ts`), and its deployed bytecode is public the instant the

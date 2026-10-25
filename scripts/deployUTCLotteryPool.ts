@@ -83,12 +83,12 @@ import { getEthUsdPrice, MAP_EDITOR } from "../ignition/modules/DeployAndConfig"
 // Configuration via environment variables (all optional):
 //   REFERENCE_TIER_INDEX     ShipPurchaser tier that fixes the pool's initial
 //                            price. Default: 0. (LP-seed sourcing always uses
-//                            whichever tier mints the most UC per purchase,
+//                            whichever tier mints the most UTC per purchase,
 //                            independent of this -- see "Sourcing tier" log
 //                            line -- since sourcing needs few transactions,
 //                            not a specific price; any tier's price/mint
-//                            ratio yields the same fungible UC either way.)
-//   LP_SEED_UC_AMOUNT        Whole-UC amount to seed as liquidity (e.g.
+//                            ratio yields the same fungible UTC either way.)
+//   LP_SEED_UTC_AMOUNT        Whole-UTC amount to seed as liquidity (e.g.
 //                            "500"). Default: the larger of a live-computed
 //                            ~$10-equivalent or LP_SEED_TO_SMOKE_TEST_RATIO
 //                            times the smoke-test sell size (see that
@@ -177,7 +177,7 @@ const SKIP_SMOKE_TEST =
   (process.env.SKIP_SMOKE_TEST ?? "true").toLowerCase() === "true";
 const REFERENCE_TIER_INDEX = Number(process.env.REFERENCE_TIER_INDEX ?? "0");
 
-// Multiplies the UC amount that would just barely clear the hook's
+// Multiplies the UTC amount that would just barely clear the hook's
 // minEntryThresholdWei, so the smoke-test swap comfortably qualifies after
 // pool fees (0.3%) and price impact eat into its proceeds.
 const SMOKE_TEST_SAFETY_MULTIPLIER = 3n;
@@ -187,7 +187,7 @@ const SMOKE_TEST_SAFETY_MULTIPLIER = 3n;
 // fraction of the pool and real (post-price-impact) proceeds fall well short
 // of the naive/reference-rate estimate SMOKE_TEST_SAFETY_MULTIPLIER assumes.
 // Confirmed on-chain (2026-09-17): a ~$10 LP seed against a 3x-multiplied
-// smoke-test sell put the trade at ~7.4x the pool's own UC reserve, real ETH
+// smoke-test sell put the trade at ~7.4x the pool's own UTC reserve, real ETH
 // proceeds landed at ~12% of the naive estimate (0.00358 ETH vs. a 0.01 ETH
 // threshold), and no SellRecorded event fired at all -- confirmed via
 // hasParticipated/weightInDraw both reading false/0 after the swap. For a
@@ -411,7 +411,7 @@ async function main() {
     .abi as any;
   const shipPurchaserAbi = (await hre.artifacts.readArtifact("ShipPurchaser"))
     .abi as any;
-  const ucAbi = (await hre.artifacts.readArtifact("UniversalCredits"))
+  const utcAbi = (await hre.artifacts.readArtifact("UniversalCredits"))
     .abi as any;
   const hookArtifact = await hre.artifacts.readArtifact("UTCLotteryHook");
   const hookAbi = hookArtifact.abi as any;
@@ -436,11 +436,11 @@ async function main() {
 
   const shipsOwnerClient = resolveOwnerClient(shipsOwner, "Ships.owner()");
 
-  // ---- Step 4: read the reference UC/ETH rate ----------------------------
+  // ---- Step 4: read the reference UTC/ETH rate ----------------------------
   const tierPriceWei = (await publicClient.readContract({
     address: shipPurchaserAddress,
     abi: shipPurchaserAbi,
-    functionName: "tierPrices",
+    functionName: "flowTierPrices",
     args: [BigInt(REFERENCE_TIER_INDEX)],
   })) as bigint;
   const tierShipsCount = (await publicClient.readContract({
@@ -455,20 +455,20 @@ async function main() {
     functionName: "recycleReward",
     args: [],
   })) as bigint;
-  const mintAmountUC = BigInt(tierShipsCount) * recycleReward;
+  const mintAmountUTC = BigInt(tierShipsCount) * recycleReward;
   console.log(
-    `Reference rate (tier ${REFERENCE_TIER_INDEX}): ${formatEther(tierPriceWei)} ETH -> ${formatEther(mintAmountUC)} UC`,
+    `Reference rate (tier ${REFERENCE_TIER_INDEX}): ${formatEther(tierPriceWei)} ETH -> ${formatEther(mintAmountUTC)} UTC`,
   );
 
-  // Sourcing loop (step 8) buys whichever tier mints the most UC per
+  // Sourcing loop (step 8) buys whichever tier mints the most UTC per
   // purchase, independent of REFERENCE_TIER_INDEX (which only fixes the
   // pool's initial price) -- with the LP_SEED_TO_SMOKE_TEST_RATIO fix above,
-  // sourcing enough UC at tier 0's 0.5 UC/purchase would take ~300
+  // sourcing enough UTC at tier 0's 0.5 UTC/purchase would take ~300
   // transactions; the largest tier mints ~12x more per purchase.
   const [allTierShips, allTierPrices] = (await publicClient.readContract({
     address: shipPurchaserAddress,
     abi: shipPurchaserAbi,
-    functionName: "getPurchaseInfo",
+    functionName: "getFlowPurchaseInfo",
     args: [],
   })) as [readonly number[], readonly bigint[]];
   let sourcingTierIndex = 0;
@@ -476,14 +476,14 @@ async function main() {
     if (allTierShips[i] > allTierShips[sourcingTierIndex]) sourcingTierIndex = i;
   }
   const sourcingTierPriceWei = allTierPrices[sourcingTierIndex];
-  const sourcingTierMintUC = BigInt(allTierShips[sourcingTierIndex]) * recycleReward;
+  const sourcingTierMintUTC = BigInt(allTierShips[sourcingTierIndex]) * recycleReward;
   console.log(
     `Sourcing tier ${sourcingTierIndex}: ${formatEther(sourcingTierPriceWei)} ETH -> ` +
-      `${formatEther(sourcingTierMintUC)} UC per purchase`,
+      `${formatEther(sourcingTierMintUTC)} UTC per purchase`,
   );
 
-  // ---- Step 5: compute sqrtPriceX96 (price = currency1/currency0 = UC/ETH) ----
-  const ratioX192 = (mintAmountUC << 192n) / tierPriceWei;
+  // ---- Step 5: compute sqrtPriceX96 (price = currency1/currency0 = UTC/ETH) ----
+  const ratioX192 = (mintAmountUTC << 192n) / tierPriceWei;
   const sqrtPriceX96 = isqrt(ratioX192);
   console.log("sqrtPriceX96:", sqrtPriceX96.toString());
   if (sqrtPriceX96 <= MIN_SQRT_PRICE || sqrtPriceX96 >= MAX_SQRT_PRICE) {
@@ -639,67 +639,67 @@ async function main() {
     functionName: "minEntryThresholdWei",
     args: [],
   })) as bigint;
-  const smokeTestSellUc =
-    ((minEntryThresholdWei * mintAmountUC) / tierPriceWei) *
+  const smokeTestSellUtc =
+    ((minEntryThresholdWei * mintAmountUTC) / tierPriceWei) *
     SMOKE_TEST_SAFETY_MULTIPLIER;
   console.log(
-    `minEntryThresholdWei: ${formatEther(minEntryThresholdWei)} ETH -- smoke-test sell sized to ${formatEther(smokeTestSellUc)} UC`,
+    `minEntryThresholdWei: ${formatEther(minEntryThresholdWei)} ETH -- smoke-test sell sized to ${formatEther(smokeTestSellUtc)} UTC`,
   );
 
-  // ---- Step 8: source LP-seed UC via ShipPurchaser.purchaseUTCWithFlow ---
-  let lpSeedUcTarget: bigint;
-  const lpSeedEnvRaw = process.env.LP_SEED_UC_AMOUNT;
-  const smokeTestFloor = smokeTestSellUc * LP_SEED_TO_SMOKE_TEST_RATIO;
+  // ---- Step 8: source LP-seed UTC via ShipPurchaser.purchaseUTCWithFlow ---
+  let lpSeedUtcTarget: bigint;
+  const lpSeedEnvRaw = process.env.LP_SEED_UTC_AMOUNT;
+  const smokeTestFloor = smokeTestSellUtc * LP_SEED_TO_SMOKE_TEST_RATIO;
   if (lpSeedEnvRaw) {
-    lpSeedUcTarget = parseEther(lpSeedEnvRaw);
-    if (!SKIP_SMOKE_TEST && lpSeedUcTarget < smokeTestFloor) {
+    lpSeedUtcTarget = parseEther(lpSeedEnvRaw);
+    if (!SKIP_SMOKE_TEST && lpSeedUtcTarget < smokeTestFloor) {
       console.warn(
-        `WARNING: LP_SEED_UC_AMOUNT (${formatEther(lpSeedUcTarget)} UC) is below ` +
-          `${LP_SEED_TO_SMOKE_TEST_RATIO}x the smoke-test sell size (${formatEther(smokeTestFloor)} UC) -- ` +
+        `WARNING: LP_SEED_UTC_AMOUNT (${formatEther(lpSeedUtcTarget)} UTC) is below ` +
+          `${LP_SEED_TO_SMOKE_TEST_RATIO}x the smoke-test sell size (${formatEther(smokeTestFloor)} UTC) -- ` +
           "the smoke-test swap may see enough price impact to fall short of minEntryThresholdWei.",
       );
     }
   } else {
     const ethUsdPrice = getEthUsdPrice();
     const tenDollarsEthWei = parseEther((10 / ethUsdPrice).toFixed(18));
-    const tenDollarsUc = (tenDollarsEthWei * mintAmountUC) / tierPriceWei;
+    const tenDollarsUtc = (tenDollarsEthWei * mintAmountUTC) / tierPriceWei;
     if (SKIP_SMOKE_TEST) {
-      lpSeedUcTarget = tenDollarsUc;
+      lpSeedUtcTarget = tenDollarsUtc;
       console.log(
-        `No LP_SEED_UC_AMOUNT set -- defaulting to ~$10 of UC at $${ethUsdPrice}/ETH: ` +
-          `${formatEther(lpSeedUcTarget)} UC (SKIP_SMOKE_TEST set, so not sizing against the ` +
+        `No LP_SEED_UTC_AMOUNT set -- defaulting to ~$10 of UTC at $${ethUsdPrice}/ETH: ` +
+          `${formatEther(lpSeedUtcTarget)} UTC (SKIP_SMOKE_TEST set, so not sizing against the ` +
           "smoke-test sell).",
       );
     } else {
-      lpSeedUcTarget = tenDollarsUc > smokeTestFloor ? tenDollarsUc : smokeTestFloor;
+      lpSeedUtcTarget = tenDollarsUtc > smokeTestFloor ? tenDollarsUtc : smokeTestFloor;
       console.log(
-        `No LP_SEED_UC_AMOUNT set -- ~$10 of UC would be ${formatEther(tenDollarsUc)} UC, but ` +
-          `defaulting to ${formatEther(lpSeedUcTarget)} UC (>= ${LP_SEED_TO_SMOKE_TEST_RATIO}x the ` +
+        `No LP_SEED_UTC_AMOUNT set -- ~$10 of UTC would be ${formatEther(tenDollarsUtc)} UTC, but ` +
+          `defaulting to ${formatEther(lpSeedUtcTarget)} UTC (>= ${LP_SEED_TO_SMOKE_TEST_RATIO}x the ` +
           "smoke-test sell size, so the smoke test itself doesn't move the price enough to fail).",
       );
     }
   }
   const sourcingTarget = SKIP_SMOKE_TEST
-    ? lpSeedUcTarget
-    : lpSeedUcTarget + smokeTestSellUc;
+    ? lpSeedUtcTarget
+    : lpSeedUtcTarget + smokeTestSellUtc;
 
   // ---- Step 10 (computed early): liquidityDelta for a full-range position --
-  const amount0Wei = (lpSeedUcTarget * tierPriceWei) / mintAmountUC;
+  const amount0Wei = (lpSeedUtcTarget * tierPriceWei) / mintAmountUTC;
   const liquidityDelta = getLiquidityForAmounts(
     sqrtPriceX96,
     MIN_SQRT_PRICE,
     MAX_SQRT_PRICE,
     amount0Wei,
-    lpSeedUcTarget,
+    lpSeedUtcTarget,
   );
   console.log(
-    `Liquidity math: amount0 (ETH) = ${formatEther(amount0Wei)}, amount1 (UC) = ${formatEther(lpSeedUcTarget)}, liquidityDelta = ${liquidityDelta.toString()}`,
+    `Liquidity math: amount0 (ETH) = ${formatEther(amount0Wei)}, amount1 (UTC) = ${formatEther(lpSeedUtcTarget)}, liquidityDelta = ${liquidityDelta.toString()}`,
   );
 
   // Re-run safety (2026-10-17): this script is re-run after failures (by
   // hand, or by ignition-deploy-retry.sh --with-lottery-pool), and step 12
   // isn't idempotent on its own -- a failure after it (e.g. an RPC blip
-  // during the grant in step 13) would otherwise source more UC and add a
+  // during the grant in step 13) would otherwise source more UTC and add a
   // second seed. Skip sourcing/approve/add when the pool already holds at
   // least ~our seed. Compared against our own seed size rather than "> 0",
   // since anyone can add dust liquidity through PoolModifyLiquidityTest once
@@ -713,22 +713,22 @@ async function main() {
         "-- skipping LP-seed sourcing, approve, and add-liquidity (a prior run already did them).",
     );
   }
-  const ucNeeded = seedAlreadyAdded
-    ? (SKIP_SMOKE_TEST ? 0n : smokeTestSellUc)
+  const utcNeeded = seedAlreadyAdded
+    ? (SKIP_SMOKE_TEST ? 0n : smokeTestSellUtc)
     : sourcingTarget;
 
-  let ucBalance = (await publicClient.readContract({
+  let utcBalance = (await publicClient.readContract({
     address: universalCreditsAddress,
-    abi: ucAbi,
+    abi: utcAbi,
     functionName: "balanceOf",
     args: [wallet.account.address],
   })) as bigint;
-  console.log("Current UC balance:", formatEther(ucBalance));
+  console.log("Current UTC balance:", formatEther(utcBalance));
 
-  while (ucBalance < ucNeeded) {
+  while (utcBalance < utcNeeded) {
     console.log(
-      `Sourcing more UC via purchaseUTCWithFlow(tier ${sourcingTierIndex}, ` +
-        `+${formatEther(sourcingTierMintUC)} UC)...`,
+      `Sourcing more UTC via purchaseUTCWithFlow(tier ${sourcingTierIndex}, ` +
+        `+${formatEther(sourcingTierMintUTC)} UTC)...`,
     );
     const { request } = await publicClient.simulateContract({
       address: shipPurchaserAddress,
@@ -743,22 +743,22 @@ async function main() {
     if (receipt.status !== "success") {
       throw new Error(`purchaseUTCWithFlow reverted: ${hash}`);
     }
-    ucBalance = (await publicClient.readContract({
+    utcBalance = (await publicClient.readContract({
       address: universalCreditsAddress,
-      abi: ucAbi,
+      abi: utcAbi,
       functionName: "balanceOf",
       args: [wallet.account.address],
     })) as bigint;
   }
-  console.log("UC sourced. Balance now:", formatEther(ucBalance));
+  console.log("UTC sourced. Balance now:", formatEther(utcBalance));
 
-  // ---- Step 9: approve UC to PoolModifyLiquidityTest ----------------------
+  // ---- Step 9: approve UTC to PoolModifyLiquidityTest ----------------------
   if (!seedAlreadyAdded) {
     const { request } = await publicClient.simulateContract({
       address: universalCreditsAddress,
-      abi: ucAbi,
+      abi: utcAbi,
       functionName: "approve",
-      args: [POOL_MODIFY_LIQUIDITY_TEST, lpSeedUcTarget],
+      args: [POOL_MODIFY_LIQUIDITY_TEST, lpSeedUtcTarget],
       account: wallet.account,
     });
     const hash = await wallet.writeContract(request);
@@ -768,7 +768,7 @@ async function main() {
   // ---- Step 11: initialize the pool --------------------------------------
   // See this script's header comment: the first successful call here
   // permanently locks the hook to this exact key -- not treated as precious
-  // right now (no canonical UC token / accumulated history yet), but there's
+  // right now (no canonical UTC token / accumulated history yet), but there's
   // no on-chain fix for a wrong key, so still verify carefully before
   // sending. key/poolId were already computed above, right before writing
   // the output file.
@@ -983,24 +983,24 @@ async function main() {
       args: [],
     })) as bigint;
 
-    const finalUcBalance = (await publicClient.readContract({
+    const finalUtcBalance = (await publicClient.readContract({
       address: universalCreditsAddress,
-      abi: ucAbi,
+      abi: utcAbi,
       functionName: "balanceOf",
       args: [wallet.account.address],
     })) as bigint;
-    if (finalUcBalance < smokeTestSellUc) {
+    if (finalUtcBalance < smokeTestSellUtc) {
       throw new Error(
-        "Not enough leftover UC for the smoke-test swap -- this shouldn't happen given the sourcing target above.",
+        "Not enough leftover UTC for the smoke-test swap -- this shouldn't happen given the sourcing target above.",
       );
     }
 
     {
       const { request } = await publicClient.simulateContract({
         address: universalCreditsAddress,
-        abi: ucAbi,
+        abi: utcAbi,
         functionName: "approve",
-        args: [POOL_SWAP_TEST, smokeTestSellUc],
+        args: [POOL_SWAP_TEST, smokeTestSellUtc],
         account: wallet.account,
       });
       const hash = await wallet.writeContract(request);
@@ -1019,7 +1019,7 @@ async function main() {
         key,
         {
           zeroForOne: false,
-          amountSpecified: -smokeTestSellUc,
+          amountSpecified: -smokeTestSellUtc,
           sqrtPriceLimitX96: MAX_SQRT_PRICE - 1n,
         },
         { takeClaims: false, settleUsingBurn: false },

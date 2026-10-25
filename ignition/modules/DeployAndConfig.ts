@@ -62,14 +62,18 @@ const TOURNAMENT_WORLD_ID_GROUP = 1n;
 const TOURNAMENT_EXTERNAL_NULLIFIER =
   318078722027557965998987370672697888390534537434722412480399796468873891570n;
 
-// Ship-pack tiers, shared between Ships.sol and ShipPurchaser.sol's
-// independent tierPrices arrays. TIER_USD_PRICES is the "~$1/ship with bulk
+// Ship-pack tiers, shared between Ships.sol's tierPrices and
+// ShipPurchaser.sol's flowTierPrices (both native-token prices; a production
+// deploy writes these into both). TIER_USD_PRICES is the "~$1/ship with bulk
 // discount" curve documented in docs/UTC_Price_Prediction_10k_Players.md —
 // both contracts' constructors hardcode these same numbers as raw
 // `X.XX ether` literals, which only prices ships near $1 each if 1 native
 // token ≈ $1 USD (true-ish for FLOW, false for ETH on Base).
 const TIER_SHIPS = [5, 11, 22, 40, 60];
 const TIER_USD_PRICES = [4.99, 9.99, 19.99, 34.99, 49.99];
+
+// RoguelikeResupply repair price in UTC wei per hull point: 1 UTC per 100 HP.
+const REPAIR_COST_PER_HP = parseEther("1") / 100n;
 
 // Fixed ETH/USD price used only for tests / non-production deploys, so the
 // test suite stays deterministic and never makes a network call. This is
@@ -601,6 +605,13 @@ const DeployModule = buildModule("DeployModule", (m) => {
     roguelikeNodeMap,
     roguelikeRun,
   ]);
+  // 1 UTC per 100 hull points repaired. The contract defaults to 0 (free).
+  const setRepairCostPerHPCall = m.call(
+    roguelikeResupply,
+    "setRepairCostPerHP",
+    [REPAIR_COST_PER_HP],
+    { id: "SetRepairCostPerHP" },
+  );
 
   // UA-05 fix (2026-09-29): lets RoguelikeNodeMap.removeChild refuse to
   // remove a node's last remaining child while an active run is actually
@@ -2299,11 +2310,16 @@ const DeployModule = buildModule("DeployModule", (m) => {
       { id: "SetShipsPurchaseInfo" },
     );
 
+    // ETH prices go only into ShipPurchaser's native-token array
+    // (purchaseUTCWithFlow). Its UTC prices (purchaseWithUTC) keep the
+    // constructor's 4.99/9.99/... UTC: writing ETH-sized numbers there, as
+    // this used to via setPurchaseInfo, sold 5 ships for ~0.002 UTC, which
+    // recycle for 0.5 UTC (found 2026-10-23).
     setShipPurchaserPurchaseInfoCall = m.call(
       shipPurchaser,
-      "setPurchaseInfo",
-      [TIER_SHIPS, tierPricesWei],
-      { id: "SetShipPurchaserPurchaseInfo" },
+      "setFlowTierPrices",
+      [tierPricesWei],
+      { id: "SetShipPurchaserFlowTierPrices" },
     );
   }
 
@@ -2657,6 +2673,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
 
     m.call(roguelikeResupply, "transferOwnership", [MAP_EDITOR], {
       id: "TransferRoguelikeResupplyOwnership",
+      after: [setRepairCostPerHPCall],
     });
 
     m.call(decBonusWinEffect, "transferOwnership", [MAP_EDITOR], {

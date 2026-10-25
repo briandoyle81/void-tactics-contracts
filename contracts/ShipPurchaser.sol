@@ -30,7 +30,14 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
     ];
 
     uint8[] public tierShips;
+    // UTC prices, used by purchaseWithUTC.
     uint[] public tierPrices;
+    // Native-token prices (ETH on Base), used by purchaseUTCWithFlow. Kept
+    // separate from tierPrices on 2026-10-23: the two functions used to share
+    // one array in different currencies, and the production deploy's ETH
+    // prices (~0.002 per pack) made purchaseWithUTC sell 5 ships for ~0.002
+    // UTC, which recycle for 0.5 UTC -- an unlimited UTC mint.
+    uint[] public flowTierPrices;
 
     mapping(address => uint) public referralCount;
     mapping(address => bool) public isAllowedToCreateShips;
@@ -41,17 +48,24 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
         universalCreditsMintable = IUniversalCredits(_universalCredits);
 
         tierShips = [5, 11, 22, 40, 60];
-        // Using same tier structure but with UC tokens instead of ether
+        // Using same tier structure but with UTC tokens instead of ether
         tierPrices = [
-            4.99 ether, // 4.99 UC
-            9.99 ether, // 9.99 UC
-            19.99 ether, // 19.99 UC
-            34.99 ether, // 34.99 UC
-            49.99 ether // 49.99 UC
+            4.99 ether, // 4.99 UTC
+            9.99 ether, // 9.99 UTC
+            19.99 ether, // 19.99 UTC
+            34.99 ether, // 34.99 UTC
+            49.99 ether // 49.99 UTC
+        ];
+        flowTierPrices = [
+            4.99 ether,
+            9.99 ether,
+            19.99 ether,
+            34.99 ether,
+            49.99 ether
         ];
     }
 
-    function purchaseWithUC(
+    function purchaseWithUTC(
         address _to,
         uint8 _tier,
         address _referral,
@@ -66,10 +80,10 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
             revert InsufficientFunds(price, balance);
         }
 
-        // Transfer UC tokens from buyer to this contract
+        // Transfer UTC tokens from buyer to this contract
         require(
             universalCredits.transferFrom(msg.sender, address(this), price),
-            "UC transfer failed"
+            "UTC transfer failed"
         );
 
         // Create ships for the buyer
@@ -92,11 +106,11 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
         address _to,
         uint _tier
     ) public payable nonReentrant {
-        if (_tier >= tierPrices.length) {
+        if (_tier >= flowTierPrices.length) {
             revert InvalidPurchase(_tier, msg.value);
         }
 
-        uint price = tierPrices[_tier];
+        uint price = flowTierPrices[_tier];
         if (msg.value != price) {
             revert InvalidPurchase(_tier, msg.value);
         }
@@ -124,7 +138,7 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
 
         uint referralAmount = (_salePrice * referralPercentage) / 100;
 
-        // Transfer UC tokens to referrer
+        // Transfer UTC tokens to referrer
         require(
             universalCredits.transfer(_referrer, referralAmount),
             "Referral transfer failed"
@@ -146,6 +160,21 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
         tierPrices = _tierPrices;
     }
 
+    function setFlowTierPrices(uint[] memory _flowTierPrices) public onlyOwner {
+        if (_flowTierPrices.length != tierShips.length) {
+            revert ArrayLengthMismatch();
+        }
+        flowTierPrices = _flowTierPrices;
+    }
+
+    function getFlowPurchaseInfo()
+        external
+        view
+        returns (uint8[] memory, uint[] memory)
+    {
+        return (tierShips, flowTierPrices);
+    }
+
     function getPurchaseInfo()
         external
         view
@@ -154,16 +183,16 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
         return (tierShips, tierPrices);
     }
 
-    function withdrawUC() public onlyOwner {
+    function withdrawUTC() public onlyOwner {
         uint balance = universalCredits.balanceOf(address(this));
         require(
             universalCredits.transfer(owner(), balance),
-            "UC withdrawal failed"
+            "UTC withdrawal failed"
         );
     }
 
-    // Burns UC this contract is already holding (from purchaseWithUC sales,
-    // net of referral payouts) directly, as an alternative to withdrawUC —
+    // Burns UTC this contract is already holding (from purchaseWithUTC sales,
+    // net of referral payouts) directly, as an alternative to withdrawUTC —
     // an on-chain-visible supply reduction instead of a claim about what
     // happened to withdrawn funds.
     function burnCollected(uint _amount) public onlyOwner {

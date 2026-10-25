@@ -62,9 +62,9 @@ zero recovery path, for anyone, including the owner. Identical bug class to the 
 **H-04** (`DroneYard` had the same gap; fixed by adding an `onlyOwner withdraw(address)` for UTC).
 
 **Fix:** add the same pattern `DroneYard`/`SinglePlayerMatch` already use — an
-`onlyOwner withdrawUC(address _to)` sweeping `universalCredits.balanceOf(address(this))`.
+`onlyOwner withdrawUTC(address _to)` sweeping `universalCredits.balanceOf(address(this))`.
 
-**Status: Fixed 2026-09-16.** Added `withdrawUC(address _to)` to `Lobbies.sol`, matching
+**Status: Fixed 2026-09-16.** Added `withdrawUTC(address _to)` to `Lobbies.sol`, matching
 `DroneYard.withdraw`'s exact shape (`onlyOwner`, sweeps `universalCredits.balanceOf(address(this))`
 via `transfer`, reverts `"UTC transfer failed"` on a falsy return, emits a new `Withdrawn(address
 indexed to, uint amount)` event — this contract didn't have one). `Lobbies.sol` has ample bytecode
@@ -258,7 +258,7 @@ ships, so the buyer only loses gas on the failed attempt, then can retry without
 **Fix (revert-on-receive half only), designed 2026-09-12, not yet implemented — no bytecode
 headroom in `Ships.sol` right now:** decouple the referral payout from the mint via a pull-payment/
 credit-balance model, so a hostile referrer can only forfeit their own payout, not block the
-buyer's purchase. This is the same shape `ShipPurchaser.withdrawUC()`/`withdrawFlow()` and the
+buyer's purchase. This is the same shape `ShipPurchaser.withdrawUTC()`/`withdrawFlow()` and the
 `DroneYard` H-04 fix already use elsewhere in this repo, not a new pattern.
 
 ```solidity
@@ -1117,7 +1117,7 @@ code (a misconfigured/zero/wrong-network address passed to a constructor, or a f
 succeeds silently rather than reverting — there's no return data for the ABI decoder to fail on.
 
 **Failure scenario (per site, if the relevant address were ever misconfigured):**
-- `ShipPurchaser.purchaseWithUC`: `universalCredits.transferFrom` succeeds (real, correctly-wired
+- `ShipPurchaser.purchaseWithUTC`: `universalCredits.transferFrom` succeeds (real, correctly-wired
   token) and pulls the buyer's real UTC; the subsequent `ships.createShips` silently no-ops — buyer
   pays real UTC and receives nothing, with no revert to warn them.
 - `DroneYard.modifyShip`: same shape — the UTC fee is really collected via `transferFrom`, then

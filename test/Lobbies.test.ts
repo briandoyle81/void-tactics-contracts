@@ -2331,7 +2331,7 @@ describe("Lobbies", function () {
         { client: { wallet: joiner } }
       );
       await expect(
-        joinerLobbiesForWithdraw.write.withdrawUC([joiner.account.address])
+        joinerLobbiesForWithdraw.write.withdrawUTC([joiner.account.address])
       ).to.be.rejectedWith("OwnableUnauthorizedAccount");
 
       // Without this fix, the 1 UTC locked above had no recovery path at
@@ -2345,7 +2345,7 @@ describe("Lobbies", function () {
       const recipientBalanceBefore = await universalCredits.read.balanceOf([
         recipient,
       ]);
-      await ownerLobbies.write.withdrawUC([recipient]);
+      await ownerLobbies.write.withdrawUTC([recipient]);
 
       expect(
         await universalCredits.read.balanceOf([lobbies.address])

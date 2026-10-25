@@ -62,10 +62,18 @@ a live price at deploy time rather than hardcoding a constant that goes stale th
 moves).
 
 **Action needed on both contracts** — `Ships.sol.setPurchaseInfo`/`setTiers` (ship-pack purchases
-paid directly in ETH) **and** `ShipPurchaser.sol.setPurchaseInfo` (UC-token ship purchases +
+paid directly in ETH) **and** `ShipPurchaser.sol.setPurchaseInfo` (UTC-token ship purchases +
 `purchaseUTCWithFlow`, which shares the same `tierPrices` array) each need this pushed via their
 own owner-gated setter — they are two independent arrays with the same current bug, not one shared
 fix.
+
+_**Correction (2026-10-23):** this was wrong for `ShipPurchaser`. Its `tierPrices` array served
+both `purchaseWithUTC` (priced in **UTC**) and `purchaseUTCWithFlow` (priced in **ETH**), so pushing
+ETH prices into it made UTC ship packs cost ~0.002 UTC for 5 ships, which recycle for 0.5 UTC: an
+unlimited UTC mint on the live Base Sepolia deploy. `ShipPurchaser` now has a separate
+`flowTierPrices` array for `purchaseUTCWithFlow`, and the production deploy writes ETH prices only
+there (`setFlowTierPrices`); `tierPrices` keeps its UTC constructor defaults. See
+`frontend-handoff-2026-10-23.md` §1._
 
 ## 3. `purchaseUTCWithFlow` was never 1:1 (corrected)
 
@@ -92,8 +100,8 @@ Flow (the mint-rate formula doesn't depend on chain at all, only the false 1:1 a
 
 ## 4. What's still true
 
-- UTC spent on `purchaseWithUC` ship purchases is transferred, not burned — it accumulates in
-  `ShipPurchaser`, withdrawable by the owner via `withdrawUC()`. Same for ETH paid into
+- UTC spent on `purchaseWithUTC` ship purchases is transferred, not burned — it accumulates in
+  `ShipPurchaser`, withdrawable by the owner via `withdrawUTC()`. Same for ETH paid into
   `Ships.purchaseWithFlow` / `ShipPurchaser.purchaseUTCWithFlow` (`withdrawFlow()`).
   `ShipPurchaser`'s referral payouts (0/10/20/35/50% by cumulative ships-sold tier, up to 50% at
   100k+ ships) draw down that same accumulated balance.

@@ -64,18 +64,18 @@ function purchaseWithFlow(address _to, uint8 _tier, address _referral, uint16 _v
 - Added `_variant` parameter (uint16)
 - Changed visibility: `public` → `external`
 
-#### `purchaseWithUC` - ShipPurchaser.sol
+#### `purchaseWithUTC` - ShipPurchaser.sol
 
 **Previous:**
 
 ```solidity
-function purchaseWithUC(address _to, uint _tier, address _referral) public nonReentrant
+function purchaseWithUTC(address _to, uint _tier, address _referral) public nonReentrant
 ```
 
 **Current:**
 
 ```solidity
-function purchaseWithUC(address _to, uint8 _tier, address _referral, uint16 _variant) public nonReentrant
+function purchaseWithUTC(address _to, uint8 _tier, address _referral, uint16 _variant) public nonReentrant
 ```
 
 **Changes:**
@@ -255,7 +255,7 @@ await ships.write.customizeShip([id, ship, true, false]);
 await ships.write.customizeShip([id, ship]);
 ```
 
-### 3. `purchaseWithFlow` and `purchaseWithUC` Tier Parameter Type Changed
+### 3. `purchaseWithFlow` and `purchaseWithUTC` Tier Parameter Type Changed
 
 **Previous:**
 

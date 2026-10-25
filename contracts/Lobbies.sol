@@ -832,7 +832,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
      * without this, every reserved-lobby's 1 UTC fee is permanently locked
      * in this contract — the ETH-only withdraw() above never touches it.
      */
-    function withdrawUC(address _to) external onlyOwner {
+    function withdrawUTC(address _to) external onlyOwner {
         uint amount = universalCredits.balanceOf(address(this));
         require(universalCredits.transfer(_to, amount), "UTC transfer failed");
         emit Withdrawn(_to, amount);

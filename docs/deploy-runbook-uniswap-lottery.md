@@ -145,7 +145,7 @@ Only run this after Phase 1 is live and you've confirmed
       with real funding.
 - [ ] Decide (or accept the defaults) for the script's optional env vars —
       see `scripts/deployUTCLotteryPool.ts`'s own header comment for the
-      full list (`REFERENCE_TIER_INDEX`, `LP_SEED_UC_AMOUNT`,
+      full list (`REFERENCE_TIER_INDEX`, `LP_SEED_UTC_AMOUNT`,
       `HOOK_OWNER_ADDRESS`, `DRY_RUN_ONLY`, `SKIP_SMOKE_TEST`).
 
 ### 2.2 Run it
@@ -169,7 +169,7 @@ retried like Phase 1:
 `--with-lottery-pool` runs this script only after the Ignition deploy
 succeeds. Its env vars (`MAP_EDITOR_KEY`, `SKIP_SMOKE_TEST`, ...) pass straight
 through. Before this date, re-running after a failure *after* the add-liquidity
-step (step 12) would source more UC and add a second LP seed. The script now
+step (step 12) would source more UTC and add a second LP seed. The script now
 skips sourcing, approve, and add-liquidity when the pool already holds at least
 ~90% of its seed. It reads that from PoolManager storage, so the check
 can't be fooled by someone adding dust liquidity.
@@ -178,7 +178,7 @@ can't be fooled by someone adding dust liquidity.
 
 Mines a CREATE2 salt against the real canonical deployment proxy, deploys
 `UTCLotteryHook`, computes an initial pool price from `ShipPurchaser`'s live
-mint rate, sources LP-seed UC via `purchaseUTCWithFlow`, initializes the real
+mint rate, sources LP-seed UTC via `purchaseUTCWithFlow`, initializes the real
 Uniswap v4 pool (**the one genuinely irreversible step** — see the script's
 header comment for why that's not treated as high-ceremony right now; also
 now owner-gated on the hook itself per the HA2-02 fix, and sent from
@@ -223,7 +223,7 @@ a direct state read before the script declares success.
   estimate). The script now sizes the default LP seed relative to the
   smoke-test sell size specifically (see `LP_SEED_TO_SMOKE_TEST_RATIO` in
   `deployUTCLotteryPool.ts`) so this shouldn't recur by default — if you set
-  `LP_SEED_UC_AMOUNT` explicitly, keep it comfortably above that same floor
+  `LP_SEED_UTC_AMOUNT` explicitly, keep it comfortably above that same floor
   (the script warns if it isn't) rather than assuming a small round-number
   seed is fine.
 

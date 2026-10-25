@@ -222,7 +222,7 @@ beyond knowing it can now surface from these two spots too, not just `retreatRun
 dashboard for this project's own team, not the player-facing app.
 
 ```solidity
-function withdrawUC(address _to) external onlyOwner;
+function withdrawUTC(address _to) external onlyOwner;
 event Withdrawn(address indexed to, uint amount);
 ```
 
