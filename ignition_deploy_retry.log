@@ -168,33 +168,33 @@
  ·····································|································|·································
  |  RenderAft                         ·                 2.578 (0.000)  ·                 3.203 (0.000)  │
  ·····································|································|·································
- |  RenderAft0                        ·                15.295 (0.000)  ·                15.325 (0.000)  │
+ |  RenderAft0                        ·                15.294 (0.000)  ·                15.324 (0.000)  │
  ·····································|································|·································
  |  RenderAft0V2                      ·                18.792 (0.000)  ·                18.822 (0.000)  │
  ·····································|································|·································
- |  RenderAft1                        ·                18.762 (0.000)  ·                18.792 (0.000)  │
+ |  RenderAft1                        ·                18.761 (0.000)  ·                18.791 (0.000)  │
  ·····································|································|·································
  |  RenderAft1V2                      ·                18.381 (0.000)  ·                18.411 (0.000)  │
  ·····································|································|·································
- |  RenderAft2                        ·                22.879 (0.000)  ·                22.909 (0.000)  │
+ |  RenderAft2                        ·                22.878 (0.000)  ·                22.908 (0.000)  │
  ·····································|································|·································
  |  RenderAft2V2                      ·                20.850 (0.000)  ·                20.880 (0.000)  │
  ·····································|································|·································
  |  RenderAftV2                       ·                 2.582 (0.000)  ·                 3.210 (0.000)  │
  ·····································|································|·································
- |  RenderArmor1                      ·                22.042 (0.000)  ·                22.072 (0.000)  │
+ |  RenderArmor1                      ·                22.041 (0.000)  ·                22.071 (0.000)  │
  ·····································|································|·································
  |  RenderArmor1V2                    ·                16.775 (0.000)  ·                16.806 (0.000)  │
  ·····································|································|·································
- |  RenderArmor2                      ·                20.147 (0.000)  ·                20.178 (0.000)  │
+ |  RenderArmor2                      ·                20.146 (0.000)  ·                20.177 (0.000)  │
  ·····································|································|·································
  |  RenderArmor2V2                    ·                21.239 (0.000)  ·                21.270 (0.000)  │
  ·····································|································|·································
- |  RenderArmor3                      ·                23.987 (0.000)  ·                24.018 (0.000)  │
+ |  RenderArmor3                      ·                23.986 (0.000)  ·                24.017 (0.000)  │
  ·····································|································|·································
  |  RenderArmor3V2                    ·                15.499 (0.000)  ·                15.529 (0.000)  │
  ·····································|································|·································
- |  RenderBaseBody                    ·                21.039 (0.000)  ·                21.069 (0.000)  │
+ |  RenderBaseBody                    ·                21.038 (0.000)  ·                21.068 (0.000)  │
  ·····································|································|·································
  |  RenderBaseBodyV2                  ·                23.164 (0.000)  ·                23.194 (0.000)  │
  ·····································|································|·································
@@ -214,19 +214,19 @@
  ·····································|································|·································
  |  RenderFore                        ·                 2.857 (0.000)  ·                 3.553 (0.000)  │
  ·····································|································|·································
- |  RenderFore0                       ·                19.447 (0.000)  ·                19.478 (0.000)  │
+ |  RenderFore0                       ·                19.446 (0.000)  ·                19.477 (0.000)  │
  ·····································|································|·································
  |  RenderFore0V2                     ·                16.620 (0.000)  ·                16.650 (0.000)  │
  ·····································|································|·································
- |  RenderFore1                       ·                21.172 (0.000)  ·                21.202 (0.000)  │
+ |  RenderFore1                       ·                21.171 (0.000)  ·                21.201 (0.000)  │
  ·····································|································|·································
  |  RenderFore1V2                     ·                23.190 (0.000)  ·                23.221 (0.000)  │
  ·····································|································|·································
- |  RenderFore2                       ·                15.288 (0.000)  ·                15.318 (0.000)  │
+ |  RenderFore2                       ·                15.287 (0.000)  ·                15.317 (0.000)  │
  ·····································|································|·································
  |  RenderFore2V2                     ·                20.145 (0.000)  ·                20.175 (0.000)  │
  ·····································|································|·································
- |  RenderForePerfect                 ·                18.375 (0.000)  ·                18.405 (0.000)  │
+ |  RenderForePerfect                 ·                18.374 (0.000)  ·                18.404 (0.000)  │
  ·····································|································|·································
  |  RenderForePerfectV2               ·                20.214 (0.000)  ·                20.244 (0.000)  │
  ·····································|································|·································
@@ -234,29 +234,29 @@
  ·····································|································|·································
  |  RenderMetadata                    ·                 7.803 (0.000)  ·                 8.123 (0.000)  │
  ·····································|································|·································
- |  RenderShield1                     ·                22.553 (0.000)  ·                22.583 (0.000)  │
+ |  RenderShield1                     ·                22.552 (0.000)  ·                22.582 (0.000)  │
  ·····································|································|·································
  |  RenderShield1V2                   ·                21.202 (0.000)  ·                21.232 (0.000)  │
  ·····································|································|·································
- |  RenderShield2                     ·                20.066 (0.000)  ·                20.097 (0.000)  │
+ |  RenderShield2                     ·                20.065 (0.000)  ·                20.096 (0.000)  │
  ·····································|································|·································
  |  RenderShield2V2                   ·                23.441 (0.000)  ·                23.472 (0.000)  │
  ·····································|································|·································
- |  RenderShield3                     ·                23.692 (0.000)  ·                23.723 (0.000)  │
+ |  RenderShield3                     ·                23.691 (0.000)  ·                23.722 (0.000)  │
  ·····································|································|·································
  |  RenderShield3V2                   ·                20.759 (0.000)  ·                20.789 (0.000)  │
  ·····································|································|·································
  |  RenderSpecial                     ·                 2.734 (0.000)  ·                 3.364 (0.000)  │
  ·····································|································|·································
- |  RenderSpecial1                    ·                23.125 (0.000)  ·                23.155 (0.000)  │
+ |  RenderSpecial1                    ·                23.124 (0.000)  ·                23.154 (0.000)  │
  ·····································|································|·································
  |  RenderSpecial1V2                  ·                21.225 (0.000)  ·                21.255 (0.000)  │
  ·····································|································|·································
- |  RenderSpecial2                    ·                14.726 (0.000)  ·                14.756 (0.000)  │
+ |  RenderSpecial2                    ·                14.725 (0.000)  ·                14.755 (0.000)  │
  ·····································|································|·································
  |  RenderSpecial2V2                  ·                20.031 (0.000)  ·                20.062 (0.000)  │
  ·····································|································|·································
- |  RenderSpecial3                    ·                23.728 (0.000)  ·                23.758 (0.000)  │
+ |  RenderSpecial3                    ·                23.727 (0.000)  ·                23.757 (0.000)  │
  ·····································|································|·································
  |  RenderSpecial3V2                  ·                11.027 (0.000)  ·                11.058 (0.000)  │
  ·····································|································|·································
@@ -278,19 +278,19 @@
  ·····································|································|·································
  |  RenderWeapon                      ·                 2.822 (0.000)  ·                 3.520 (0.000)  │
  ·····································|································|·································
- |  RenderWeapon1                     ·                 8.586 (0.000)  ·                 8.616 (0.000)  │
+ |  RenderWeapon1                     ·                 8.585 (0.000)  ·                 8.615 (0.000)  │
  ·····································|································|·································
  |  RenderWeapon1V2                   ·                11.931 (0.000)  ·                11.961 (0.000)  │
  ·····································|································|·································
- |  RenderWeapon2                     ·                10.251 (0.000)  ·                10.281 (0.000)  │
+ |  RenderWeapon2                     ·                10.250 (0.000)  ·                10.280 (0.000)  │
  ·····································|································|·································
  |  RenderWeapon2V2                   ·                 9.061 (0.000)  ·                 9.091 (0.000)  │
  ·····································|································|·································
- |  RenderWeapon3                     ·                21.030 (0.000)  ·                21.061 (0.000)  │
+ |  RenderWeapon3                     ·                21.029 (0.000)  ·                21.060 (0.000)  │
  ·····································|································|·································
  |  RenderWeapon3V2                   ·                 8.299 (0.000)  ·                 8.329 (0.000)  │
  ·····································|································|·································
- |  RenderWeapon4                     ·                16.494 (0.000)  ·                16.524 (0.000)  │
+ |  RenderWeapon4                     ·                16.493 (0.000)  ·                16.523 (0.000)  │
  ·····································|································|·································
  |  RenderWeapon4V2                   ·                10.179 (0.000)  ·                10.209 (0.000)  │
  ·····································|································|·································
@@ -322,15 +322,15 @@
  ·····································|································|·································
  |  ShipGrantWinEffect                ·                 7.521 (0.000)  ·                 7.790 (0.000)  │
  ·····································|································|·································
- |  ShipPurchaser                     ·                 5.257 (0.000)  ·                 6.309 (0.000)  │
+ |  ShipPurchaser                     ·                 5.682 (0.000)  ·                 6.829 (0.000)  │
  ·····································|································|·································
- |  Ships                             ·                23.920 (0.000)  ·                25.072 (0.000)  │
+ |  Ships                             ·                23.963 (0.000)  ·                25.115 (0.000)  │
  ·····································|································|·································
  |  ShipsRouter                       ·                 6.565 (0.000)  ·                 7.080 (0.000)  │
  ·····································|································|·································
  |  SignedMath                        ·                 0.084 (0.000)  ·                 0.138 (0.000)  │
  ·····································|································|·································
- |  SinglePlayerMatch                 ·                15.959 (0.000)  ·                16.464 (0.000)  │
+ |  SinglePlayerMatch                 ·                15.960 (0.000)  ·                16.465 (0.000)  │
  ·····································|································|·································
  |  SinglePlayerOrchestratorRegistry  ·                 0.854 (0.000)  ·                 1.011 (0.000)  │
  ·····································|································|·································
@@ -372,7 +372,7 @@
  ·····································|································|·································
  |  VariantPurchaseGate               ·                 1.260 (0.000)  ·                 1.416 (0.000)  │
  ·------------------------------------|--------------------------------|--------------------------------·
-[DeployAndConfig] Using cached ETH/USD price: $2400.97 (fetched within the last 24h)
+[DeployAndConfig] Using cached ETH/USD price: $2358.97 (fetched within the last 24h)
 Hardhat Ignition starting for [ DeployModule ]...[2K[1GHardhat Ignition 🚀
 
 Resuming existing deployment from ./ignition/deployments/chain-84532
@@ -380,944 +380,1009 @@ Resuming existing deployment from ./ignition/deployments/chain-84532
 Deploying [ DeployModule ]
 
 Batch #1
+  Executing DeployModule#AddRoguelikeEdge5...
+  Executing DeployModule#CreateRoguelikeR02Node...
+  Executing DeployModule#SetRoguelikeR01WinEffects...
+
+[5A[0JBatch #1
+  Executed DeployModule#AddRoguelikeEdge5
+  Executing DeployModule#CreateRoguelikeR02Node...
+  Executing DeployModule#SetRoguelikeR01WinEffects...
+
+[5A[0JBatch #1
+  Executed DeployModule#AddRoguelikeEdge5
+  Executed DeployModule#CreateRoguelikeR02Node
+  Executing DeployModule#SetRoguelikeR01WinEffects...
+
+[5A[0JBatch #1
+  Executed DeployModule#AddRoguelikeEdge5
+  Executed DeployModule#CreateRoguelikeR02Node
+  Executed DeployModule#SetRoguelikeR01WinEffects
+
+[5A[0JBatch #1
+  Executed DeployModule#AddRoguelikeEdge5
+  Executed DeployModule#CreateRoguelikeR02Node
+  Executed DeployModule#SetRoguelikeR01WinEffects
+
+Batch #2
+  Executing DeployModule#AddRoguelikeEdge6...
+  Executing DeployModule#CreateRoguelikeR03Node...
+
+[4A[0JBatch #2
+  Executing DeployModule#AddRoguelikeEdge6...
+  Executing DeployModule#CreateRoguelikeR03Node...
+
+[4A[0JBatch #2
+  Executing DeployModule#AddRoguelikeEdge6...
+  Executing DeployModule#CreateRoguelikeR03Node...
+
+[4A[0JBatch #2
+  Executed DeployModule#AddRoguelikeEdge6
+  Executing DeployModule#CreateRoguelikeR03Node...
+
+[4A[0JBatch #2
+  Executed DeployModule#AddRoguelikeEdge6
+  Executed DeployModule#CreateRoguelikeR03Node
+
+[4A[0JBatch #2
+  Executed DeployModule#AddRoguelikeEdge6
+  Executed DeployModule#CreateRoguelikeR03Node
+
+Batch #3
+  Executing DeployModule#AddRoguelikeEdge7...
+  Executing DeployModule#CreateRoguelikeR04Node...
+
+[4A[0JBatch #3
+  Executing DeployModule#AddRoguelikeEdge7...
+  Executing DeployModule#CreateRoguelikeR04Node...
+
+[4A[0JBatch #3
+  Executing DeployModule#AddRoguelikeEdge7...
+  Executing DeployModule#CreateRoguelikeR04Node...
+
+[4A[0JBatch #3
+  Executed DeployModule#AddRoguelikeEdge7
+  Executing DeployModule#CreateRoguelikeR04Node...
+
+[4A[0JBatch #3
+  Executed DeployModule#AddRoguelikeEdge7
+  Executed DeployModule#CreateRoguelikeR04Node
+
+[4A[0JBatch #3
+  Executed DeployModule#AddRoguelikeEdge7
+  Executed DeployModule#CreateRoguelikeR04Node
+
+Batch #4
   Executing DeployModule#AddRoguelikeEdge8...
   Executing DeployModule#CreateRoguelikeR05Node...
 
-[4A[0JBatch #1
+[4A[0JBatch #4
+  Executing DeployModule#AddRoguelikeEdge8...
+  Executing DeployModule#CreateRoguelikeR05Node...
+
+[4A[0JBatch #4
+  Executing DeployModule#AddRoguelikeEdge8...
+  Executing DeployModule#CreateRoguelikeR05Node...
+
+[4A[0JBatch #4
   Executed DeployModule#AddRoguelikeEdge8
   Executing DeployModule#CreateRoguelikeR05Node...
 
-[4A[0JBatch #1
+[4A[0JBatch #4
   Executed DeployModule#AddRoguelikeEdge8
   Executed DeployModule#CreateRoguelikeR05Node
 
-[4A[0JBatch #1
+[4A[0JBatch #4
   Executed DeployModule#AddRoguelikeEdge8
   Executed DeployModule#CreateRoguelikeR05Node
-
-Batch #2
-  Executing DeployModule#AddRoguelikeEdge9...
-
-[3A[0JBatch #2
-  Executing DeployModule#AddRoguelikeEdge9...
-
-[3A[0JBatch #2
-  Executed DeployModule#AddRoguelikeEdge9
-
-[3A[0JBatch #2
-  Executed DeployModule#AddRoguelikeEdge9
-
-Batch #3
-  Executing DeployModule#AddRoguelikeEdge10...
-
-[3A[0JBatch #3
-  Executing DeployModule#AddRoguelikeEdge10...
-
-[3A[0JBatch #3
-  Executed DeployModule#AddRoguelikeEdge10
-
-[3A[0JBatch #3
-  Executed DeployModule#AddRoguelikeEdge10
-
-Batch #4
-  Executing DeployModule#AddRoguelikeEdge11...
-
-[3A[0JBatch #4
-  Executing DeployModule#AddRoguelikeEdge11...
-
-[3A[0JBatch #4
-  Executed DeployModule#AddRoguelikeEdge11
-
-[3A[0JBatch #4
-  Executed DeployModule#AddRoguelikeEdge11
 
 Batch #5
-  Executing DeployModule#AddRoguelikeEdge12...
+  Executing DeployModule#AddRoguelikeEdge9...
 
 [3A[0JBatch #5
-  Executing DeployModule#AddRoguelikeEdge12...
+  Executing DeployModule#AddRoguelikeEdge9...
 
 [3A[0JBatch #5
-  Executed DeployModule#AddRoguelikeEdge12
+  Executed DeployModule#AddRoguelikeEdge9
 
 [3A[0JBatch #5
-  Executed DeployModule#AddRoguelikeEdge12
+  Executed DeployModule#AddRoguelikeEdge9
 
 Batch #6
-  Executing DeployModule#AddRoguelikeEdge13...
+  Executing DeployModule#AddRoguelikeEdge10...
 
 [3A[0JBatch #6
-  Executing DeployModule#AddRoguelikeEdge13...
+  Executing DeployModule#AddRoguelikeEdge10...
 
 [3A[0JBatch #6
-  Executed DeployModule#AddRoguelikeEdge13
+  Executed DeployModule#AddRoguelikeEdge10
 
 [3A[0JBatch #6
-  Executed DeployModule#AddRoguelikeEdge13
+  Executed DeployModule#AddRoguelikeEdge10
 
 Batch #7
-  Executing DeployModule#AddRoguelikeEdge14...
+  Executing DeployModule#AddRoguelikeEdge11...
 
 [3A[0JBatch #7
-  Executing DeployModule#AddRoguelikeEdge14...
+  Executing DeployModule#AddRoguelikeEdge11...
 
 [3A[0JBatch #7
-  Executed DeployModule#AddRoguelikeEdge14
+  Executed DeployModule#AddRoguelikeEdge11
 
 [3A[0JBatch #7
-  Executed DeployModule#AddRoguelikeEdge14
+  Executed DeployModule#AddRoguelikeEdge11
 
 Batch #8
-  Executing DeployModule#AddRoguelikeEdge15...
+  Executing DeployModule#AddRoguelikeEdge12...
 
 [3A[0JBatch #8
-  Executing DeployModule#AddRoguelikeEdge15...
+  Executing DeployModule#AddRoguelikeEdge12...
 
 [3A[0JBatch #8
-  Executed DeployModule#AddRoguelikeEdge15
+  Executed DeployModule#AddRoguelikeEdge12
 
 [3A[0JBatch #8
-  Executed DeployModule#AddRoguelikeEdge15
+  Executed DeployModule#AddRoguelikeEdge12
 
 Batch #9
-  Executing DeployModule#AddRoguelikeEdge16...
+  Executing DeployModule#AddRoguelikeEdge13...
 
 [3A[0JBatch #9
-  Executing DeployModule#AddRoguelikeEdge16...
+  Executing DeployModule#AddRoguelikeEdge13...
 
 [3A[0JBatch #9
-  Executed DeployModule#AddRoguelikeEdge16
+  Executed DeployModule#AddRoguelikeEdge13
 
 [3A[0JBatch #9
-  Executed DeployModule#AddRoguelikeEdge16
+  Executed DeployModule#AddRoguelikeEdge13
 
 Batch #10
-  Executing DeployModule#AddRoguelikeEdge17...
+  Executing DeployModule#AddRoguelikeEdge14...
 
 [3A[0JBatch #10
-  Executing DeployModule#AddRoguelikeEdge17...
+  Executing DeployModule#AddRoguelikeEdge14...
 
 [3A[0JBatch #10
-  Executed DeployModule#AddRoguelikeEdge17
+  Executed DeployModule#AddRoguelikeEdge14
 
 [3A[0JBatch #10
-  Executed DeployModule#AddRoguelikeEdge17
+  Executed DeployModule#AddRoguelikeEdge14
 
 Batch #11
-  Executing DeployModule#AddRoguelikeEdge18...
+  Executing DeployModule#AddRoguelikeEdge15...
 
 [3A[0JBatch #11
-  Executing DeployModule#AddRoguelikeEdge18...
+  Executing DeployModule#AddRoguelikeEdge15...
 
 [3A[0JBatch #11
-  Executed DeployModule#AddRoguelikeEdge18
+  Executed DeployModule#AddRoguelikeEdge15
 
 [3A[0JBatch #11
-  Executed DeployModule#AddRoguelikeEdge18
+  Executed DeployModule#AddRoguelikeEdge15
 
 Batch #12
-  Executing DeployModule#AddRoguelikeEdge19...
+  Executing DeployModule#AddRoguelikeEdge16...
 
 [3A[0JBatch #12
-  Executing DeployModule#AddRoguelikeEdge19...
+  Executing DeployModule#AddRoguelikeEdge16...
 
 [3A[0JBatch #12
-  Executed DeployModule#AddRoguelikeEdge19
+  Executed DeployModule#AddRoguelikeEdge16
 
 [3A[0JBatch #12
-  Executed DeployModule#AddRoguelikeEdge19
+  Executed DeployModule#AddRoguelikeEdge16
 
 Batch #13
-  Executing DeployModule#AddRoguelikeEdge20...
+  Executing DeployModule#AddRoguelikeEdge17...
 
 [3A[0JBatch #13
-  Executing DeployModule#AddRoguelikeEdge20...
+  Executing DeployModule#AddRoguelikeEdge17...
 
 [3A[0JBatch #13
-  Executed DeployModule#AddRoguelikeEdge20
+  Executed DeployModule#AddRoguelikeEdge17
 
 [3A[0JBatch #13
-  Executed DeployModule#AddRoguelikeEdge20
+  Executed DeployModule#AddRoguelikeEdge17
 
 Batch #14
-  Executing DeployModule#AddRoguelikeEdge21...
+  Executing DeployModule#AddRoguelikeEdge18...
 
 [3A[0JBatch #14
-  Executing DeployModule#AddRoguelikeEdge21...
+  Executing DeployModule#AddRoguelikeEdge18...
 
 [3A[0JBatch #14
-  Executed DeployModule#AddRoguelikeEdge21
+  Executed DeployModule#AddRoguelikeEdge18
 
 [3A[0JBatch #14
-  Executed DeployModule#AddRoguelikeEdge21
+  Executed DeployModule#AddRoguelikeEdge18
 
 Batch #15
-  Executing DeployModule#AddRoguelikeEdge22...
+  Executing DeployModule#AddRoguelikeEdge19...
 
 [3A[0JBatch #15
-  Executing DeployModule#AddRoguelikeEdge22...
+  Executing DeployModule#AddRoguelikeEdge19...
 
 [3A[0JBatch #15
-  Executed DeployModule#AddRoguelikeEdge22
+  Executed DeployModule#AddRoguelikeEdge19
 
 [3A[0JBatch #15
-  Executed DeployModule#AddRoguelikeEdge22
+  Executed DeployModule#AddRoguelikeEdge19
 
 Batch #16
-  Executing DeployModule#AddRoguelikeEdge23...
+  Executing DeployModule#AddRoguelikeEdge20...
 
 [3A[0JBatch #16
-  Executing DeployModule#AddRoguelikeEdge23...
+  Executing DeployModule#AddRoguelikeEdge20...
 
 [3A[0JBatch #16
-  Executed DeployModule#AddRoguelikeEdge23
+  Executed DeployModule#AddRoguelikeEdge20
 
 [3A[0JBatch #16
-  Executed DeployModule#AddRoguelikeEdge23
+  Executed DeployModule#AddRoguelikeEdge20
 
 Batch #17
-  Executing DeployModule#AddRoguelikeEdge24...
+  Executing DeployModule#AddRoguelikeEdge21...
 
 [3A[0JBatch #17
-  Executing DeployModule#AddRoguelikeEdge24...
+  Executing DeployModule#AddRoguelikeEdge21...
 
 [3A[0JBatch #17
-  Executed DeployModule#AddRoguelikeEdge24
+  Executed DeployModule#AddRoguelikeEdge21
 
 [3A[0JBatch #17
-  Executed DeployModule#AddRoguelikeEdge24
+  Executed DeployModule#AddRoguelikeEdge21
 
 Batch #18
-  Executing DeployModule#AddRoguelikeEdge25...
+  Executing DeployModule#AddRoguelikeEdge22...
 
 [3A[0JBatch #18
-  Executing DeployModule#AddRoguelikeEdge25...
+  Executing DeployModule#AddRoguelikeEdge22...
 
 [3A[0JBatch #18
-  Executed DeployModule#AddRoguelikeEdge25
+  Executed DeployModule#AddRoguelikeEdge22
 
 [3A[0JBatch #18
-  Executed DeployModule#AddRoguelikeEdge25
+  Executed DeployModule#AddRoguelikeEdge22
 
 Batch #19
-  Executing DeployModule#AddRoguelikeEdge26...
+  Executing DeployModule#AddRoguelikeEdge23...
 
 [3A[0JBatch #19
-  Executing DeployModule#AddRoguelikeEdge26...
+  Executing DeployModule#AddRoguelikeEdge23...
 
 [3A[0JBatch #19
-  Executed DeployModule#AddRoguelikeEdge26
+  Executed DeployModule#AddRoguelikeEdge23
 
 [3A[0JBatch #19
-  Executed DeployModule#AddRoguelikeEdge26
+  Executed DeployModule#AddRoguelikeEdge23
 
 Batch #20
-  Executing DeployModule#AddRoguelikeEdge27...
+  Executing DeployModule#AddRoguelikeEdge24...
 
 [3A[0JBatch #20
-  Executing DeployModule#AddRoguelikeEdge27...
+  Executing DeployModule#AddRoguelikeEdge24...
 
 [3A[0JBatch #20
-  Executed DeployModule#AddRoguelikeEdge27
+  Executed DeployModule#AddRoguelikeEdge24
 
 [3A[0JBatch #20
-  Executed DeployModule#AddRoguelikeEdge27
+  Executed DeployModule#AddRoguelikeEdge24
 
 Batch #21
-  Executing DeployModule#AddRoguelikeEdge28...
+  Executing DeployModule#AddRoguelikeEdge25...
 
 [3A[0JBatch #21
-  Executing DeployModule#AddRoguelikeEdge28...
+  Executing DeployModule#AddRoguelikeEdge25...
 
 [3A[0JBatch #21
-  Executed DeployModule#AddRoguelikeEdge28
+  Executed DeployModule#AddRoguelikeEdge25
 
 [3A[0JBatch #21
-  Executed DeployModule#AddRoguelikeEdge28
+  Executed DeployModule#AddRoguelikeEdge25
 
 Batch #22
-  Executing DeployModule#AddRoguelikeEdge29...
+  Executing DeployModule#AddRoguelikeEdge26...
 
 [3A[0JBatch #22
-  Executing DeployModule#AddRoguelikeEdge29...
+  Executing DeployModule#AddRoguelikeEdge26...
 
 [3A[0JBatch #22
-  Executed DeployModule#AddRoguelikeEdge29
+  Executed DeployModule#AddRoguelikeEdge26
 
 [3A[0JBatch #22
-  Executed DeployModule#AddRoguelikeEdge29
+  Executed DeployModule#AddRoguelikeEdge26
 
 Batch #23
-  Executing DeployModule#AddRoguelikeEdge30...
+  Executing DeployModule#AddRoguelikeEdge27...
 
 [3A[0JBatch #23
-  Executing DeployModule#AddRoguelikeEdge30...
+  Executing DeployModule#AddRoguelikeEdge27...
 
 [3A[0JBatch #23
-  Executed DeployModule#AddRoguelikeEdge30
+  Executed DeployModule#AddRoguelikeEdge27
 
 [3A[0JBatch #23
-  Executed DeployModule#AddRoguelikeEdge30
+  Executed DeployModule#AddRoguelikeEdge27
 
 Batch #24
-  Executing DeployModule#AddRoguelikeEdge31...
+  Executing DeployModule#AddRoguelikeEdge28...
 
 [3A[0JBatch #24
-  Executing DeployModule#AddRoguelikeEdge31...
+  Executing DeployModule#AddRoguelikeEdge28...
 
 [3A[0JBatch #24
-  Executed DeployModule#AddRoguelikeEdge31
+  Executed DeployModule#AddRoguelikeEdge28
 
 [3A[0JBatch #24
-  Executed DeployModule#AddRoguelikeEdge31
+  Executed DeployModule#AddRoguelikeEdge28
 
 Batch #25
-  Executing DeployModule#AddRoguelikeEdge32...
+  Executing DeployModule#AddRoguelikeEdge29...
 
 [3A[0JBatch #25
-  Executing DeployModule#AddRoguelikeEdge32...
+  Executing DeployModule#AddRoguelikeEdge29...
 
 [3A[0JBatch #25
-  Executed DeployModule#AddRoguelikeEdge32
+  Executed DeployModule#AddRoguelikeEdge29
 
 [3A[0JBatch #25
-  Executed DeployModule#AddRoguelikeEdge32
+  Executed DeployModule#AddRoguelikeEdge29
 
 Batch #26
-  Executing DeployModule#AddRoguelikeEdge33...
+  Executing DeployModule#AddRoguelikeEdge30...
 
 [3A[0JBatch #26
-  Executing DeployModule#AddRoguelikeEdge33...
+  Executing DeployModule#AddRoguelikeEdge30...
 
 [3A[0JBatch #26
-  Executed DeployModule#AddRoguelikeEdge33
+  Executed DeployModule#AddRoguelikeEdge30
 
 [3A[0JBatch #26
-  Executed DeployModule#AddRoguelikeEdge33
+  Executed DeployModule#AddRoguelikeEdge30
 
 Batch #27
-  Executing DeployModule#AddRoguelikeEdge34...
+  Executing DeployModule#AddRoguelikeEdge31...
 
 [3A[0JBatch #27
-  Executing DeployModule#AddRoguelikeEdge34...
+  Executing DeployModule#AddRoguelikeEdge31...
 
 [3A[0JBatch #27
-  Executed DeployModule#AddRoguelikeEdge34
+  Executed DeployModule#AddRoguelikeEdge31
 
 [3A[0JBatch #27
-  Executed DeployModule#AddRoguelikeEdge34
+  Executed DeployModule#AddRoguelikeEdge31
 
 Batch #28
-  Executing DeployModule#TransferRoguelikeNodeMapOwnership...
+  Executing DeployModule#AddRoguelikeEdge32...
 
 [3A[0JBatch #28
-  Executing DeployModule#TransferRoguelikeNodeMapOwnership...
+  Executing DeployModule#AddRoguelikeEdge32...
 
 [3A[0JBatch #28
+  Executed DeployModule#AddRoguelikeEdge32
+
+[3A[0JBatch #28
+  Executed DeployModule#AddRoguelikeEdge32
+
+Batch #29
+  Executing DeployModule#AddRoguelikeEdge33...
+
+[3A[0JBatch #29
+  Executing DeployModule#AddRoguelikeEdge33...
+
+[3A[0JBatch #29
+  Executed DeployModule#AddRoguelikeEdge33
+
+[3A[0JBatch #29
+  Executed DeployModule#AddRoguelikeEdge33
+
+Batch #30
+  Executing DeployModule#AddRoguelikeEdge34...
+
+[3A[0JBatch #30
+  Executing DeployModule#AddRoguelikeEdge34...
+
+[3A[0JBatch #30
+  Executed DeployModule#AddRoguelikeEdge34
+
+[3A[0JBatch #30
+  Executed DeployModule#AddRoguelikeEdge34
+
+Batch #31
+  Executing DeployModule#AddRoguelikeEdge35...
+
+[3A[0JBatch #31
+  Executing DeployModule#AddRoguelikeEdge35...
+
+[3A[0JBatch #31
+  Executed DeployModule#AddRoguelikeEdge35
+
+[3A[0JBatch #31
+  Executed DeployModule#AddRoguelikeEdge35
+
+Batch #32
+  Executing DeployModule#TransferRoguelikeNodeMapOwnership...
+
+[3A[0JBatch #32
+  Executing DeployModule#TransferRoguelikeNodeMapOwnership...
+
+[3A[0JBatch #32
   Executed DeployModule#TransferRoguelikeNodeMapOwnership
 
-[3A[0JBatch #28
+[3A[0JBatch #32
   Executed DeployModule#TransferRoguelikeNodeMapOwnership
 
 [ DeployModule ] successfully deployed 🚀
 
 Deployed Addresses
 
-DeployModule#AIBehaviorRegistry - 0x48379F29Ce76f255aaA9a8cEa9e4A422560411a3
-DeployModule#AIShips - 0xD5e925F5457206260434937a779318FEBA012660
-DeployModule#DestroyRewardLib - 0x297abc496976E0A79F0FCCd89Fe9C54A9E070B5B
-DeployModule#DroneEnergyCores - 0x486417b4664B055604e72734EBec049E2dc1B25F
-DeployModule#DroneNames - 0x405bC73dF7480EAd0C3E4D257E8FdC92BedEb0a8
-DeployModule#FactionRewardTokenRegistry - 0x98B631c5C94a9567aD8761877094D9c29B28bf23
-DeployModule#GameEngineRegistry - 0xc3429052845186B2c6Ae07E006E663A853F782E4
-DeployModule#GameResults - 0xc167721564522A606d23C687B01084F42DA70C7B
-DeployModule#Maps - 0x21a5eE53Bd7483F125c32336205E5F8a9257E668
-DeployModule#RamResolver - 0xAc2548E746CEEA1493E71d617956C2753fD9cECA
-DeployModule#RandomManager - 0xE8d26721C823b12b47d73a39ed692E7ee5BF9853
-DeployModule#RenderAft0 - 0xF1b3cB8A6Cfc97C57c7CFA48104164c01D6d651B
-DeployModule#RenderAft0V2 - 0xaCc7f2fC13587bfc1D637Ae7B02367F82578d1D9
-DeployModule#RenderAft1 - 0xfd0E7321cd123E866C3A96f3ab900d8681B45F7C
-DeployModule#RenderAft1V2 - 0x9CD533207c9B2D067203A68248b725b0294680c2
-DeployModule#RenderAft2 - 0xD0fE65F037aa5C2D11A899e4Ff1738ff78Fb42BF
-DeployModule#RenderAft2V2 - 0x9C11BEe9764909A20B7C4559c8176bbCad1a4341
-DeployModule#RenderArmor1 - 0xF07ddaA883A8c87c195dAE3A88639F97016c52d9
-DeployModule#RenderArmor1V2 - 0x0a8D63030950F082f70A5CCf7d698748026E09D7
-DeployModule#RenderArmor2 - 0x1a4aC42ABa434325D7389BbB2946B9A6D88DB707
-DeployModule#RenderArmor2V2 - 0x2e6E7b6B76D6c3E2CeF171e60ff49E51E6AB5be1
-DeployModule#RenderArmor3 - 0x68f975573127B73062B40d5065fCBd5010690D0D
-DeployModule#RenderArmor3V2 - 0xa793306cee598E90B67ECb41Cd7051745653f24F
-DeployModule#RenderBaseBody - 0xe520FF292DF809d48e381f628E905a727F40aeaF
-DeployModule#RenderBaseBodyV2 - 0xa2daCD10a48D0091E91093aD993194082bB771f5
-DeployModule#RenderExplosion1 - 0x17b58BfC6bDB2F4584fd120dA44e801FE0855826
-DeployModule#RenderExplosion1V2 - 0x1633285685cD9B2f17aa7125302E3Da2C51490E2
-DeployModule#RenderExplosion2 - 0x18D3641c6fbc470957eaB5c8777DFA3b7Cda4782
-DeployModule#RenderExplosion2V2 - 0x551d2E3F35A880933fC26Cc833C781ad30114926
-DeployModule#RenderExplosion3V2 - 0xB29881A3879339f987be8ba410a795DB641aeA1A
-DeployModule#RenderFore0 - 0x3342B670fbF035Eaa2F1b96AaA8A1618FC2e6cA8
-DeployModule#RenderFore0V2 - 0x37B32533729d2ad949863B3A6030FCaa9bB2f911
-DeployModule#RenderFore1 - 0x032B2e438d4D4467cb67869C612c57464E12EC99
-DeployModule#RenderFore1V2 - 0x67146bFFd418b40A2Ef9FF5Afe803D7E669A7Ee6
-DeployModule#RenderFore2 - 0xB8B5A549c120CD9Ba8c63ECF3d3D337e8e49f2A2
-DeployModule#RenderFore2V2 - 0x435a3949Bf531c2Cea071aAaB27D9590dF341cAB
-DeployModule#RenderForePerfect - 0x6BcDb7b9AFF2Cd62B20b61373efB2a9C1E3734d2
-DeployModule#RenderForePerfectV2 - 0x3e3bC1d31db719926ce1a60bd39b227edb4a39c0
-DeployModule#RenderShield1 - 0xB72dB4342F810031aecFC22438a1A1a5386D6C57
-DeployModule#RenderShield1V2 - 0xD5AFf01b039203b4E5A6008fb9E21D31Cef9e02A
-DeployModule#RenderShield2 - 0xdf8717DD955F05011f8B13d863E27E4E149ED5AE
-DeployModule#RenderShield2V2 - 0xd6F44Ed7917fB3b41277Bd7445d99E0aAEDA72cD
-DeployModule#RenderShield3 - 0x757EF75c0760862d2DDd6e6b805743d40ec0B0f3
-DeployModule#RenderShield3V2 - 0x596857Fd747a12718c3818AbDd3158c7074D79e2
-DeployModule#RenderSpecial1 - 0xE894fdaAC6dE3248550A9699A56C4353486576Ab
-DeployModule#RenderSpecial1V2 - 0xf807f7Ca1Ba496BCf3848F93f1F05D4bf28D88E6
-DeployModule#RenderSpecial2 - 0xD0f5BE4e8f30EE1b16B4b760a0587769d10eB32A
-DeployModule#RenderSpecial2V2 - 0xDb377Efa514E90f405502a473f7130bF79b22610
-DeployModule#RenderSpecial3 - 0x0A0A3A22e69571200400d60CCBCE1Fd9b27a4A76
-DeployModule#RenderSpecial3V2 - 0x16a7302193BeAbd5c5dD9455c960C281106541a6
-DeployModule#RenderUnconstructed1 - 0xAA2E52aF0ccC552cc8d3aD0BE54bE7AeeEf05f10
-DeployModule#RenderUnconstructed1V2 - 0xAf9C002a223E3a36A9F05aBFce832ED13059871b
-DeployModule#RenderUnconstructed2 - 0xCAfD2436D8C2F4736C7aEC101f95342780053e99
-DeployModule#RenderUnconstructed2V2 - 0xa46AF084eddDC4F3844cB44003A07212D365CdF1
-DeployModule#RenderUnconstructed3V2 - 0x4DD340dd64684C460E1cf370ed69bad3A6BFEBbd
-DeployModule#RenderUnconstructed4V2 - 0x74Fb1eD4D82024576e37ddbe70EdF785B2DBa3E7
-DeployModule#RenderUnconstructed5V2 - 0xD9C814D483A9a3B010F8F9D1A9ACB3dfE8Be89cC
-DeployModule#RenderWeapon1 - 0x2D47f9A8b0902B0BE168fc09b01D2082B2bBC622
-DeployModule#RenderWeapon1V2 - 0x25e3F90a156E25fC0adcD935a58f2fb5603723ca
-DeployModule#RenderWeapon2 - 0x70406c0826940Af80010778ffa364A89053bdbA0
-DeployModule#RenderWeapon2V2 - 0x72283b9627a41ABbb5FC15a7A2737F8c98775393
-DeployModule#RenderWeapon3 - 0xBb0557F70F29cB5c62639480aFC8D2a930d3B2eE
-DeployModule#RenderWeapon3V2 - 0xC8768E2723AFBeF82E9874bfd7815A7539703223
-DeployModule#RenderWeapon4 - 0x13Ae7f2912473b35e8E2991226F155E7C9C82B50
-DeployModule#RenderWeapon4V2 - 0xD7244cB6D38FE9089E94CcaFa2853916d56baC42
-DeployModule#RepairResolver - 0xA4742E93a7E54a39CB9FD1062431333F06f99B80
-DeployModule#RoguelikeRun - 0xF384333E180B6c5bEF152540514D8dFe47Ca1aF3
-DeployModule#SelfieCheckEligibilityProvider - 0x1819AE10a1FfAee227A415a7EA6B4102471cd0Ad
-DeployModule#ShatteredHiveMedalArt - 0x47cAC61e66e3c3DA7ff702d5b46c87153c2c63bD
-DeployModule#SinglePlayerOrchestratorRegistry - 0x91E8BB175eF1F7Ae63771b5cbD0E17e79b7EAFfc
-DeployModule#SpecialEffectsLib - 0xb37294fa3487225647888A5F320Da1F456084dB8
-DeployModule#UniversalCredits - 0x3c3A896B293436eAB2409CD6b5Ab73263E0b438D
-DeployModule#VariantPurchaseGate - 0x41C62756d33BF2241e0363af2294fF085072aeB5
-DeployModule#AIEncounters - 0xE97D6c34f7a3aBAe89b642928438e0007Eb5fcf1
-DeployModule#DECBonusWinEffect - 0x0950F9f1d3CCBbB57257FaF1959956DC8aDfc6D5
-DeployModule#DroneStorefront - 0x23E5E0f7Db953112e78f450a0229605d5213AEa9
-DeployModule#GameBlobRegistry - 0x001E4744dAA1Eb9B40CF41Fa092535aec2aFc314
-DeployModule#GenerateNewShip - 0x9bE27C3e15de8F1BA180FCf5CffEFa2f0772A3fE
-DeployModule#NodeMap - 0x68201035b871bf3d76A22d47F75cb13472519e03
-DeployModule#RenderAft - 0x8876f0C9fc4d205Cf80D3Cf64B757Ea62fF1f77f
-DeployModule#RenderAftV2 - 0xD908D3ade4bE8125088Bc4eb97a7C2a182d46D60
-DeployModule#RenderBody - 0xC3bB98256eCEBb2D59b9bAAae22f10b40575EE53
-DeployModule#RenderBodyV2 - 0x30f6c155c4DFa67783aa66A947d7e066dD11A1c0
-DeployModule#RenderFore - 0xD54Ac54332CbE225c490Fb6B518cc4a3C158BFA4
-DeployModule#RenderForeV2 - 0x9c199cCa77E78833657227245A0dF8498227a718
-DeployModule#RenderSpecial - 0x8a6DB82c5b44887Edfc1f808361D53F11dC2536f
-DeployModule#RenderSpecialV2 - 0x67F8329E850706bb75e2BBa5d489283E2a025cF9
-DeployModule#RenderWeapon - 0x011Fa2BaD5E64F9432e756f2c9Dad87a4258AcDE
-DeployModule#RenderWeaponV2 - 0x1320EdBA084C1cf9B8E299157185Df963Ab6f25a
-DeployModule#RoguelikeNodeMap - 0x2646f9E65FC257E0Ac393B0CBFd9eD55aCD31794
-DeployModule#ImageRenderer - 0x7a2089bBa6Cfb1681757631B2f21427798043c59
-DeployModule#ImageRendererV2 - 0x804ADbd05CB9Ce2f4EE47c11f0DC5d5B8762FA72
-DeployModule#RenderMetadata - 0x6A5AC91d11985D9edDE6C2297133F56E79efd7d9
-DeployModule#Ships - 0xEB83fAbEa5f0b099B6fBB09Eee42162465e4726d
-DeployModule#FreeShipClaim - 0xFF3D60Ad0f50eE58D32584f95Fc9D5d922B1B092
-DeployModule#GameLens - 0x294FAa26e0Cc1A370A00571b47f8825510ab157E
-DeployModule#Lobbies - 0xd1C693E75E3BFb8FE39fdFCE536b3ead04D2a799
-DeployModule#ShipAttributes - 0xA5059cDB881210BB33110B02C3f9b53e7dfB3beF
-DeployModule#ShipGrantWinEffect - 0xf17F466fEc65d61Db1dC53acFF253727e5EB7e92
-DeployModule#ShipPurchaser - 0x7Ba0Ad0072f3C446d7C665061a10296cf09A20D0
-DeployModule#ShipsRouter - 0x27eCCB0400EA6C6B3EC885048d109e6058E0b4ce
-DeployModule#TutorialClaim - 0xFD3F1958a48bda67366Db98918Ac0B0A56A9dc98
-DeployModule#DroneSwarmResolver - 0xff2ABA5c18668387bECe9B09773E0F5a64e184a7
-DeployModule#DroneYard - 0x5b5FBd88B384E2F79Eb2009ac71A220CA07ea027
-DeployModule#EMPResolver - 0x86ce9FEe13aB003fc0098485D7Ce6ef6F707082f
-DeployModule#ElectricStormResolver - 0xF43914e6952F14d3A8997e37504e3266BA2bc9C4
-DeployModule#FlakArrayResolver - 0x698a626fC2A89823211641A25FC9a6F0d20C52E2
-DeployModule#Fleets - 0x6c1D6d01648A89c0F2AE8879d6c11e97Ee923Dc1
-DeployModule#Game - 0xec6f63df4Aee7c1Fc79B370FcB9434c67dd35D4b
-DeployModule#HealAboveFloorWinEffect - 0x0C1cF9B8CB791D89d92dee7a9654399EFA92C50d
-DeployModule#RepairDronesResolver - 0x55F03606d588bBB04f85559cb350d530Bb6B8B3b
-DeployModule#PvPMatch - 0x4AF1283DCF45339e8c09fb61e1b149BDD69C6915
-DeployModule#RoguelikeMatch - 0xF88c2db474A0ca65EFEA325387EE5a80a2FeA779
-DeployModule#RoguelikeResupply - 0xAD667ABD8DA18e1F5CBd50Ba04fB672EBb77d6B2
-DeployModule#ShatteredHiveMedal - 0x1e205f49F54c1Bddd50b1E9746039dA6e73Db462
-DeployModule#SinglePlayerMatch - 0x8d6117b82aD39577676b0E349274fD61B261Ee04
-DeployModule#Tournament - 0xDEf10f93FCb490b1A710c994e455f85164d0d317
-DeployModule#Variant1AI - 0x1f6cd1C7CA8c9c1895063eE1b1BF6a5291b002d7
-DeployModule#Variant2AI - 0x6fEfa92118A2e7D028C54dD2F4d8AB5D23902426
+DeployModule#AIBehaviorRegistry - 0xb2EAF574FA0088891f2085dc7842242fe35A69CF
+DeployModule#AIShips - 0x5f46BC609b9F5c54702A474c374b301E1EFF36ab
+DeployModule#DestroyRewardLib - 0x2Fb2332B78e4f9C11D4c51Bd8e1eb0e945E3f671
+DeployModule#DroneEnergyCores - 0xA5dFE93E0c18FEe09eC844157f8D4B419023D148
+DeployModule#DroneNames - 0xc629145944EfB88DF2147803EB896c154C548c2F
+DeployModule#FactionRewardTokenRegistry - 0xa1fA8a3ba7bAb193b55f5172aB4dbC5E8bB287d6
+DeployModule#GameEngineRegistry - 0x3AC0543011259208dc4953739f31372d07D7F30E
+DeployModule#GameResults - 0x82F4F935f0a5c5aFF794A1612D83041A66CEbFf5
+DeployModule#Maps - 0x0c8A41A1047e08E872BFde54cae4D9a0a41573B1
+DeployModule#RamResolver - 0x8bC7B66B6d187f111Ed0c68c1Ca08F9dF0774fb4
+DeployModule#RandomManager - 0xB96284278eCA244279eDDC5c1c76C82F346C1ced
+DeployModule#RenderAft0 - 0xE268Ae2e41b80e5dd30841423AE2BfE5185D74c0
+DeployModule#RenderAft0V2 - 0xD064e12dd7E78E02515525a64D9be31035B2Ad8d
+DeployModule#RenderAft1 - 0x1e249aEFA5C802Aa03A9d184f68cDdBe377eC8d3
+DeployModule#RenderAft1V2 - 0x3954a610626CA4A4E1A3B70E86883Ae6E248638D
+DeployModule#RenderAft2 - 0xEf3a936a51C02cA1eebdc410b16AB36795c8bd73
+DeployModule#RenderAft2V2 - 0xF1EeF30E3EbedB266c1486b61D73e170EF3FD54C
+DeployModule#RenderArmor1 - 0x7AA775E4121F6a52DA86551137E384d8cc4657d7
+DeployModule#RenderArmor1V2 - 0x7A93C4F0Ed59c431d8082A6ACA8DF634612Ecf65
+DeployModule#RenderArmor2 - 0xcC3b9F80694eAE3c293fe4C25557121221e20797
+DeployModule#RenderArmor2V2 - 0x4A1e9A963B79c21ef3A74A4A0720B146Be681869
+DeployModule#RenderArmor3 - 0x99D44fAfbbf56Bb9e38C2CD998Ac105EA9467bf5
+DeployModule#RenderArmor3V2 - 0xA4236105C8aF258da1E224518f0A4cb1122CD4bD
+DeployModule#RenderBaseBody - 0xC282B2d0fCC4bEd7Ee187A5236057d4eC3eB94BE
+DeployModule#RenderBaseBodyV2 - 0x03B2C86C15D06AE96402D3996E8f515E77afCc1d
+DeployModule#RenderExplosion1 - 0x43fB95F15544A2B3ECF505da013Ad48063602873
+DeployModule#RenderExplosion1V2 - 0x0ab9DE5394F4d03Fb936296F9EaCDE975A1E22C3
+DeployModule#RenderExplosion2 - 0x8018c6B800E13936590512FD5BA31b6c67227148
+DeployModule#RenderExplosion2V2 - 0x2F5Aa132ed9d6dCd4A8a854E2d927E2376D75dDC
+DeployModule#RenderExplosion3V2 - 0x985A3567DD079b40254ee37Dd034bd875e745Ff9
+DeployModule#RenderFore0 - 0x093F5F105F9D812bD8F460aC986ee99bCe7a89B6
+DeployModule#RenderFore0V2 - 0xB1F7966c25a0278370d9B8eff6D2434D853Db0Fb
+DeployModule#RenderFore1 - 0xaAe30ddd23e5ddf487144e9bA4380F870c09A0cf
+DeployModule#RenderFore1V2 - 0x348177ccdbe477D8DE81027Df60651990C41bb6b
+DeployModule#RenderFore2 - 0x3499e1E5800D63dbEc258A610F043B0f78b4866F
+DeployModule#RenderFore2V2 - 0xf9a8418EB8af9C54C424Dded25cDDA60891fa0D5
+DeployModule#RenderForePerfect - 0xEe760A9e67c58E457011F885C4D2D9B5d97B1E12
+DeployModule#RenderForePerfectV2 - 0x9C1d07C00a3F32cfE924Ee6cc4E29147d425680A
+DeployModule#RenderShield1 - 0xa3fF49C5b5E618A85bfAf4C16ceD83d1499bcB88
+DeployModule#RenderShield1V2 - 0xF4D03A8037B20915C512f664391af0426b631673
+DeployModule#RenderShield2 - 0x6a4EA7B011547c210fbB5c9966c9eF8e40f5790F
+DeployModule#RenderShield2V2 - 0xC31a0e632D4A923bF7D4394cb642f6919A3ece0d
+DeployModule#RenderShield3 - 0xf5c3854112c9704903739d35BA5A4F283c4a76A4
+DeployModule#RenderShield3V2 - 0x101210E36F40808e43B27C07e66C8B2562954164
+DeployModule#RenderSpecial1 - 0x407514C3915510671ed17942c8d9906d3F2b11c8
+DeployModule#RenderSpecial1V2 - 0x96258b39Ee1C3E8aBE53c5Fe6B28015B924C456F
+DeployModule#RenderSpecial2 - 0x9954Bbf480ACD2d99DE7921509d13E3BFc044f8b
+DeployModule#RenderSpecial2V2 - 0x5b03945764d720bE3a5890A1878Bc5A2B9915487
+DeployModule#RenderSpecial3 - 0xA76FAf845027996FcF467faC917865dF62664fe9
+DeployModule#RenderSpecial3V2 - 0xDb783D5C33b9A5eC31D36eEE2cB440fa9c15ecc3
+DeployModule#RenderUnconstructed1 - 0xE348D8F6F2c20cE9c8004468a381794b956072Cf
+DeployModule#RenderUnconstructed1V2 - 0x2A2b2c8682cf0Dc8B239087997223bf9c017f309
+DeployModule#RenderUnconstructed2 - 0xFcA29F10F4229188d0380A0e51BAF762E39B13A6
+DeployModule#RenderUnconstructed2V2 - 0x95fDC0Dbd5684f7F6eA1da3Da48AB7126b847aD0
+DeployModule#RenderUnconstructed3V2 - 0xc331707bCDd173dB9C8736DC78216EAf63E94e69
+DeployModule#RenderUnconstructed4V2 - 0x4506f62ca8a459361228bAFDc8d6A7bf2E81FF0F
+DeployModule#RenderUnconstructed5V2 - 0x7327965D7c39cA580E49d162414Df2F7170126f5
+DeployModule#RenderWeapon1 - 0xC38646C5BCe92Ec09E28f667796647649078824a
+DeployModule#RenderWeapon1V2 - 0x6Ba7D13e693C6BDb0dddBC518c535Cf0AE8Be2ce
+DeployModule#RenderWeapon2 - 0x68558081c9C72920Ab6060AF71B4fC948efc9b91
+DeployModule#RenderWeapon2V2 - 0x29Cb8BC17FF26973e3437ce76257091f103ab4f2
+DeployModule#RenderWeapon3 - 0x7b2E7c2Cb5bF621D5C0Ef38DC43A8B40948C008a
+DeployModule#RenderWeapon3V2 - 0x86A7000057Dd2752C1672Bb14fE0e3ce77DFcf5b
+DeployModule#RenderWeapon4 - 0x3C65134115a1C281c98734A142d9bf8A1D20e75C
+DeployModule#RenderWeapon4V2 - 0xD9C86D87013feaC43F4180486D3867C3e288ea24
+DeployModule#RepairResolver - 0x321A8B86ca47e73e8A2908536A978F7EAc01f3a7
+DeployModule#RoguelikeRun - 0xBCB07b6D6Fd577218E881EB9bDa437B8633E18Bf
+DeployModule#SelfieCheckEligibilityProvider - 0x23423EF151D5dfeC56AAE741E1E242e4462A126a
+DeployModule#ShatteredHiveMedalArt - 0xcfC17eDdfa80df3d253fEd084778F6Fd1d089500
+DeployModule#SinglePlayerOrchestratorRegistry - 0x79E01f281C475BDD01CDb4EeC7df2f2f4b164755
+DeployModule#SpecialEffectsLib - 0xd33074dBe6123b88a41fC13cE081d4b2C7017499
+DeployModule#UniversalCredits - 0xf6bf2068bF1D5D566af5Ca0fAF4B81E1565573a6
+DeployModule#VariantPurchaseGate - 0xf8c66fF2D6b55c3B7aB698f53C67CE27b6788858
+DeployModule#AIEncounters - 0x68f196ba83A6E0BF08AD51b15886E2F8C874F0A4
+DeployModule#DECBonusWinEffect - 0x88904728cE8D73DfBefED7EB380a2A61c186D9FD
+DeployModule#DroneStorefront - 0x6D9daF55D7699758E93df0052ca330267aD098f9
+DeployModule#GameBlobRegistry - 0x6E66D96e45E28158d6746A85be7d2bb8EEF5db38
+DeployModule#GenerateNewShip - 0x22C29468D0408f01a3241fE71De09D06Ea6ff043
+DeployModule#NodeMap - 0xCBA82B8F3e7A3069178556b716A55340A2380e7C
+DeployModule#RenderAft - 0xa39fFC5A26964D813563f1a22bB065Ee29e7d5e1
+DeployModule#RenderAftV2 - 0x4F10836614385062a2Bb95d6b83ca2eFA74Fb51D
+DeployModule#RenderBody - 0xe46329Bc758a8050F2E9418f36aA319492407fd5
+DeployModule#RenderBodyV2 - 0x2487D6a3ae9da93a1827c670B3a779912A7fB152
+DeployModule#RenderFore - 0x2E5B1DDe62b965C36A17b08688DB433C6512f36B
+DeployModule#RenderForeV2 - 0xc30402C0188BABFDC302A4C75E0A5fa9e9fc5eeb
+DeployModule#RenderSpecial - 0x115FDE45a5b5055410F27dbb383dC9Ade71727E9
+DeployModule#RenderSpecialV2 - 0x55563775b8872B879dd9d7996b449350d458Cf99
+DeployModule#RenderWeapon - 0x6ff9A2E94BBb578cd73a05e4607b87742a6b9182
+DeployModule#RenderWeaponV2 - 0xA4AaD5BC97760d16cf5FaC0066C10f2D4bcDac27
+DeployModule#RoguelikeNodeMap - 0x875916D263Bd886720Dadf8D0c3c48A96127396e
+DeployModule#ImageRenderer - 0xAC008841f245B56065304edF0efF10Fe9Ff9AD13
+DeployModule#ImageRendererV2 - 0xaC6Da55a6BA384CbAd5f0Af534bE45b4b86BC462
+DeployModule#RenderMetadata - 0x51c3a9930ed1F94D587069d81c0518Eb682C256E
+DeployModule#Ships - 0x8F9740334815F426b2D8F7f91be4Eb29a1c665F0
+DeployModule#FreeShipClaim - 0x72CC39fb3c2bFE2CEC3E9117BA937BeBFe39604b
+DeployModule#GameLens - 0x869e5A79F29c8E49792a792A07806cB8B83d56c8
+DeployModule#Lobbies - 0x98B57c147cdFE45869e997321C39A931277B3dD0
+DeployModule#ShipAttributes - 0xA3F3E844cA1c83091528005d4189dF65d826cBD0
+DeployModule#ShipGrantWinEffect - 0xBa4aAA105EEe74acaCC768c6026d31A80301Ac0D
+DeployModule#ShipPurchaser - 0x190606b8DF24Fc4792bdE6A934789E927087C1cE
+DeployModule#ShipsRouter - 0x480c29A98DF83743B1e09EB319F92E95b2a0c3d1
+DeployModule#DroneSwarmResolver - 0xb465528410dBa6c948113888B559D3316250f1Db
+DeployModule#DroneYard - 0xCD09EE1f8D2AB57591873b7B6Cc2C7C1efa2Bd6A
+DeployModule#EMPResolver - 0xCF708f326fa7fff07ba64ab84c1531609f05FC4D
+DeployModule#ElectricStormResolver - 0x9a2dD1525adE533B41b0e39d312f572C075a3242
+DeployModule#FlakArrayResolver - 0xd5622ccA2AC2206e9a1836621Df87847899F7Ab7
+DeployModule#HealAboveFloorWinEffect - 0x3a8ffC76A2c6F017a1248a84bcfE3faaf4b1FD27
+DeployModule#RepairDronesResolver - 0x87E9d37f08c98CBB3a862343784ee6B2565e2E0e
+DeployModule#TutorialClaim - 0x471F1aF89c16d09fF9c2f4926De1bCAc65622d67
+DeployModule#Variant1AI - 0x775f0f953898A02Bc61b6CE046dF1A5daED929B9
+DeployModule#Variant2AI - 0xb66e67248150cb6A9B885666d080c5F5569ac17A
+DeployModule#Fleets - 0x79e6Cca746A2DEc294B93885340d526d58900fa7
+DeployModule#Game - 0x657Cd07729262664D77D643d0aEd4f62e0dE5424
+DeployModule#PvPMatch - 0x38d5c6E075962501DD7e426629883EBA406199D9
+DeployModule#RoguelikeMatch - 0x92fa7ED1A6ACC9C7aF8320BAdf20016bb65cB247
+DeployModule#RoguelikeResupply - 0xEd2aB399619F44A5Fae06D520EE9D6Ed7ed30846
+DeployModule#ShatteredHiveMedal - 0x4048d6520d6B8F6aBb4752C11A97d7eB95c05205
+DeployModule#SinglePlayerMatch - 0x48723CBde1F2714b9DBcdc4Bf8F97ff356F6aaEE
+DeployModule#Tournament - 0xE2C073b78e8Ace655bF35ba980Dfef3D18d9032d
 
 Verifying deployed contracts
 
 Verifying contract "contracts/AIBehaviorRegistry.sol:AIBehaviorRegistry" for network base-sepolia...
 Contract contracts/AIBehaviorRegistry.sol:AIBehaviorRegistry already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x48379F29Ce76f255aaA9a8cEa9e4A422560411a3#code
+  - https://sepolia.basescan.org/address/0xb2EAF574FA0088891f2085dc7842242fe35A69CF#code
 
 Verifying contract "contracts/AIShips.sol:AIShips" for network base-sepolia...
 Contract contracts/AIShips.sol:AIShips already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xD5e925F5457206260434937a779318FEBA012660#code
+  - https://sepolia.basescan.org/address/0x5f46BC609b9F5c54702A474c374b301E1EFF36ab#code
 
 Verifying contract "contracts/DestroyRewardLib.sol:DestroyRewardLib" for network base-sepolia...
 Successfully verified contract "contracts/DestroyRewardLib.sol:DestroyRewardLib" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x297abc496976E0A79F0FCCd89Fe9C54A9E070B5B#code
+  - https://sepolia.basescan.org/address/0x2Fb2332B78e4f9C11D4c51Bd8e1eb0e945E3f671#code
 
 Verifying contract "contracts/DroneEnergyCores.sol:DroneEnergyCores" for network base-sepolia...
 Contract contracts/DroneEnergyCores.sol:DroneEnergyCores already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x486417b4664B055604e72734EBec049E2dc1B25F#code
+  - https://sepolia.basescan.org/address/0xA5dFE93E0c18FEe09eC844157f8D4B419023D148#code
 
 Verifying contract "contracts/DroneNames.sol:DroneNames" for network base-sepolia...
 Contract contracts/DroneNames.sol:DroneNames already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x405bC73dF7480EAd0C3E4D257E8FdC92BedEb0a8#code
+  - https://sepolia.basescan.org/address/0xc629145944EfB88DF2147803EB896c154C548c2F#code
 
 Verifying contract "contracts/FactionRewardTokenRegistry.sol:FactionRewardTokenRegistry" for network base-sepolia...
 Contract contracts/FactionRewardTokenRegistry.sol:FactionRewardTokenRegistry already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x98B631c5C94a9567aD8761877094D9c29B28bf23#code
+  - https://sepolia.basescan.org/address/0xa1fA8a3ba7bAb193b55f5172aB4dbC5E8bB287d6#code
 
 Verifying contract "contracts/GameEngineRegistry.sol:GameEngineRegistry" for network base-sepolia...
 Contract contracts/GameEngineRegistry.sol:GameEngineRegistry already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xc3429052845186B2c6Ae07E006E663A853F782E4#code
+  - https://sepolia.basescan.org/address/0x3AC0543011259208dc4953739f31372d07D7F30E#code
 
 Verifying contract "contracts/GameResults.sol:GameResults" for network base-sepolia...
 Contract contracts/GameResults.sol:GameResults already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xc167721564522A606d23C687B01084F42DA70C7B#code
+  - https://sepolia.basescan.org/address/0x82F4F935f0a5c5aFF794A1612D83041A66CEbFf5#code
 
 Verifying contract "contracts/Maps.sol:Maps" for network base-sepolia...
 Contract contracts/Maps.sol:Maps already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x21a5eE53Bd7483F125c32336205E5F8a9257E668#code
+  - https://sepolia.basescan.org/address/0x0c8A41A1047e08E872BFde54cae4D9a0a41573B1#code
 
 Verifying contract "contracts/RamResolver.sol:RamResolver" for network base-sepolia...
 Contract contracts/RamResolver.sol:RamResolver already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xAc2548E746CEEA1493E71d617956C2753fD9cECA#code
+  - https://sepolia.basescan.org/address/0x8bC7B66B6d187f111Ed0c68c1Ca08F9dF0774fb4#code
 
 Verifying contract "contracts/RandomManager.sol:RandomManager" for network base-sepolia...
 Contract contracts/RandomManager.sol:RandomManager already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xE8d26721C823b12b47d73a39ed692E7ee5BF9853#code
+  - https://sepolia.basescan.org/address/0xB96284278eCA244279eDDC5c1c76C82F346C1ced#code
 
 Verifying contract "contracts/Renderers/RenderAft0.sol:RenderAft0" for network base-sepolia...
 Contract contracts/Renderers/RenderAft0.sol:RenderAft0 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xF1b3cB8A6Cfc97C57c7CFA48104164c01D6d651B#code
+  - https://sepolia.basescan.org/address/0xE268Ae2e41b80e5dd30841423AE2BfE5185D74c0#code
 
 Verifying contract "contracts/RenderersV2/RenderAft0V2.sol:RenderAft0V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderAft0V2.sol:RenderAft0V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xaCc7f2fC13587bfc1D637Ae7B02367F82578d1D9#code
+Successfully verified contract "contracts/RenderersV2/RenderAft0V2.sol:RenderAft0V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xD064e12dd7E78E02515525a64D9be31035B2Ad8d#code
 
 Verifying contract "contracts/Renderers/RenderAft1.sol:RenderAft1" for network base-sepolia...
 Contract contracts/Renderers/RenderAft1.sol:RenderAft1 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xfd0E7321cd123E866C3A96f3ab900d8681B45F7C#code
+  - https://sepolia.basescan.org/address/0x1e249aEFA5C802Aa03A9d184f68cDdBe377eC8d3#code
 
 Verifying contract "contracts/RenderersV2/RenderAft1V2.sol:RenderAft1V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderAft1V2.sol:RenderAft1V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x9CD533207c9B2D067203A68248b725b0294680c2#code
+Successfully verified contract "contracts/RenderersV2/RenderAft1V2.sol:RenderAft1V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x3954a610626CA4A4E1A3B70E86883Ae6E248638D#code
 
 Verifying contract "contracts/Renderers/RenderAft2.sol:RenderAft2" for network base-sepolia...
 Contract contracts/Renderers/RenderAft2.sol:RenderAft2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xD0fE65F037aa5C2D11A899e4Ff1738ff78Fb42BF#code
+  - https://sepolia.basescan.org/address/0xEf3a936a51C02cA1eebdc410b16AB36795c8bd73#code
 
 Verifying contract "contracts/RenderersV2/RenderAft2V2.sol:RenderAft2V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderAft2V2.sol:RenderAft2V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x9C11BEe9764909A20B7C4559c8176bbCad1a4341#code
+Successfully verified contract "contracts/RenderersV2/RenderAft2V2.sol:RenderAft2V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xF1EeF30E3EbedB266c1486b61D73e170EF3FD54C#code
 
 Verifying contract "contracts/Renderers/RenderArmor1.sol:RenderArmor1" for network base-sepolia...
 Contract contracts/Renderers/RenderArmor1.sol:RenderArmor1 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xF07ddaA883A8c87c195dAE3A88639F97016c52d9#code
+  - https://sepolia.basescan.org/address/0x7AA775E4121F6a52DA86551137E384d8cc4657d7#code
 
 Verifying contract "contracts/RenderersV2/RenderArmor1V2.sol:RenderArmor1V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderArmor1V2.sol:RenderArmor1V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x0a8D63030950F082f70A5CCf7d698748026E09D7#code
+Successfully verified contract "contracts/RenderersV2/RenderArmor1V2.sol:RenderArmor1V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x7A93C4F0Ed59c431d8082A6ACA8DF634612Ecf65#code
 
 Verifying contract "contracts/Renderers/RenderArmor2.sol:RenderArmor2" for network base-sepolia...
 Contract contracts/Renderers/RenderArmor2.sol:RenderArmor2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x1a4aC42ABa434325D7389BbB2946B9A6D88DB707#code
+  - https://sepolia.basescan.org/address/0xcC3b9F80694eAE3c293fe4C25557121221e20797#code
 
 Verifying contract "contracts/RenderersV2/RenderArmor2V2.sol:RenderArmor2V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderArmor2V2.sol:RenderArmor2V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x2e6E7b6B76D6c3E2CeF171e60ff49E51E6AB5be1#code
+Successfully verified contract "contracts/RenderersV2/RenderArmor2V2.sol:RenderArmor2V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x4A1e9A963B79c21ef3A74A4A0720B146Be681869#code
 
 Verifying contract "contracts/Renderers/RenderArmor3.sol:RenderArmor3" for network base-sepolia...
 Contract contracts/Renderers/RenderArmor3.sol:RenderArmor3 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x68f975573127B73062B40d5065fCBd5010690D0D#code
+  - https://sepolia.basescan.org/address/0x99D44fAfbbf56Bb9e38C2CD998Ac105EA9467bf5#code
 
 Verifying contract "contracts/RenderersV2/RenderArmor3V2.sol:RenderArmor3V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderArmor3V2.sol:RenderArmor3V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xa793306cee598E90B67ECb41Cd7051745653f24F#code
+Successfully verified contract "contracts/RenderersV2/RenderArmor3V2.sol:RenderArmor3V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xA4236105C8aF258da1E224518f0A4cb1122CD4bD#code
 
 Verifying contract "contracts/Renderers/RenderBaseBody.sol:RenderBaseBody" for network base-sepolia...
 Contract contracts/Renderers/RenderBaseBody.sol:RenderBaseBody already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xe520FF292DF809d48e381f628E905a727F40aeaF#code
+  - https://sepolia.basescan.org/address/0xC282B2d0fCC4bEd7Ee187A5236057d4eC3eB94BE#code
 
 Verifying contract "contracts/RenderersV2/RenderBaseBodyV2.sol:RenderBaseBodyV2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderBaseBodyV2.sol:RenderBaseBodyV2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xa2daCD10a48D0091E91093aD993194082bB771f5#code
+Successfully verified contract "contracts/RenderersV2/RenderBaseBodyV2.sol:RenderBaseBodyV2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x03B2C86C15D06AE96402D3996E8f515E77afCc1d#code
 
 Verifying contract "contracts/Renderers/RenderExplosion1.sol:RenderExplosion1" for network base-sepolia...
 Contract contracts/Renderers/RenderExplosion1.sol:RenderExplosion1 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x17b58BfC6bDB2F4584fd120dA44e801FE0855826#code
+  - https://sepolia.basescan.org/address/0x43fB95F15544A2B3ECF505da013Ad48063602873#code
 
 Verifying contract "contracts/RenderersV2/RenderExplosion1V2.sol:RenderExplosion1V2" for network base-sepolia...
 Contract contracts/RenderersV2/RenderExplosion1V2.sol:RenderExplosion1V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x1633285685cD9B2f17aa7125302E3Da2C51490E2#code
+  - https://sepolia.basescan.org/address/0x0ab9DE5394F4d03Fb936296F9EaCDE975A1E22C3#code
 
 Verifying contract "contracts/Renderers/RenderExplosion2.sol:RenderExplosion2" for network base-sepolia...
 Contract contracts/Renderers/RenderExplosion2.sol:RenderExplosion2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x18D3641c6fbc470957eaB5c8777DFA3b7Cda4782#code
+  - https://sepolia.basescan.org/address/0x8018c6B800E13936590512FD5BA31b6c67227148#code
 
 Verifying contract "contracts/RenderersV2/RenderExplosion2V2.sol:RenderExplosion2V2" for network base-sepolia...
 Contract contracts/RenderersV2/RenderExplosion2V2.sol:RenderExplosion2V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x551d2E3F35A880933fC26Cc833C781ad30114926#code
+  - https://sepolia.basescan.org/address/0x2F5Aa132ed9d6dCd4A8a854E2d927E2376D75dDC#code
 
 Verifying contract "contracts/RenderersV2/RenderExplosion3V2.sol:RenderExplosion3V2" for network base-sepolia...
 Contract contracts/RenderersV2/RenderExplosion3V2.sol:RenderExplosion3V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xB29881A3879339f987be8ba410a795DB641aeA1A#code
+  - https://sepolia.basescan.org/address/0x985A3567DD079b40254ee37Dd034bd875e745Ff9#code
 
 Verifying contract "contracts/Renderers/RenderFore0.sol:RenderFore0" for network base-sepolia...
 Contract contracts/Renderers/RenderFore0.sol:RenderFore0 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x3342B670fbF035Eaa2F1b96AaA8A1618FC2e6cA8#code
+  - https://sepolia.basescan.org/address/0x093F5F105F9D812bD8F460aC986ee99bCe7a89B6#code
 
 Verifying contract "contracts/RenderersV2/RenderFore0V2.sol:RenderFore0V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderFore0V2.sol:RenderFore0V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x37B32533729d2ad949863B3A6030FCaa9bB2f911#code
+Successfully verified contract "contracts/RenderersV2/RenderFore0V2.sol:RenderFore0V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xB1F7966c25a0278370d9B8eff6D2434D853Db0Fb#code
 
 Verifying contract "contracts/Renderers/RenderFore1.sol:RenderFore1" for network base-sepolia...
 Contract contracts/Renderers/RenderFore1.sol:RenderFore1 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x032B2e438d4D4467cb67869C612c57464E12EC99#code
+  - https://sepolia.basescan.org/address/0xaAe30ddd23e5ddf487144e9bA4380F870c09A0cf#code
 
 Verifying contract "contracts/RenderersV2/RenderFore1V2.sol:RenderFore1V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderFore1V2.sol:RenderFore1V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x67146bFFd418b40A2Ef9FF5Afe803D7E669A7Ee6#code
+Successfully verified contract "contracts/RenderersV2/RenderFore1V2.sol:RenderFore1V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x348177ccdbe477D8DE81027Df60651990C41bb6b#code
 
 Verifying contract "contracts/Renderers/RenderFore2.sol:RenderFore2" for network base-sepolia...
 Contract contracts/Renderers/RenderFore2.sol:RenderFore2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xB8B5A549c120CD9Ba8c63ECF3d3D337e8e49f2A2#code
+  - https://sepolia.basescan.org/address/0x3499e1E5800D63dbEc258A610F043B0f78b4866F#code
 
 Verifying contract "contracts/RenderersV2/RenderFore2V2.sol:RenderFore2V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderFore2V2.sol:RenderFore2V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x435a3949Bf531c2Cea071aAaB27D9590dF341cAB#code
+Successfully verified contract "contracts/RenderersV2/RenderFore2V2.sol:RenderFore2V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xf9a8418EB8af9C54C424Dded25cDDA60891fa0D5#code
 
 Verifying contract "contracts/Renderers/RenderForePerfect.sol:RenderForePerfect" for network base-sepolia...
 Contract contracts/Renderers/RenderForePerfect.sol:RenderForePerfect already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x6BcDb7b9AFF2Cd62B20b61373efB2a9C1E3734d2#code
+  - https://sepolia.basescan.org/address/0xEe760A9e67c58E457011F885C4D2D9B5d97B1E12#code
 
 Verifying contract "contracts/RenderersV2/RenderForePerfectV2.sol:RenderForePerfectV2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderForePerfectV2.sol:RenderForePerfectV2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x3e3bC1d31db719926ce1a60bd39b227edb4a39c0#code
+Successfully verified contract "contracts/RenderersV2/RenderForePerfectV2.sol:RenderForePerfectV2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x9C1d07C00a3F32cfE924Ee6cc4E29147d425680A#code
 
 Verifying contract "contracts/Renderers/RenderShield1.sol:RenderShield1" for network base-sepolia...
 Contract contracts/Renderers/RenderShield1.sol:RenderShield1 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xB72dB4342F810031aecFC22438a1A1a5386D6C57#code
+  - https://sepolia.basescan.org/address/0xa3fF49C5b5E618A85bfAf4C16ceD83d1499bcB88#code
 
 Verifying contract "contracts/RenderersV2/RenderShield1V2.sol:RenderShield1V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderShield1V2.sol:RenderShield1V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xD5AFf01b039203b4E5A6008fb9E21D31Cef9e02A#code
+Successfully verified contract "contracts/RenderersV2/RenderShield1V2.sol:RenderShield1V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xF4D03A8037B20915C512f664391af0426b631673#code
 
 Verifying contract "contracts/Renderers/RenderShield2.sol:RenderShield2" for network base-sepolia...
 Contract contracts/Renderers/RenderShield2.sol:RenderShield2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xdf8717DD955F05011f8B13d863E27E4E149ED5AE#code
+  - https://sepolia.basescan.org/address/0x6a4EA7B011547c210fbB5c9966c9eF8e40f5790F#code
 
 Verifying contract "contracts/RenderersV2/RenderShield2V2.sol:RenderShield2V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderShield2V2.sol:RenderShield2V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xd6F44Ed7917fB3b41277Bd7445d99E0aAEDA72cD#code
+Successfully verified contract "contracts/RenderersV2/RenderShield2V2.sol:RenderShield2V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xC31a0e632D4A923bF7D4394cb642f6919A3ece0d#code
 
 Verifying contract "contracts/Renderers/RenderShield3.sol:RenderShield3" for network base-sepolia...
 Contract contracts/Renderers/RenderShield3.sol:RenderShield3 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x757EF75c0760862d2DDd6e6b805743d40ec0B0f3#code
+  - https://sepolia.basescan.org/address/0xf5c3854112c9704903739d35BA5A4F283c4a76A4#code
 
 Verifying contract "contracts/RenderersV2/RenderShield3V2.sol:RenderShield3V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderShield3V2.sol:RenderShield3V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x596857Fd747a12718c3818AbDd3158c7074D79e2#code
+Successfully verified contract "contracts/RenderersV2/RenderShield3V2.sol:RenderShield3V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x101210E36F40808e43B27C07e66C8B2562954164#code
 
 Verifying contract "contracts/Renderers/RenderSpecial1.sol:RenderSpecial1" for network base-sepolia...
 Contract contracts/Renderers/RenderSpecial1.sol:RenderSpecial1 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xE894fdaAC6dE3248550A9699A56C4353486576Ab#code
+  - https://sepolia.basescan.org/address/0x407514C3915510671ed17942c8d9906d3F2b11c8#code
 
 Verifying contract "contracts/RenderersV2/RenderSpecial1V2.sol:RenderSpecial1V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderSpecial1V2.sol:RenderSpecial1V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xf807f7Ca1Ba496BCf3848F93f1F05D4bf28D88E6#code
+Successfully verified contract "contracts/RenderersV2/RenderSpecial1V2.sol:RenderSpecial1V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x96258b39Ee1C3E8aBE53c5Fe6B28015B924C456F#code
 
 Verifying contract "contracts/Renderers/RenderSpecial2.sol:RenderSpecial2" for network base-sepolia...
 Contract contracts/Renderers/RenderSpecial2.sol:RenderSpecial2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xD0f5BE4e8f30EE1b16B4b760a0587769d10eB32A#code
+  - https://sepolia.basescan.org/address/0x9954Bbf480ACD2d99DE7921509d13E3BFc044f8b#code
 
 Verifying contract "contracts/RenderersV2/RenderSpecial2V2.sol:RenderSpecial2V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderSpecial2V2.sol:RenderSpecial2V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xDb377Efa514E90f405502a473f7130bF79b22610#code
+Successfully verified contract "contracts/RenderersV2/RenderSpecial2V2.sol:RenderSpecial2V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x5b03945764d720bE3a5890A1878Bc5A2B9915487#code
 
 Verifying contract "contracts/Renderers/RenderSpecial3.sol:RenderSpecial3" for network base-sepolia...
 Contract contracts/Renderers/RenderSpecial3.sol:RenderSpecial3 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x0A0A3A22e69571200400d60CCBCE1Fd9b27a4A76#code
+  - https://sepolia.basescan.org/address/0xA76FAf845027996FcF467faC917865dF62664fe9#code
 
 Verifying contract "contracts/RenderersV2/RenderSpecial3V2.sol:RenderSpecial3V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderSpecial3V2.sol:RenderSpecial3V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x16a7302193BeAbd5c5dD9455c960C281106541a6#code
+Successfully verified contract "contracts/RenderersV2/RenderSpecial3V2.sol:RenderSpecial3V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xDb783D5C33b9A5eC31D36eEE2cB440fa9c15ecc3#code
 
 Verifying contract "contracts/Renderers/RenderUnconstructed1.sol:RenderUnconstructed1" for network base-sepolia...
 Contract contracts/Renderers/RenderUnconstructed1.sol:RenderUnconstructed1 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xAA2E52aF0ccC552cc8d3aD0BE54bE7AeeEf05f10#code
+  - https://sepolia.basescan.org/address/0xE348D8F6F2c20cE9c8004468a381794b956072Cf#code
 
 Verifying contract "contracts/RenderersV2/RenderUnconstructed1V2.sol:RenderUnconstructed1V2" for network base-sepolia...
 Contract contracts/RenderersV2/RenderUnconstructed1V2.sol:RenderUnconstructed1V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xAf9C002a223E3a36A9F05aBFce832ED13059871b#code
+  - https://sepolia.basescan.org/address/0x2A2b2c8682cf0Dc8B239087997223bf9c017f309#code
 
 Verifying contract "contracts/Renderers/RenderUnconstructed2.sol:RenderUnconstructed2" for network base-sepolia...
 Contract contracts/Renderers/RenderUnconstructed2.sol:RenderUnconstructed2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xCAfD2436D8C2F4736C7aEC101f95342780053e99#code
+  - https://sepolia.basescan.org/address/0xFcA29F10F4229188d0380A0e51BAF762E39B13A6#code
 
 Verifying contract "contracts/RenderersV2/RenderUnconstructed2V2.sol:RenderUnconstructed2V2" for network base-sepolia...
 Contract contracts/RenderersV2/RenderUnconstructed2V2.sol:RenderUnconstructed2V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xa46AF084eddDC4F3844cB44003A07212D365CdF1#code
+  - https://sepolia.basescan.org/address/0x95fDC0Dbd5684f7F6eA1da3Da48AB7126b847aD0#code
 
 Verifying contract "contracts/RenderersV2/RenderUnconstructed3V2.sol:RenderUnconstructed3V2" for network base-sepolia...
 Contract contracts/RenderersV2/RenderUnconstructed3V2.sol:RenderUnconstructed3V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x4DD340dd64684C460E1cf370ed69bad3A6BFEBbd#code
+  - https://sepolia.basescan.org/address/0xc331707bCDd173dB9C8736DC78216EAf63E94e69#code
 
 Verifying contract "contracts/RenderersV2/RenderUnconstructed4V2.sol:RenderUnconstructed4V2" for network base-sepolia...
 Contract contracts/RenderersV2/RenderUnconstructed4V2.sol:RenderUnconstructed4V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x74Fb1eD4D82024576e37ddbe70EdF785B2DBa3E7#code
+  - https://sepolia.basescan.org/address/0x4506f62ca8a459361228bAFDc8d6A7bf2E81FF0F#code
 
 Verifying contract "contracts/RenderersV2/RenderUnconstructed5V2.sol:RenderUnconstructed5V2" for network base-sepolia...
 Contract contracts/RenderersV2/RenderUnconstructed5V2.sol:RenderUnconstructed5V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xD9C814D483A9a3B010F8F9D1A9ACB3dfE8Be89cC#code
+  - https://sepolia.basescan.org/address/0x7327965D7c39cA580E49d162414Df2F7170126f5#code
 
 Verifying contract "contracts/Renderers/RenderWeapon1.sol:RenderWeapon1" for network base-sepolia...
 Contract contracts/Renderers/RenderWeapon1.sol:RenderWeapon1 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x2D47f9A8b0902B0BE168fc09b01D2082B2bBC622#code
+  - https://sepolia.basescan.org/address/0xC38646C5BCe92Ec09E28f667796647649078824a#code
 
 Verifying contract "contracts/RenderersV2/RenderWeapon1V2.sol:RenderWeapon1V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderWeapon1V2.sol:RenderWeapon1V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x25e3F90a156E25fC0adcD935a58f2fb5603723ca#code
+Successfully verified contract "contracts/RenderersV2/RenderWeapon1V2.sol:RenderWeapon1V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x6Ba7D13e693C6BDb0dddBC518c535Cf0AE8Be2ce#code
 
 Verifying contract "contracts/Renderers/RenderWeapon2.sol:RenderWeapon2" for network base-sepolia...
 Contract contracts/Renderers/RenderWeapon2.sol:RenderWeapon2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x70406c0826940Af80010778ffa364A89053bdbA0#code
+  - https://sepolia.basescan.org/address/0x68558081c9C72920Ab6060AF71B4fC948efc9b91#code
 
 Verifying contract "contracts/RenderersV2/RenderWeapon2V2.sol:RenderWeapon2V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderWeapon2V2.sol:RenderWeapon2V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x72283b9627a41ABbb5FC15a7A2737F8c98775393#code
+Successfully verified contract "contracts/RenderersV2/RenderWeapon2V2.sol:RenderWeapon2V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x29Cb8BC17FF26973e3437ce76257091f103ab4f2#code
 
 Verifying contract "contracts/Renderers/RenderWeapon3.sol:RenderWeapon3" for network base-sepolia...
 Contract contracts/Renderers/RenderWeapon3.sol:RenderWeapon3 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xBb0557F70F29cB5c62639480aFC8D2a930d3B2eE#code
+  - https://sepolia.basescan.org/address/0x7b2E7c2Cb5bF621D5C0Ef38DC43A8B40948C008a#code
 
 Verifying contract "contracts/RenderersV2/RenderWeapon3V2.sol:RenderWeapon3V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderWeapon3V2.sol:RenderWeapon3V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xC8768E2723AFBeF82E9874bfd7815A7539703223#code
+Successfully verified contract "contracts/RenderersV2/RenderWeapon3V2.sol:RenderWeapon3V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x86A7000057Dd2752C1672Bb14fE0e3ce77DFcf5b#code
 
 Verifying contract "contracts/Renderers/RenderWeapon4.sol:RenderWeapon4" for network base-sepolia...
 Contract contracts/Renderers/RenderWeapon4.sol:RenderWeapon4 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x13Ae7f2912473b35e8E2991226F155E7C9C82B50#code
+  - https://sepolia.basescan.org/address/0x3C65134115a1C281c98734A142d9bf8A1D20e75C#code
 
 Verifying contract "contracts/RenderersV2/RenderWeapon4V2.sol:RenderWeapon4V2" for network base-sepolia...
-Contract contracts/RenderersV2/RenderWeapon4V2.sol:RenderWeapon4V2 already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xD7244cB6D38FE9089E94CcaFa2853916d56baC42#code
+Successfully verified contract "contracts/RenderersV2/RenderWeapon4V2.sol:RenderWeapon4V2" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xD9C86D87013feaC43F4180486D3867C3e288ea24#code
 
 Verifying contract "contracts/RepairResolver.sol:RepairResolver" for network base-sepolia...
 Contract contracts/RepairResolver.sol:RepairResolver already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xA4742E93a7E54a39CB9FD1062431333F06f99B80#code
+  - https://sepolia.basescan.org/address/0x321A8B86ca47e73e8A2908536A978F7EAc01f3a7#code
 
 Verifying contract "contracts/RoguelikeRun.sol:RoguelikeRun" for network base-sepolia...
 Contract contracts/RoguelikeRun.sol:RoguelikeRun already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xF384333E180B6c5bEF152540514D8dFe47Ca1aF3#code
+  - https://sepolia.basescan.org/address/0xBCB07b6D6Fd577218E881EB9bDa437B8633E18Bf#code
 
 Verifying contract "contracts/SelfieCheckEligibilityProvider.sol:SelfieCheckEligibilityProvider" for network base-sepolia...
 Contract contracts/SelfieCheckEligibilityProvider.sol:SelfieCheckEligibilityProvider already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x1819AE10a1FfAee227A415a7EA6B4102471cd0Ad#code
+  - https://sepolia.basescan.org/address/0x23423EF151D5dfeC56AAE741E1E242e4462A126a#code
 
 Verifying contract "contracts/ShatteredHiveMedalArt.sol:ShatteredHiveMedalArt" for network base-sepolia...
 Contract contracts/ShatteredHiveMedalArt.sol:ShatteredHiveMedalArt already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x47cAC61e66e3c3DA7ff702d5b46c87153c2c63bD#code
+  - https://sepolia.basescan.org/address/0xcfC17eDdfa80df3d253fEd084778F6Fd1d089500#code
 
 Verifying contract "contracts/SinglePlayerOrchestratorRegistry.sol:SinglePlayerOrchestratorRegistry" for network base-sepolia...
 Contract contracts/SinglePlayerOrchestratorRegistry.sol:SinglePlayerOrchestratorRegistry already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x91E8BB175eF1F7Ae63771b5cbD0E17e79b7EAFfc#code
+  - https://sepolia.basescan.org/address/0x79E01f281C475BDD01CDb4EeC7df2f2f4b164755#code
 
 Verifying contract "contracts/SpecialEffectsLib.sol:SpecialEffectsLib" for network base-sepolia...
 Successfully verified contract "contracts/SpecialEffectsLib.sol:SpecialEffectsLib" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xb37294fa3487225647888A5F320Da1F456084dB8#code
+  - https://sepolia.basescan.org/address/0xd33074dBe6123b88a41fC13cE081d4b2C7017499#code
 
 Verifying contract "contracts/UniversalCredits.sol:UniversalCredits" for network base-sepolia...
-Contract contracts/UniversalCredits.sol:UniversalCredits already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x3c3A896B293436eAB2409CD6b5Ab73263E0b438D#code
+Successfully verified contract "contracts/UniversalCredits.sol:UniversalCredits" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0xf6bf2068bF1D5D566af5Ca0fAF4B81E1565573a6#code
 
 Verifying contract "contracts/VariantPurchaseGate.sol:VariantPurchaseGate" for network base-sepolia...
 Contract contracts/VariantPurchaseGate.sol:VariantPurchaseGate already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x41C62756d33BF2241e0363af2294fF085072aeB5#code
+  - https://sepolia.basescan.org/address/0xf8c66fF2D6b55c3B7aB698f53C67CE27b6788858#code
 
 Verifying contract "contracts/AIEncounters.sol:AIEncounters" for network base-sepolia...
-Successfully verified contract "contracts/AIEncounters.sol:AIEncounters" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xE97D6c34f7a3aBAe89b642928438e0007Eb5fcf1#code
+Contract contracts/AIEncounters.sol:AIEncounters already verified on network base-sepolia:
+  - https://sepolia.basescan.org/address/0x68f196ba83A6E0BF08AD51b15886E2F8C874F0A4#code
 
 Verifying contract "contracts/DECBonusWinEffect.sol:DECBonusWinEffect" for network base-sepolia...
-Successfully verified contract "contracts/DECBonusWinEffect.sol:DECBonusWinEffect" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x0950F9f1d3CCBbB57257FaF1959956DC8aDfc6D5#code
+Contract contracts/DECBonusWinEffect.sol:DECBonusWinEffect already verified on network base-sepolia:
+  - https://sepolia.basescan.org/address/0x88904728cE8D73DfBefED7EB380a2A61c186D9FD#code
 
 Verifying contract "contracts/DroneStorefront.sol:DroneStorefront" for network base-sepolia...
 Contract contracts/DroneStorefront.sol:DroneStorefront already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x23E5E0f7Db953112e78f450a0229605d5213AEa9#code
+  - https://sepolia.basescan.org/address/0x6D9daF55D7699758E93df0052ca330267aD098f9#code
 
 Verifying contract "contracts/GameBlobRegistry.sol:GameBlobRegistry" for network base-sepolia...
 Successfully verified contract "contracts/GameBlobRegistry.sol:GameBlobRegistry" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x001E4744dAA1Eb9B40CF41Fa092535aec2aFc314#code
+  - https://sepolia.basescan.org/address/0x6E66D96e45E28158d6746A85be7d2bb8EEF5db38#code
 
 Verifying contract "contracts/GenerateNewShip.sol:GenerateNewShip" for network base-sepolia...
 Successfully verified contract "contracts/GenerateNewShip.sol:GenerateNewShip" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x9bE27C3e15de8F1BA180FCf5CffEFa2f0772A3fE#code
+  - https://sepolia.basescan.org/address/0x22C29468D0408f01a3241fE71De09D06Ea6ff043#code
 
 Verifying contract "contracts/NodeMap.sol:NodeMap" for network base-sepolia...
 Contract contracts/NodeMap.sol:NodeMap already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x68201035b871bf3d76A22d47F75cb13472519e03#code
+  - https://sepolia.basescan.org/address/0xCBA82B8F3e7A3069178556b716A55340A2380e7C#code
 
 Verifying contract "contracts/Renderers/RenderAft.sol:RenderAft" for network base-sepolia...
 Successfully verified contract "contracts/Renderers/RenderAft.sol:RenderAft" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x8876f0C9fc4d205Cf80D3Cf64B757Ea62fF1f77f#code
+  - https://sepolia.basescan.org/address/0xa39fFC5A26964D813563f1a22bB065Ee29e7d5e1#code
 
 Verifying contract "contracts/RenderersV2/RenderAftV2.sol:RenderAftV2" for network base-sepolia...
 Successfully verified contract "contracts/RenderersV2/RenderAftV2.sol:RenderAftV2" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xD908D3ade4bE8125088Bc4eb97a7C2a182d46D60#code
+  - https://sepolia.basescan.org/address/0x4F10836614385062a2Bb95d6b83ca2eFA74Fb51D#code
 
 Verifying contract "contracts/Renderers/RenderBody.sol:RenderBody" for network base-sepolia...
 Successfully verified contract "contracts/Renderers/RenderBody.sol:RenderBody" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xC3bB98256eCEBb2D59b9bAAae22f10b40575EE53#code
+  - https://sepolia.basescan.org/address/0xe46329Bc758a8050F2E9418f36aA319492407fd5#code
 
 Verifying contract "contracts/RenderersV2/RenderBodyV2.sol:RenderBodyV2" for network base-sepolia...
 Successfully verified contract "contracts/RenderersV2/RenderBodyV2.sol:RenderBodyV2" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x30f6c155c4DFa67783aa66A947d7e066dD11A1c0#code
+  - https://sepolia.basescan.org/address/0x2487D6a3ae9da93a1827c670B3a779912A7fB152#code
 
 Verifying contract "contracts/Renderers/RenderFore.sol:RenderFore" for network base-sepolia...
 Successfully verified contract "contracts/Renderers/RenderFore.sol:RenderFore" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xD54Ac54332CbE225c490Fb6B518cc4a3C158BFA4#code
+  - https://sepolia.basescan.org/address/0x2E5B1DDe62b965C36A17b08688DB433C6512f36B#code
 
 Verifying contract "contracts/RenderersV2/RenderForeV2.sol:RenderForeV2" for network base-sepolia...
 Successfully verified contract "contracts/RenderersV2/RenderForeV2.sol:RenderForeV2" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x9c199cCa77E78833657227245A0dF8498227a718#code
+  - https://sepolia.basescan.org/address/0xc30402C0188BABFDC302A4C75E0A5fa9e9fc5eeb#code
 
 Verifying contract "contracts/Renderers/RenderSpecial.sol:RenderSpecial" for network base-sepolia...
 Successfully verified contract "contracts/Renderers/RenderSpecial.sol:RenderSpecial" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x8a6DB82c5b44887Edfc1f808361D53F11dC2536f#code
+  - https://sepolia.basescan.org/address/0x115FDE45a5b5055410F27dbb383dC9Ade71727E9#code
 
 Verifying contract "contracts/RenderersV2/RenderSpecialV2.sol:RenderSpecialV2" for network base-sepolia...
 Successfully verified contract "contracts/RenderersV2/RenderSpecialV2.sol:RenderSpecialV2" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x67F8329E850706bb75e2BBa5d489283E2a025cF9#code
+  - https://sepolia.basescan.org/address/0x55563775b8872B879dd9d7996b449350d458Cf99#code
 
 Verifying contract "contracts/Renderers/RenderWeapon.sol:RenderWeapon" for network base-sepolia...
 Successfully verified contract "contracts/Renderers/RenderWeapon.sol:RenderWeapon" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x011Fa2BaD5E64F9432e756f2c9Dad87a4258AcDE#code
+  - https://sepolia.basescan.org/address/0x6ff9A2E94BBb578cd73a05e4607b87742a6b9182#code
 
 Verifying contract "contracts/RenderersV2/RenderWeaponV2.sol:RenderWeaponV2" for network base-sepolia...
 Successfully verified contract "contracts/RenderersV2/RenderWeaponV2.sol:RenderWeaponV2" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x1320EdBA084C1cf9B8E299157185Df963Ab6f25a#code
+  - https://sepolia.basescan.org/address/0xA4AaD5BC97760d16cf5FaC0066C10f2D4bcDac27#code
 
 Verifying contract "contracts/RoguelikeNodeMap.sol:RoguelikeNodeMap" for network base-sepolia...
 Contract contracts/RoguelikeNodeMap.sol:RoguelikeNodeMap already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x2646f9E65FC257E0Ac393B0CBFd9eD55aCD31794#code
+  - https://sepolia.basescan.org/address/0x875916D263Bd886720Dadf8D0c3c48A96127396e#code
 
 Verifying contract "contracts/ImageRenderer.sol:ImageRenderer" for network base-sepolia...
 Successfully verified contract "contracts/ImageRenderer.sol:ImageRenderer" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x7a2089bBa6Cfb1681757631B2f21427798043c59#code
+  - https://sepolia.basescan.org/address/0xAC008841f245B56065304edF0efF10Fe9Ff9AD13#code
 
 Verifying contract "contracts/ImageRendererV2.sol:ImageRendererV2" for network base-sepolia...
 Successfully verified contract "contracts/ImageRendererV2.sol:ImageRendererV2" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x804ADbd05CB9Ce2f4EE47c11f0DC5d5B8762FA72#code
+  - https://sepolia.basescan.org/address/0xaC6Da55a6BA384CbAd5f0Af534bE45b4b86BC462#code
 
 Verifying contract "contracts/RenderMetadata.sol:RenderMetadata" for network base-sepolia...
 Successfully verified contract "contracts/RenderMetadata.sol:RenderMetadata" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x6A5AC91d11985D9edDE6C2297133F56E79efd7d9#code
+  - https://sepolia.basescan.org/address/0x51c3a9930ed1F94D587069d81c0518Eb682C256E#code
 
 Verifying contract "contracts/Ships.sol:Ships" for network base-sepolia...
-Contract contracts/Ships.sol:Ships already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xEB83fAbEa5f0b099B6fBB09Eee42162465e4726d#code
+Successfully verified contract "contracts/Ships.sol:Ships" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x8F9740334815F426b2D8F7f91be4Eb29a1c665F0#code
 
 Verifying contract "contracts/FreeShipClaim.sol:FreeShipClaim" for network base-sepolia...
 Contract contracts/FreeShipClaim.sol:FreeShipClaim already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xFF3D60Ad0f50eE58D32584f95Fc9D5d922B1B092#code
+  - https://sepolia.basescan.org/address/0x72CC39fb3c2bFE2CEC3E9117BA937BeBFe39604b#code
 
 Verifying contract "contracts/GameLens.sol:GameLens" for network base-sepolia...
 Successfully verified contract "contracts/GameLens.sol:GameLens" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x294FAa26e0Cc1A370A00571b47f8825510ab157E#code
+  - https://sepolia.basescan.org/address/0x869e5A79F29c8E49792a792A07806cB8B83d56c8#code
 
 Verifying contract "contracts/Lobbies.sol:Lobbies" for network base-sepolia...
-Contract contracts/Lobbies.sol:Lobbies already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xd1C693E75E3BFb8FE39fdFCE536b3ead04D2a799#code
+Successfully verified contract "contracts/Lobbies.sol:Lobbies" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x98B57c147cdFE45869e997321C39A931277B3dD0#code
 
 Verifying contract "contracts/ShipAttributes.sol:ShipAttributes" for network base-sepolia...
 Contract contracts/ShipAttributes.sol:ShipAttributes already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xA5059cDB881210BB33110B02C3f9b53e7dfB3beF#code
+  - https://sepolia.basescan.org/address/0xA3F3E844cA1c83091528005d4189dF65d826cBD0#code
 
 Verifying contract "contracts/ShipGrantWinEffect.sol:ShipGrantWinEffect" for network base-sepolia...
-Successfully verified contract "contracts/ShipGrantWinEffect.sol:ShipGrantWinEffect" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xf17F466fEc65d61Db1dC53acFF253727e5EB7e92#code
+Contract contracts/ShipGrantWinEffect.sol:ShipGrantWinEffect already verified on network base-sepolia:
+  - https://sepolia.basescan.org/address/0xBa4aAA105EEe74acaCC768c6026d31A80301Ac0D#code
 
 Verifying contract "contracts/ShipPurchaser.sol:ShipPurchaser" for network base-sepolia...
 Successfully verified contract "contracts/ShipPurchaser.sol:ShipPurchaser" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x7Ba0Ad0072f3C446d7C665061a10296cf09A20D0#code
+  - https://sepolia.basescan.org/address/0x190606b8DF24Fc4792bdE6A934789E927087C1cE#code
 
 Verifying contract "contracts/ShipsRouter.sol:ShipsRouter" for network base-sepolia...
 Successfully verified contract "contracts/ShipsRouter.sol:ShipsRouter" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x27eCCB0400EA6C6B3EC885048d109e6058E0b4ce#code
-
-Verifying contract "contracts/TutorialClaim.sol:TutorialClaim" for network base-sepolia...
-Successfully verified contract "contracts/TutorialClaim.sol:TutorialClaim" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xFD3F1958a48bda67366Db98918Ac0B0A56A9dc98#code
+  - https://sepolia.basescan.org/address/0x480c29A98DF83743B1e09EB319F92E95b2a0c3d1#code
 
 Verifying contract "contracts/DroneSwarmResolver.sol:DroneSwarmResolver" for network base-sepolia...
 Successfully verified contract "contracts/DroneSwarmResolver.sol:DroneSwarmResolver" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xff2ABA5c18668387bECe9B09773E0F5a64e184a7#code
+  - https://sepolia.basescan.org/address/0xb465528410dBa6c948113888B559D3316250f1Db#code
 
 Verifying contract "contracts/DroneYard.sol:DroneYard" for network base-sepolia...
 Successfully verified contract "contracts/DroneYard.sol:DroneYard" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x5b5FBd88B384E2F79Eb2009ac71A220CA07ea027#code
+  - https://sepolia.basescan.org/address/0xCD09EE1f8D2AB57591873b7B6Cc2C7C1efa2Bd6A#code
 
 Verifying contract "contracts/EMPResolver.sol:EMPResolver" for network base-sepolia...
 Successfully verified contract "contracts/EMPResolver.sol:EMPResolver" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x86ce9FEe13aB003fc0098485D7Ce6ef6F707082f#code
+  - https://sepolia.basescan.org/address/0xCF708f326fa7fff07ba64ab84c1531609f05FC4D#code
 
 Verifying contract "contracts/ElectricStormResolver.sol:ElectricStormResolver" for network base-sepolia...
 Successfully verified contract "contracts/ElectricStormResolver.sol:ElectricStormResolver" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xF43914e6952F14d3A8997e37504e3266BA2bc9C4#code
+  - https://sepolia.basescan.org/address/0x9a2dD1525adE533B41b0e39d312f572C075a3242#code
 
 Verifying contract "contracts/FlakArrayResolver.sol:FlakArrayResolver" for network base-sepolia...
 Successfully verified contract "contracts/FlakArrayResolver.sol:FlakArrayResolver" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x698a626fC2A89823211641A25FC9a6F0d20C52E2#code
-
-Verifying contract "contracts/Fleets.sol:Fleets" for network base-sepolia...
-Contract contracts/Fleets.sol:Fleets already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x6c1D6d01648A89c0F2AE8879d6c11e97Ee923Dc1#code
-
-Verifying contract "contracts/Game.sol:Game" for network base-sepolia...
-Successfully verified contract "contracts/Game.sol:Game" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xec6f63df4Aee7c1Fc79B370FcB9434c67dd35D4b#code
+  - https://sepolia.basescan.org/address/0xd5622ccA2AC2206e9a1836621Df87847899F7Ab7#code
 
 Verifying contract "contracts/HealAboveFloorWinEffect.sol:HealAboveFloorWinEffect" for network base-sepolia...
-Successfully verified contract "contracts/HealAboveFloorWinEffect.sol:HealAboveFloorWinEffect" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x0C1cF9B8CB791D89d92dee7a9654399EFA92C50d#code
+Contract contracts/HealAboveFloorWinEffect.sol:HealAboveFloorWinEffect already verified on network base-sepolia:
+  - https://sepolia.basescan.org/address/0x3a8ffC76A2c6F017a1248a84bcfE3faaf4b1FD27#code
 
 Verifying contract "contracts/RepairDronesResolver.sol:RepairDronesResolver" for network base-sepolia...
 Successfully verified contract "contracts/RepairDronesResolver.sol:RepairDronesResolver" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x55F03606d588bBB04f85559cb350d530Bb6B8B3b#code
+  - https://sepolia.basescan.org/address/0x87E9d37f08c98CBB3a862343784ee6B2565e2E0e#code
 
-Verifying contract "contracts/PvPMatch.sol:PvPMatch" for network base-sepolia...
-Contract contracts/PvPMatch.sol:PvPMatch already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x4AF1283DCF45339e8c09fb61e1b149BDD69C6915#code
-
-Verifying contract "contracts/RoguelikeMatch.sol:RoguelikeMatch" for network base-sepolia...
-Successfully verified contract "contracts/RoguelikeMatch.sol:RoguelikeMatch" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xF88c2db474A0ca65EFEA325387EE5a80a2FeA779#code
-
-Verifying contract "contracts/RoguelikeResupply.sol:RoguelikeResupply" for network base-sepolia...
-Contract contracts/RoguelikeResupply.sol:RoguelikeResupply already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0xAD667ABD8DA18e1F5CBd50Ba04fB672EBb77d6B2#code
-
-Verifying contract "contracts/ShatteredHiveMedal.sol:ShatteredHiveMedal" for network base-sepolia...
-Contract contracts/ShatteredHiveMedal.sol:ShatteredHiveMedal already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x1e205f49F54c1Bddd50b1E9746039dA6e73Db462#code
-
-Verifying contract "contracts/SinglePlayerMatch.sol:SinglePlayerMatch" for network base-sepolia...
-Successfully verified contract "contracts/SinglePlayerMatch.sol:SinglePlayerMatch" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0x8d6117b82aD39577676b0E349274fD61B261Ee04#code
-
-Verifying contract "contracts/Tournament.sol:Tournament" for network base-sepolia...
-Successfully verified contract "contracts/Tournament.sol:Tournament" for network base-sepolia:
-  - https://sepolia.basescan.org/address/0xDEf10f93FCb490b1A710c994e455f85164d0d317#code
+Verifying contract "contracts/TutorialClaim.sol:TutorialClaim" for network base-sepolia...
+Successfully verified contract "contracts/TutorialClaim.sol:TutorialClaim" for network base-sepolia:
+  - https://sepolia.basescan.org/address/0x471F1aF89c16d09fF9c2f4926De1bCAc65622d67#code
 
 Verifying contract "contracts/Variant1AI.sol:Variant1AI" for network base-sepolia...
 Contract contracts/Variant1AI.sol:Variant1AI already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x1f6cd1C7CA8c9c1895063eE1b1BF6a5291b002d7#code
+  - https://sepolia.basescan.org/address/0x775f0f953898A02Bc61b6CE046dF1A5daED929B9#code
 
 Verifying contract "contracts/Variant2AI.sol:Variant2AI" for network base-sepolia...
 Contract contracts/Variant2AI.sol:Variant2AI already verified on network base-sepolia:
-  - https://sepolia.basescan.org/address/0x6fEfa92118A2e7D028C54dD2F4d8AB5D23902426#code
+  - https://sepolia.basescan.org/address/0xb66e67248150cb6A9B885666d080c5F5569ac17A#code
 
+Verifying contract "contracts/Fleets.sol:Fleets" for network base-sepolia...
+Error in plugin hardhat-ignition: Verification failed. Please run `hardhat ignition verify chain-84532 --include-unrelated-contracts` to attempt verifying all contracts.
+
+For more info run Hardhat with --show-stack-traces
