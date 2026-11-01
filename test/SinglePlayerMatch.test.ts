@@ -2071,10 +2071,9 @@ describe("SinglePlayerMatch", function () {
       // variant 1 intentionally has no reward token registered.
       const { humanShipId, aiShipId } = await setUpOneAIShip(fixture, 2);
 
-      const [utcBefore, decBefore, recycleReward] = await Promise.all([
+      const [utcBefore, decBefore] = await Promise.all([
         universalCredits.read.balanceOf([human.account.address]),
         droneEnergyCores.read.balanceOf([human.account.address]),
-        ships.read.recycleReward(),
       ]);
 
       await shipsRouter.write.setTimestampDestroyed([aiShipId, humanShipId], {
@@ -2086,7 +2085,8 @@ describe("SinglePlayerMatch", function () {
         droneEnergyCores.read.balanceOf([human.account.address]),
       ]);
 
-      expect(decAfter - decBefore).to.equal(recycleReward >> 2n);
+      // One whole core per AI kill (docs/audit-4.md HA7-01).
+      expect(decAfter - decBefore).to.equal(1n);
       expect(utcAfter).to.equal(utcBefore);
     });
 

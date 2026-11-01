@@ -96,7 +96,6 @@ describe("Ships", function () {
         "0x0000000000000000000000000000000000000000", // metadataRenderer
         "0x0000000000000000000000000000000000000000", // shipAttributes
         "0x0000000000000000000000000000000000000000", // universalCredits
-        "0x0000000000000000000000000000000000000000", // droneEnergyCores
         "0x0000000000000000000000000000000000000000", // purchaseGate
       ]);
 
@@ -434,7 +433,6 @@ describe("Ships", function () {
         "0x0000000000000000000000000000000000000000", // metadataRenderer
         "0x0000000000000000000000000000000000000000", // shipAttributes
         "0x0000000000000000000000000000000000000000", // universalCredits
-        "0x0000000000000000000000000000000000000000", // droneEnergyCores
         "0x0000000000000000000000000000000000000000", // purchaseGate
       ]);
 
@@ -449,7 +447,7 @@ describe("Ships", function () {
       const zero = "0x0000000000000000000000000000000000000000";
 
       const hash = await ships.write.setConfig([
-        zero, zero, zero, zero, zero, zero, zero, zero, zero, zero,
+        zero, zero, zero, zero, zero, zero, zero, zero, zero,
       ]);
       await publicClient.waitForTransactionReceipt({ hash });
 
@@ -583,6 +581,58 @@ describe("Ships", function () {
       expect(constructedShip.name).to.equal("Mock Ship"); // name is at index 0
       expect(constructedShip.shipData.costsVersion).to.equal(1); // shipData.costsVersion
       expect(constructedShip.shipData.cost).to.be.greaterThan(0); // shipData.cost
+    });
+
+    // docs/trustless-randomness-plan-2026-11-01.md (audit-4 HA7-10): a
+    // roll nothing captured before its window closed builds the fixed
+    // baseline ship, never a new roll; a captured one keeps its roll.
+    it("builds a baseline ship for an expired, uncaptured roll, and the real roll once captured (HA7-10)", async function () {
+      const { ships, user1, user2, randomManager } =
+        await loadFixture(deployShipsFixture);
+      await ships.write.purchaseWithFlow(
+        [user1.account.address, 0n, user2.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      const before = tupleToShip((await ships.read.ships([1n])) as ShipTuple);
+      // Past the 256-block window with no RandomManager call at all.
+      await hre.network.provider.send("hardhat_mine", ["0x12c"]);
+      expect(await randomManager.read.isExpired([before.traits.serialNumber])).to.equal(true);
+
+      await ships.write.constructShip([1n], { account: user1.account });
+      const built = tupleToShip((await ships.read.ships([1n])) as ShipTuple);
+      expect(built.shipData.constructed).to.equal(true);
+      expect([built.traits.accuracy, built.traits.hull, built.traits.speed]).to.deep.equal([0, 0, 0]);
+      expect(built.shipData.shiny).to.equal(false);
+      expect(built.equipment).to.deep.equal({
+        mainWeapon: 0,
+        armor: 0,
+        shields: 0,
+        special: 0,
+      });
+      const preset = Number(before.shipData.shipsDestroyed);
+      expect(Number(built.shipData.shipsDestroyed)).to.equal(preset > 0 ? preset : 1);
+      // The request itself is never re-rolled or revealed.
+      const req = await randomManager.read.requests([before.traits.serialNumber]);
+      expect(req[1]).to.equal(false);
+
+      // A second pack, captured by a later mint before its window closes,
+      // keeps its real roll after the window.
+      await ships.write.purchaseWithFlow(
+        [user1.account.address, 0n, user2.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      const count = await ships.read.shipCount();
+      const second = tupleToShip((await ships.read.ships([count])) as ShipTuple);
+      await ships.write.purchaseWithFlow(
+        [user2.account.address, 0n, user1.account.address, 1],
+        { value: parseEther("4.99") },
+      ); // stores the second pack's block hash
+      await hre.network.provider.send("hardhat_mine", ["0x12c"]);
+      expect(await randomManager.read.isExpired([second.traits.serialNumber])).to.equal(false);
+      await ships.write.constructShip([count], { account: user1.account });
+      expect(
+        (await randomManager.read.requests([second.traits.serialNumber]))[1],
+      ).to.equal(true);
     });
 
     it("Should allow owner to construct all tier 4 ships at once", async function () {
@@ -2341,8 +2391,7 @@ describe("Ships", function () {
           metadataRenderer.address, // metadataRenderer - use actual
           shipAttributes.address, // shipAttributes - use actual
           universalCredits.address, // universalCredits - use actual
-          "0x0000000000000000000000000000000000000000", // droneEnergyCores
-          "0x0000000000000000000000000000000000000000", // purchaseGate
+            "0x0000000000000000000000000000000000000000", // purchaseGate
         ],
         {
           account: owner.account,
@@ -2405,7 +2454,6 @@ describe("Ships", function () {
           metadataRenderer.address,
           shipAttributes.address,
           universalCredits.address,
-          "0x0000000000000000000000000000000000000000",
           "0x0000000000000000000000000000000000000000",
         ],
         { account: owner.account },

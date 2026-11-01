@@ -16,6 +16,11 @@ import "./BlockHashLib.sol";
 import "./IShips.sol";
 import "./Types.sol";
 
+// The one RandomManager call the hook makes.
+interface IRandomManagerCapture {
+    function capturePending(uint _maxBlocks) external;
+}
+
 // UTCLotteryHook — the pool + lottery half of the Uniswap pick
 // (docs/eth-global-remote-strategy-v2.md, Pick 3). No fee-to-treasury, no
 // active peg defense — both were considered and rejected on their own
@@ -47,6 +52,12 @@ contract UTCLotteryHook is BaseHook, Ownable {
     using BalanceDeltaLibrary for BalanceDelta;
 
     IShips public ships;
+    // Optional (docs/trustless-randomness-plan-2026-11-01.md, decision D2):
+    // swaps are the game's most frequent transactions, so each one also
+    // asks RandomManager to store pending ship-roll block hashes before
+    // they age out. Unset = skipped.
+    IRandomManagerCapture public randomManager;
+    uint256 private constant CAPTURE_PER_SWAP = 2;
     address public immutable utcToken;
 
     bool public poolLocked;
@@ -128,10 +139,19 @@ contract UTCLotteryHook is BaseHook, Ownable {
     // Resolution happens automatically in the afterSwap of the next swap in
     // a later block (see _maybeAutoResolve), or via the permissionless
     // resolveDraw. The close block's hash stays readable for 8191 blocks
-    // (~4.5 hours on Base) via EIP-2935, or 256 without it (BlockHashLib);
-    // if nothing resolves a draw within that window, the next attempt
-    // re-targets it to its own (equally unknowable) block — see _retarget.
+    // (~4.5 hours on Base) via EIP-2935, or 256 without it (BlockHashLib).
+    // The first swap after the close block stores it (drawSeed), so the
+    // draw can't expire after that; only if no swap and no resolveDraw
+    // happens within the window does the next attempt re-target it to its
+    // own (equally unknowable) block — see _retarget.
     mapping(uint256 => uint256) public drawCloseBlock;
+    // The close block's hash, stored by the first swap after that block is
+    // sealed (docs/audit-4.md HA7-09). Once stored the draw can't expire:
+    // resolveDraw uses it instead of re-reading the block hash, so a
+    // retarget (a fresh roll) only happens if nobody swaps and nobody
+    // resolves for the whole blockhash window. Without it, losers could
+    // compute the winner, wait out the window and get a re-roll.
+    mapping(uint256 => bytes32) public drawSeed;
     // The pick's denominator, snapshotted at close so later owner changes to
     // maxWeightPerEntryWei/maxWinProbabilityDenominator (made after the
     // close block's hash is public) can't influence an already-closed draw.
@@ -313,6 +333,7 @@ contract UTCLotteryHook is BaseHook, Ownable {
         // block, so it can never be the draw this same swap closes).
         _maybeAutoResolve();
         _maybeCloseDraw();
+        _captureShipRandomness();
 
         return (BaseHook.afterSwap.selector, 0);
     }
@@ -441,21 +462,26 @@ contract UTCLotteryHook is BaseHook, Ownable {
         }
         uint256 closeBlock = drawCloseBlock[drawId];
         if (block.number <= closeBlock) return; // close block not sealed yet
-        if (BlockHashLib.get(closeBlock) == bytes32(0)) {
-            _retarget(drawId);
-            return;
+        // Stored before the gas gate below, so every swap's gas estimate
+        // includes it and it can't be skipped by a cheap swap.
+        if (drawSeed[drawId] == bytes32(0)) {
+            bytes32 closeHash = BlockHashLib.get(closeBlock);
+            if (closeHash == bytes32(0)) {
+                _retarget(drawId);
+                return;
+            }
+            drawSeed[drawId] = closeHash;
         }
         if (gasleft() < autoResolveMinGas) return;
         try this.resolveDraw(drawId) {} catch {}
     }
 
     // A block hash is only readable for BlockHashLib's window (8191 blocks
-    // with EIP-2935, else 256). A draw nobody resolved in time moves its
-    // target to the current block, whose hash is just as unknowable to the
-    // caller as the original was to the closer. The only leverage this
-    // leaves is a losing party hoping nobody resolves within the whole
-    // window; ordinary swaps auto-resolving plus anyone being able to call
-    // resolveDraw make that impractical.
+    // with EIP-2935, else 256). A draw whose seed nobody stored in time
+    // moves its target to the current block, whose hash is just as
+    // unknowable to the caller as the original was to the closer. That
+    // needs no swap and no resolveDraw for the whole window: any swap
+    // stores the seed (see drawSeed), whatever its gas.
     function _retarget(uint256 _drawId) internal {
         drawCloseBlock[_drawId] = block.number;
         emit DrawRetargeted(_drawId, block.number);
@@ -477,10 +503,13 @@ contract UTCLotteryHook is BaseHook, Ownable {
         if (block.number <= closeBlock) {
             revert DrawNotReady(_drawId);
         }
-        bytes32 closeHash = BlockHashLib.get(closeBlock);
+        bytes32 closeHash = drawSeed[_drawId];
         if (closeHash == bytes32(0)) {
-            _retarget(_drawId);
-            return;
+            closeHash = BlockHashLib.get(closeBlock);
+            if (closeHash == bytes32(0)) {
+                _retarget(_drawId);
+                return;
+            }
         }
         uint256 totalWeight = totalWeightInDraw[_drawId];
         uint256[] storage segments = drawSegments[_drawId];
@@ -664,6 +693,20 @@ contract UTCLotteryHook is BaseHook, Ownable {
 
     function setShips(address _ships) external onlyOwner {
         ships = IShips(_ships);
+    }
+
+    function setRandomManager(address _randomManager) external onlyOwner {
+        randomManager = IRandomManagerCapture(_randomManager);
+    }
+
+    // Never reverts the swap: skipped when unset or not a contract (a
+    // call to an address with no code can't be caught), and any failure,
+    // including running short of gas, is swallowed. A missed capture is
+    // made by the next swap or any other RandomManager call.
+    function _captureShipRandomness() internal {
+        address rm = address(randomManager);
+        if (rm.code.length == 0) return;
+        try IRandomManagerCapture(rm).capturePending(CAPTURE_PER_SWAP) {} catch {}
     }
 
     function setAutoResolveMinGas(uint256 _autoResolveMinGas) external onlyOwner {

@@ -1065,7 +1065,8 @@ describe("Ship costs, versions, and fleets", function () {
       expect(BigInt(updated.shipData.cost)).to.equal(BigInt(expectedCost));
     });
 
-    it("syncShipCosts is permissionless and updates multiple ships", async function () {
+    // docs/audit-4.md HA7-08: only the owner or an approved address.
+    it("syncShipCosts updates multiple ships for their owner or an approved address, and no one else", async function () {
       const { ships, shipAttributes, owner, user1, user2, randomManager } =
         await loadFixture(deployShipsFixture);
 
@@ -1087,7 +1088,20 @@ describe("Ship costs, versions, and fleets", function () {
 
       const vAfter = await shipAttributes.read.getCurrentCostsVersion([1]);
 
-      await ships.write.syncShipCosts([[1n, 2n]], { account: user2.account });
+      await expect(
+        ships.write.syncShipCosts([[1n, 2n]], { account: user2.account }),
+      ).to.be.rejectedWith("NotYourShip");
+      // An id with no token behind it is rejected, not written (L-03).
+      await expect(
+        ships.write.syncShipCosts([[0n]], { account: user1.account }),
+      ).to.be.rejectedWith("NotYourShip");
+
+      await ships.write.syncShipCosts([[1n]], { account: user1.account });
+      // An address the owner approved for the ship can sync it too.
+      await ships.write.approve([user2.account.address, 2n], {
+        account: user1.account,
+      });
+      await ships.write.syncShipCosts([[2n]], { account: user2.account });
 
       for (const id of [1n, 2n] as const) {
         const shipMem = await ships.read.getShip([id]);
@@ -1132,7 +1146,7 @@ describe("Ship costs, versions, and fleets", function () {
       ]);
 
       await expect(
-        ships.write.syncShipCosts([[shipId]], { account: joiner.account }),
+        ships.write.syncShipCosts([[shipId]], { account: creator.account }),
       ).to.be.rejectedWith("ShipInFleet");
 
       await expect(

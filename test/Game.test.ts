@@ -4248,6 +4248,110 @@ describe("Game", function () {
       });
     });
 
+    // One ship each, with MockEffectsResolver as every faction ability, so a
+    // test can apply arbitrary effects through Game's real dispatch path.
+    async function oneShipEachWithMockEffects() {
+      const fx = await loadFixture(deployGameFixture);
+      const { creatorLobbies, joinerLobbies, creator, joiner, ships, game, randomManager, owner } = fx;
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      const totalShipCount = Number(await ships.read.shipCount());
+      for (let i = 1; i <= totalShipCount; i++) {
+        const ship = tupleToShip((await ships.read.ships([BigInt(i)])) as ShipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+      const resolver = await hre.viem.deployContract("MockEffectsResolver");
+      for (const id of [1n, 6n]) {
+        const ship = tupleToShip((await ships.read.ships([id])) as ShipTuple);
+        await game.write.setFactionAbilityResolver(
+          [ship.traits.variant, resolver.address],
+          { account: owner.account },
+        );
+      }
+      await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([1n, [1n], [{ row: 0, col: 0 }]]);
+      await joinerLobbies.write.createFleet([1n, [6n], [{ row: 0, col: 16 }]]);
+      const gameData = (await game.read.getGame([1n])) as unknown as GameDataView;
+      const creatorFirst =
+        gameData.turnState.currentTurn.toLowerCase() === creator.account.address.toLowerCase();
+      const first = creatorFirst
+        ? { client: creator, shipId: 1n, col: 0 }
+        : { client: joiner, shipId: 6n, col: 16 };
+      const second = creatorFirst
+        ? { client: joiner, shipId: 6n, col: 16 }
+        : { client: creator, shipId: 1n, col: 0 };
+      const useAbility = (who: typeof first) =>
+        game.write.moveShip(
+          [1n, who.shipId, 0, who.col, ActionType.FactionAbility, 0n],
+          { account: who.client.account },
+        );
+      return { ...fx, resolver, first, second, useAbility };
+    }
+
+    const NO_RELOCATE = -32768;
+    const effect = (shipId: bigint, fields: { hullDelta?: number; removalKind?: number }) => ({
+      shipId,
+      hullDelta: fields.hullDelta ?? 0,
+      reactorTimerDelta: 0,
+      newRow: NO_RELOCATE,
+      newCol: NO_RELOCATE,
+      removalKind: fields.removalKind ?? 0,
+    });
+
+    // The ship to credit for a kill, from its packed board word.
+    const lastDamagerOf = async (game: any, gameId: bigint, shipId: bigint) => {
+      const board = (await game.read.getAIBoard([gameId])) as bigint[];
+      for (let i = 7; i < board.length; i += 2) {
+        if (board[i] === shipId) return board[i + 1] >> 208n;
+      }
+      throw new Error(`ship ${shipId} not on the board`);
+    };
+
+    // docs/audit-4.md HA7-03: an ability that removes both sides' last
+    // ships ends by score once every removal is applied, and destroys
+    // both, instead of handing the win to whichever side was removed last.
+    it("ends a mutual wipe-out from one ability by score and removes every doomed ship (HA7-03)", async function () {
+      const { game, resolver, first, second, useAbility } = await oneShipEachWithMockEffects();
+      await resolver.write.setEffects([[
+        effect(first.shipId, { removalKind: 2 }),
+        effect(second.shipId, { removalKind: 2 }),
+      ]]);
+      await useAbility(first);
+
+      const g = (await game.read.getGame([1n])) as unknown as GameDataView;
+      expect(g.metadata.ended).to.equal(true);
+      // 0-0 on score: a draw, not a win for either side.
+      expect(g.metadata.winner).to.equal(zeroAddress);
+      for (const id of [first.shipId, second.shipId]) {
+        expect((await game.read.getShipPosition([1n, id])).status).to.equal(1);
+      }
+    });
+
+    // docs/audit-4.md HA7-04: damage from a ship's own side never takes
+    // the kill credit; an enemy's damage does.
+    it("credits a kill only to an enemy's damage, never to friendly fire (HA7-04)", async function () {
+      const { game, resolver, first, second, useAbility } = await oneShipEachWithMockEffects();
+      // The first ship disables itself: no credit.
+      await resolver.write.setEffects([[effect(first.shipId, { hullDelta: -1000 })]]);
+      await useAbility(first);
+      expect((await game.read.getShipAttributes([1n, first.shipId])).hullPoints).to.equal(0);
+      expect(await lastDamagerOf(game, 1n, first.shipId)).to.equal(0n);
+
+      // The enemy hits the wreck: credit goes to the enemy ship.
+      await resolver.write.setEffects([[effect(first.shipId, { hullDelta: -1 })]]);
+      await useAbility(second);
+      expect(await lastDamagerOf(game, 1n, first.shipId)).to.equal(second.shipId);
+    });
+
     it("keeps the occupancy bitmap in step with relocations and retreats, and rejects off-board relocations", async function () {
       const { creatorLobbies, joinerLobbies, creator, joiner, ships, game, randomManager, owner } =
         await loadFixture(deployGameFixture);

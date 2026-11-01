@@ -14,7 +14,6 @@ import "./IRandomManager.sol";
 import "./IGenerateNewShip.sol";
 import "./IUniversalCredits.sol";
 import "./IShipAttributes.sol";
-import "./IDroneEnergyCores.sol";
 import "./IVariantPurchaseGate.sol";
 
 contract Ships is ERC721, Ownable, ReentrancyGuard {
@@ -86,7 +85,6 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
     // TODO: Should variants have different weapons or props?
 
     IUniversalCredits public universalCredits;
-    IDroneEnergyCores public droneEnergyCores;
     // Per-variant purchase gate registry (e.g. requiring the Shattered Hive
     // Campaign medal for variant 2) — see _mintShip/VariantPurchaseGate.sol.
     // Ships.sol deliberately knows nothing about which variants are gated or
@@ -258,7 +256,7 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
         ship.traits.hull = _ship.traits.hull;
         ship.traits.speed = _ship.traits.speed;
         // NOTE: traits.variant is not bounds-checked against maxVariant here.
-        // DroneYard.validateShip is currently the only caller-side enforcement
+        // DroneYard._validateShip is currently the only caller-side enforcement
         // of that bound (variant == 0 or > maxVariant reverts there). Ships.sol
         // has almost no bytecode headroom left (see
         // docs/ShipsSizeOptimizationAnalysis.md for identified savings), so a
@@ -349,22 +347,24 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
         }
 
         // Reveals (locks in, permanently) this ship's randomness on first
-        // call if the commit-reveal entropy window has opened, then returns
-        // it — no separate prior reveal transaction required. Reverts
-        // TooSoonToReveal if called before block.prevrandao has actually
-        // changed since the ship was minted (see RandomManager.sol's header
-        // comment for why this must be a genuine change, not just a later
-        // block number).
-        uint64 randomBase = config.randomManager.fulfillRandomRequest(
-            newShip.traits.serialNumber
-        );
-
-        Ship memory generatedShip = config.shipGenerator.generateShip(
-            _id,
-            newShip.traits.serialNumber,
-            randomBase,
-            newShip.traits.variant
-        );
+        // call, then returns it — no separate prior reveal transaction
+        // required. Reverts TooSoonToReveal in the mint's own block. A
+        // request nothing captured before its window closed builds the
+        // fixed baseline ship instead, never a new roll (audit-4 HA7-10;
+        // see RandomManager.sol's header comment).
+        uint serial = newShip.traits.serialNumber;
+        Ship memory generatedShip = config.randomManager.isExpired(serial)
+            ? config.shipGenerator.generateBaselineShip(
+                _id,
+                serial,
+                newShip.traits.variant
+            )
+            : config.shipGenerator.generateShip(
+                _id,
+                serial,
+                config.randomManager.fulfillRandomRequest(serial),
+                newShip.traits.variant
+            );
 
         // Copy generated ship data to storage
         // We already have variant, it was set at purchase
@@ -393,10 +393,18 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
         _setCostOfShip(_id);
     }
 
-    /// @notice Permissionless: refresh cost and costsVersion for each id (minted ERC-721 tokens only; invalid ids corrupt storage).
+    /// @notice Refresh cost and costsVersion for each id. Only the ship's
+    /// owner or an approved address (docs/audit-4.md HA7-08, closing
+    /// audit-2 L-03): a third party re-pricing an unlocked ship could push
+    /// someone's roster over its cost cap. Unminted ids are rejected too,
+    /// so no write lands on an empty slot.
     function syncShipCosts(uint[] calldata _ids) external {
         for (uint i; i < _ids.length; ++i) {
-            _setCostOfShip(_ids[i]);
+            uint id = _ids[i];
+            if (!_isAuthorized(_ownerOf(id), msg.sender, id)) {
+                revert NotYourShip(id);
+            }
+            _setCostOfShip(id);
         }
     }
 
@@ -635,7 +643,6 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
         address _metadataRenderer,
         address _shipAttributes,
         address _universalCredits,
-        address _droneEnergyCores,
         address _purchaseGate
     ) public onlyOwner {
         config.gameAddress = _gameAddress;
@@ -646,7 +653,6 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
         config.metadataRenderer = IRenderMetadata(_metadataRenderer);
         config.shipAttributes = IShipAttributes(_shipAttributes);
         universalCredits = IUniversalCredits(_universalCredits);
-        droneEnergyCores = IDroneEnergyCores(_droneEnergyCores);
         purchaseGate = _purchaseGate;
         emit BatchMetadataUpdate(0, type(uint256).max);
     }

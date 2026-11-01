@@ -240,8 +240,8 @@ contract Fleets is Ownable, IFleets {
             if (ship.shipData.inFleet) revert ShipAlreadyInFleet();
 
             // docs/audit-3.md HA6-23: an unconstructed ship has all-zero
-            // traits, and the permissionless Ships.syncShipCosts can still
-            // stamp it with a current costsVersion — without this it could
+            // traits, and its owner's Ships.syncShipCosts can still stamp
+            // it with a current costsVersion — without this it could
             // join a fleet (and then never be constructable while inFleet).
             if (!ship.shipData.constructed) revert ShipNotConstructed();
 
@@ -342,7 +342,7 @@ contract Fleets is Ownable, IFleets {
                 _packPosition(_startingPositions[i])
             );
         }
-        delete from.shipIds;
+        _emptyFleet(from);
 
         emit FleetCleared(_fromFleetId);
         emit FleetCreated(fleetId, _lobbyId, _owner);
@@ -398,7 +398,7 @@ contract Fleets is Ownable, IFleets {
             );
         }
         uint keptCost = from.totalCost;
-        delete from.shipIds;
+        _emptyFleet(from);
 
         if (_shipIds.length > kept) {
             _frozenPrices = true;
@@ -497,8 +497,7 @@ contract Fleets is Ownable, IFleets {
             }
         }
 
-        // Clear the fleet's shipIds array
-        delete fleet.shipIds;
+        _emptyFleet(fleet);
 
         emit FleetCleared(_fleetId);
     }
@@ -510,15 +509,19 @@ contract Fleets is Ownable, IFleets {
         FleetRecord storage fleet = _fleets[_fleetId];
         if (fleet.id == 0) revert FleetNotFound();
 
-        // Find and remove the ship from the fleet. Swap-and-pop — order
-        // doesn't matter here (fleet.shipIds is consumed purely as a
-        // membership list once a game has started; nothing indexes into it
-        // positionally) — same pattern as NodeMap._removeFromCampaignNodeIds
-        // and RoguelikeNodeMap.removeChild (G-02).
+        // Find and remove the ship from the fleet. Swap-and-pop (same
+        // pattern as NodeMap._removeFromCampaignNodeIds and
+        // RoguelikeNodeMap.removeChild, G-02): the fleet's last ship takes
+        // the removed one's place. reserveFleet keeps the resulting order.
         for (uint i = 0; i < fleet.shipIds.length; i++) {
             if (fleet.shipIds[i] == _shipId) {
-                fleet.shipIds[i] = fleet.shipIds[fleet.shipIds.length - 1];
+                // startingPositions moves in step, so ids and positions
+                // stay index-aligned for getFleet and later readers.
+                uint last = fleet.shipIds.length - 1;
+                fleet.shipIds[i] = fleet.shipIds[last];
                 fleet.shipIds.pop();
+                fleet.startingPositions[i] = fleet.startingPositions[last];
+                fleet.startingPositions.pop();
                 if (fleet.isAIFleet) return;
 
                 // Read cost before releasing the ship from the fleet: a ship's cost
@@ -537,6 +540,15 @@ contract Fleets is Ownable, IFleets {
 
         // Ship not found in fleet
         revert ShipNotFound();
+    }
+
+    // Leaves a fleet with no ships, no positions and no cost, so a cleared
+    // or handed-off fleet reads back empty instead of with stale positions
+    // and totalCost (audit-4 Info, 2026-11-01).
+    function _emptyFleet(FleetRecord storage _fleet) private {
+        delete _fleet.shipIds;
+        delete _fleet.startingPositions;
+        _fleet.totalCost = 0;
     }
 
     // View functions

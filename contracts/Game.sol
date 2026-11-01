@@ -926,7 +926,7 @@ contract Game is Ownable {
                 targetShipId
             );
         } else if (actionType == ActionType.Retreat) {
-            _removeShipFromGame(_gameId, _shipId, true);
+            _removeShipFromGame(_gameId, _shipId, true, true);
         } else if (actionType == ActionType.Assist) {
             revert InvalidMove(); // Assist removed
         } else if (actionType == ActionType.Special) {
@@ -988,7 +988,7 @@ contract Game is Ownable {
         if (targetAttributes.hullPoints == 0) {
             targetAttributes.reactorCriticalTimer++;
             if (targetAttributes.reactorCriticalTimer >= 3) {
-                _removeShipFromGame(_gameId, targetShipId, false);
+                _removeShipFromGame(_gameId, targetShipId, false, true);
             }
             return; // No damage calculation needed for 0 HP ships
         }
@@ -1369,22 +1369,24 @@ contract Game is Ownable {
         // Removals must be applied before relocations — a relocation that
         // lands on a cell a removal is vacating would otherwise get
         // clobbered (see SpecialEffectsLib.EffectResults).
+        // Game end is checked once, after every removal and relocation
+        // (docs/audit-4.md HA7-03): checking after each removal could end
+        // the game while a doomed ship's live bit was still set (the joiner
+        // won a mutual wipe-out, and the rest of the removals were skipped).
         for (uint i = 0; i < results.removeShipIds.length; i++) {
             _removeShipFromGame(
                 _gameId,
                 results.removeShipIds[i],
-                results.removeKinds[i] == 1
+                results.removeKinds[i] == 1,
+                false
             );
-            // A removal that ended the game cleared both fleets; a further
-            // removal would revert ShipNotFound (HA6-02). Relocations below
-            // still apply (grid/positions only) so the final board is right.
-            if (game.metadata.ended) break;
         }
         SpecialEffectsLib.applyRelocations(
             game,
             results.relocateShipIds,
             results.relocatePositions
         );
+        if (results.removeShipIds.length != 0) _checkGameEndCondition(_gameId);
     }
 
     /// @notice Removes a ship from the grid, fleets, and per-player active sets; records it as gone.
@@ -1394,7 +1396,8 @@ contract Game is Ownable {
     function _removeShipFromGame(
         uint _gameId,
         uint _shipId,
-        bool _isRetreat
+        bool _isRetreat,
+        bool _checkEnd
     ) internal {
         // No _requireGameExists: every caller is reached only via moveShip,
         // which already checked it.
@@ -1465,8 +1468,9 @@ contract Game is Ownable {
         // Remove ship from the active lists
         _removeShipFromPlayerActiveShips(_gameId, _shipId);
 
-        // Check if the game should end due to a player having no active ships
-        _checkGameEndCondition(_gameId);
+        // Check if the game should end due to a player having no active
+        // ships (deferred by the caller for a batch of removals).
+        if (_checkEnd) _checkGameEndCondition(_gameId);
     }
 
     // Removes a ship from its side's active list: swap the last id into
@@ -1511,7 +1515,7 @@ contract Game is Ownable {
             if (attrs.status == 0 && attrs.hullPoints == 0) {
                 attrs.reactorCriticalTimer++;
                 if (attrs.reactorCriticalTimer >= 3) {
-                    _removeShipFromGame(_gameId, shipId, false);
+                    _removeShipFromGame(_gameId, shipId, false, true);
                     // This removal ended the game and cleared both fleets;
                     // another removal would revert ShipNotFound (HA6-02).
                     if (game.metadata.ended) return;

@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Types.sol";
-import "./Ships.sol";
 import "./PvPMatch.sol";
 import "./IFleets.sol";
 import "./IMaps.sol";
@@ -16,7 +15,6 @@ import "./IMaps.sol";
 contract Lobbies is Ownable, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.UintSet;
 
-    Ships public ships;
     PvPMatch public pvpMatch;
     IFleets public fleets;
     IMaps public maps;
@@ -112,9 +110,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
     // rejoin immediately and stall the creator again, indefinitely.
     mapping(uint lobbyId => mapping(address => bool)) public kickedFromLobby;
 
-    constructor(address _ships) Ownable(msg.sender) {
-        ships = Ships(_ships);
-    }
+    constructor() Ownable(msg.sender) {}
 
     function setUniversalCreditsAddress(address _universalCredits) public onlyOwner {
         universalCredits = IERC20(_universalCredits);

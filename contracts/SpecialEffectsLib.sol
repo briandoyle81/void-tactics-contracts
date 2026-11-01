@@ -163,14 +163,13 @@ library SpecialEffectsLib {
         ShipBoardState storage attrs = game.shipBoard[_effect.shipId];
 
         if (_effect.reactorTimerDelta != 0) {
-            // Matches the old native EMP's unconditional lastDamage write on
-            // every hit (not just the one that tips the timer critical) —
-            // only the value in place when the ship actually gets removed
-            // (read at Game.sol's _removeShipFromGame) ever matters, but
-            // writing it here on every delta is the minimal-diff match for
-            // prior behavior and self-attributes a rammer that destroys
-            // itself on its own 3rd ram.
-            attrs.lastDamager = uint48(_actingShipId);
+            // Written on every hit (not just the one that tips the timer
+            // critical) — only the value in place when the ship actually
+            // gets removed (read at Game.sol's _removeShipFromGame) ever
+            // matters. Enemy hits only (docs/audit-4.md HA7-04): a ship's
+            // own side, including a rammer ticking itself, never takes the
+            // kill credit and reward.
+            _creditDamager(game, attrs, _actingShipId);
             int16 newTimer = int16(uint16(attrs.reactorCriticalTimer)) +
                 int16(_effect.reactorTimerDelta);
             if (newTimer < 0) newTimer = 0;
@@ -225,7 +224,7 @@ library SpecialEffectsLib {
                     attrs.zeroedAfterMovingRound = round;
                 }
                 EnumerableSet.add(game.shipsWithZeroHP, _shipId);
-                attrs.lastDamager = uint48(_actingShipId);
+                _creditDamager(game, attrs, _actingShipId);
             } else {
                 attrs.hullPoints -= uint8(damage);
             }
@@ -306,6 +305,20 @@ library SpecialEffectsLib {
             }
             p.row = newRow;
             p.col = newCol;
+        }
+    }
+
+    // Records the acting ship as the one to credit if this ship is
+    // destroyed, unless it's on the same side: friendly fire (Flak, Storm)
+    // on a doomed ship of your own must not take the kill credit and reward
+    // from the enemy that downed it (docs/audit-4.md HA7-04).
+    function _creditDamager(
+        GameData storage game,
+        ShipBoardState storage attrs,
+        uint _actingShipId
+    ) private {
+        if (game.shipBoard[_actingShipId].isCreator != attrs.isCreator) {
+            attrs.lastDamager = uint48(_actingShipId);
         }
     }
 

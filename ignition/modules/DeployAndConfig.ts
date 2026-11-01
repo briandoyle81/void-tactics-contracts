@@ -483,7 +483,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
     ships,
     universalCredits,
     shipPurchaser,
-    shipNames,
   ]);
 
   // Deploy Maps contract
@@ -522,7 +521,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
   const fleets = m.contract("Fleets", [shipsRouter]);
 
   // Deploy Lobbies contract
-  const lobbies = m.contract("Lobbies", [ships]);
+  const lobbies = m.contract("Lobbies");
 
   // Deploy PvPMatch: the PvP-specific orchestration split out of Game.sol
   // (human forfeit/timeout, PvP leaderboard recording). Core Game.sol stays
@@ -531,8 +530,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
 
   // Deploy SinglePlayerMatch: plays single-player matches as an on-chain AI
   // opponent, entered via NodeMap's campaign graph (startNodeMatch) — no
-  // Lobbies involved. `lobbies` is kept as a legacy constructor arg only
-  // (see the contract's header comment). First arg is AIShips.sol, not
+  // Lobbies involved. First arg is AIShips.sol, not
   // Ships.sol — this contract's AI fleets are allocated from AIShips' pool.
   // Trailing 0 is engineIndex (HA4-01 fix, 2026-09-28) — this is engine 0
   // (the first/only one), so it reproduces the exact nodeMatchCount-based
@@ -542,7 +540,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // engineIndex comment and the engine-registry plan.
   const singlePlayerMatch = m.contract("SinglePlayerMatch", [
     aiShips,
-    lobbies,
     game,
     aiEncounters,
     maps,
@@ -826,7 +823,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
     metadataRenderer,
     shipAttributes, // shipAttributes
     universalCredits, // universalCredits
-    droneEnergyCores, // droneEnergyCores
     variantPurchaseGate, // purchaseGate
   ]);
 
@@ -2246,9 +2242,12 @@ const DeployModule = buildModule("DeployModule", (m) => {
 
   // Seed the drone-core turn-in tier ladder: cumulative cost to reach tier N
   // grants +N to a player's permanent free-ship bonus (see
-  // DroneStorefront.turnInCores / FreeShipClaim.claimFreeShips). Costs ramp
-  // ~1.76x per tier so tier 1 is reachable in a handful of AI kills while
-  // the top tier takes a very long time to earn — tune via addTier
+  // DroneStorefront.turnInCores / FreeShipClaim.claimFreeShips). Costs are
+  // whole cores (DEC has 0 decimals) and an AI kill pays
+  // ShipsRouter.factionKillReward = 1 core (docs/audit-4.md HA7-01), so
+  // tier 1 takes 10 kills. Costs ramp ~1.76x per tier: an average roguelike
+  // run (~25 kills) reaches tier 1-2, a full clear (~200) tier 4, and the
+  // top tier (3,755 cores total) takes ~150 average runs — tune via addTier
   // post-deploy. DEC is a freely transferable ERC20 (not soulbound), so a
   // player can also just buy cores from someone else's grind instead of
   // earning them directly — see DroneEnergyCores.sol.
@@ -2615,11 +2614,9 @@ const DeployModule = buildModule("DeployModule", (m) => {
       after: [setVariant1AICall, setVariant2AICall],
     });
 
-    // RandomManager is Ownable only for retargetExpired (re-targeting ship
-    // rolls that missed the 256-block window — docs/audit-3.md HA6-19).
-    m.call(randomManager, "transferOwnership", [MAP_EDITOR], {
-      id: "TransferRandomManagerOwnership",
-    });
+    // RandomManager has no owner (2026-11-01, audit-4 HA7-10): nothing can
+    // re-roll a request, so there's no owner-only function left to hand
+    // over.
 
     m.call(variant1AI, "transferOwnership", [MAP_EDITOR], {
       id: "TransferVariant1AIOwnership",

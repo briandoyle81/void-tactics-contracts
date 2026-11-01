@@ -84,6 +84,16 @@ Nothing in the frontend calls these:
 - `GenerateNewShip.generateSpecificShip`.
 - `Lobbies` errors `LobbyAlreadyStarted` and `InvalidShipCount`, which were never raised.
 
+More removed 2026-10-31, also never set to anything that's read (orphaned):
+
+- `Ships.droneEnergyCores()`, and its argument to the owner-only `Ships.setConfig`, which now takes nine addresses (`..., universalCredits, purchaseGate`).
+- `DroneYard.shipNames()` (and its constructor argument) and `DroneYard.validateShip`.
+- `Lobbies.ships()` (Lobbies' constructor takes no arguments now).
+- `SinglePlayerMatch.lobbies()` and `setLobbiesAddress` (and its constructor argument).
+- `ShipPurchaser.isAllowedToCreateShips(address)`.
+- `GameBlobRegistry.getBlob(gameId, player)`: use the `blobs(gameId, player)` getter, which returns the same value.
+- The `CadenceArchCaller` contract (never deployed).
+
 One getter changes type (added 2026-10-31): `SinglePlayerMatch.gameIdToAiShipIds(gameId, i)` and `RoguelikeMatch.gameIdToAiShipIds(gameId, i)` now return `uint64` instead of `uint256`. viem still decodes it as a `bigint`, and the frontend doesn't call either getter.
 
 ---
@@ -164,15 +174,71 @@ _Added 2026-10-31._ The transaction that ends a roguelike fight was the second-l
 
 - **Roster order after a win** now follows the combat fleet's order: survivors first, in the order the fleet held them (a destroyed ship's place is taken by the fleet's last ship), then rejoining ships. Read `rosterShipIds` fresh before building `enterCombatNode` positions, which must match it index for index.
 - A ship's stored HP still follows it through the whole run: one dropped at a resupply stop and added back keeps its damage.
+- **Game outcomes and kill credit (added 2026-11-01, audit-4 HA7-03/04/06/07):**
+  - A special or faction ability that removes both sides' last ships now ends the game by score (a draw if tied), and every ship it destroyed is destroyed. Before, the side removed second won and its doomed ship survived.
+  - Friendly fire (Flak, Electric Storm, a rammer's own reactor tick) never takes kill credit. The kill (rank) and reward go to the enemy ship that last damaged the destroyed ship. A ship that only its own side ever hit is destroyed with no kill credited and no reward paid.
+  - AI heal and ram ships no longer Pass when they can't land in range this turn. They shoot or move instead.
+  - **Lottery draws no longer expire once anyone swaps (audit-4 HA7-09).** The first swap after a draw's close block stores that block's hash in the new `UTCLotteryHook.drawSeed(drawId)` getter, whatever the swap's gas. From then on `resolveDraw` always resolves on the original roll. `DrawRetargeted` only fires now if nobody swaps or resolves for the whole 8,191-block window. This replaces the retarget rule described in `frontend-handoff-lottery-prize-retry-2026-10-14.md` once anyone has swapped. A UI that warns "resolve within ~4.5 hours or the draw re-rolls" only needs that warning while `drawSeed(drawId)` is zero.
+  - `Ships.syncShipCosts(ids)` now accepts only ids the caller owns or is approved for. Anything else reverts `NotYourShip(id)`, including unminted ids. Manage Navy already syncs only the player's own ships, so it keeps working, but the comment at `ManageNavy.tsx:1328` calling it permissionless is now out of date.
+  - **Fleet reads stay consistent (added 2026-11-01).** After a ship is destroyed or flees mid-game, `getFleet` and `getFleetShipIdsAndPositions` now return positions still aligned index for index with `shipIds`; before, a removal could leave them misaligned. A fleet that was cleared or handed off (a lobby leave or timeout, a game end, a roguelike reservation moved into a match) now reads back with empty `shipIds`, empty `startingPositions` and `totalCost` 0. Before, it kept its old positions and cost.
+  - A roguelike ship that fled and didn't rejoin after a win (for example, put in another fleet mid-match) is stored at the heal floor. That's the HP it comes back with if added at a resupply stop. Before, it kept its pre-fight HP.
 
 ### Frontend changes needed
 
 - Don't call `Maps.scoringTiles` or `Maps.onlyOnceTiles` (nothing does today).
 - Optional: `GameLens` and any roster HP display can use `RoguelikeRun.getRosterHP` instead of one `getShipHP` per ship.
+- **After `takeAITurn`/`takeAITurns` (added 2026-11-01, audit-4 HA7-11),** check the receipt for an `AITurnTaken` event, not just a success status. A transaction sent with too little gas can succeed without the AI acting: the AI's decision and its Pass fallback both run out of gas inside try/catch. If there's no `AITurnTaken`, resend with more gas, for example 1.5× the estimate. It's still the AI's turn, so nothing else changes.
 
 ---
 
-## 10. Checklist
+## 10. Drone Energy Cores are whole numbers (next full deploy)
+
+_Added 2026-10-31 (fixes `docs/audit-4.md` HA7-01)._ DEC is meant to be indivisible: you'd never hold or spend part of a core. The token didn't match that:
+- It had OpenZeppelin's default 18 decimals.
+- Each AI kill minted UTC's 18-decimal reward amount (0.025e18). That's 25 quadrillion cores per kill, enough for every DroneStorefront tier in one kill.
+
+Now:
+- **`DroneEnergyCores.decimals()` returns `0`.** Every DEC amount on chain is a plain count of cores: balances, `DroneStorefront.tierCoreCost(i)` (10, 20, 30, …, 1,625), and `DECBonusWinEffect.bonusAmount()` (20).
+- **An AI kill pays 1 core.** The amount is the new `ShipsRouter.factionKillReward()`, owner-settable via `setFactionKillReward`. Human (PvP) kills still pay UTC as before. Tier 1 takes 10 AI kills.
+
+### Frontend changes needed
+
+- **Stop dividing DEC by 1e18.** Show the raw bigint as the number of cores (or use `formatUnits(x, 0)`, or read `decimals()`). The current divide-by-1e18 call sites are:
+  - `app/components/DroneStorefront.tsx:52` and `:54` (next tier cost and balance), which pass `formatEther(...)` into `formatDec`;
+  - `app/components/Header.tsx:998` (the DEC balance).
+- **Approvals and turn-ins:** pass the tier cost exactly as read from `tierCoreCost`, with no `parseEther`. `turnInCores` requires the exact amount.
+- **Copy:** anything describing kill rewards in DEC should say "1 core per AI kill".
+
+---
+
+## 11. Ship rolls can't be re-rolled; expired ones build a basic ship (next full deploy)
+
+_Added 2026-11-01 (fixes `docs/audit-4.md` HA7-10; design in `docs/trustless-randomness-plan-2026-11-01.md`)._ A ship's traits come from the hash of its mint block. That used to be readable for only about 4.5 hours (8,191 blocks on Base). After that the request expired and needed an admin `RandomManager.retargetExpired`, which was a brand-new roll. A player could see a bad roll, let it expire, and get a new one. Now:
+
+- **Everyday activity fixes rolls in place.** Every mint, construct, reveal, tournament start or build, and lottery swap stores the hash of pending mint blocks (`RandomManager.blockSeed(block)`). Once stored, the ship always constructs with its original roll, however late. No transaction is needed from the player.
+- **No re-roll exists.** `retargetExpired`, `RandomnessRetargeted` and RandomManager's `owner()` are gone.
+- **A ship expires only if nothing at all happened for the whole window.** That means no mint, construct, reveal, tournament call or swap, by anyone, for about 4.5 hours after its mint. Then `isExpired(serialNumber)` is true for good, and `constructShip` still works but builds a **baseline ship**:
+  - tier-0 accuracy, hull and speed;
+  - not shiny;
+  - rank 1 (or the purchase tier's preset rank);
+  - Generic weapon, no armor or shields, no special;
+  - a name and colors from its serial number.
+- **New views:** `capturePending(maxBlocks)` (permissionless) and `hasPendingCapture()`.
+
+### Frontend changes needed
+
+- **Remove the "awaiting admin re-target" state** for expired ships (from `frontend-handoff-block-hash-randomness-2026-10-16.md`). Instead, when `isExpired(serialNumber)` is true, show that constructing it builds a basic ship. Keep encouraging players to construct promptly.
+- **Drop** anything that reads `retargetExpired` or `RandomnessRetargeted`.
+- **Add a capture keeper to the backend.** It's a convenience, not a security requirement:
+  - **What it does:** a service that calls `RandomManager.capturePending(2)` whenever there's been no game activity for **4 hours**. That's well inside the ~4.5-hour window, so a ship minted just before a quiet stretch is still captured.
+  - **Activity:** "game activity" means any transaction to RandomManager, Ships, Lobbies/Game, the match contracts, or the lottery pool. The simplest check is the time of the last `RandomnessRequested`/`RandomnessRevealed` event or swap you've indexed, or just `hasPendingCapture()` combined with the time since the oldest pending request.
+  - **Who signs:** `capturePending` is permissionless, so any funded wallet works. Use a low-value hot wallet with no other roles, never an admin key. Each call costs about 30–85k gas, a fraction of a cent on Base.
+  - **Off by default:** gate it behind an env var such as `CAPTURE_KEEPER_ENABLED`. Leave it **disabled (unset/false) in every environment until mainnet production**, and enable it only there.
+  - **Nothing depends on it:** the contracts don't rely on the keeper for correctness. Without it, a fully idle stretch just yields a baseline ship instead of a re-roll.
+
+---
+
+## 12. Checklist
 
 - [ ] After the redeploy: new ABIs for `Game`, `ShipAttributes`, `Fleets`, `GameResults`, `Lobbies`, `GameEngineRegistry` and `AIShips` (§1–§6; `AIShips` lost `shipAttributes()` and `setShipAttributesAddress`).
 - [ ] Remove `statusEffects` from the `Attributes` type and everywhere the frontend builds one (§1).
@@ -183,3 +249,6 @@ _Added 2026-10-31._ The transaction that ends a roguelike fight was the second-l
 - [ ] Trust `isCreator` on destroyed/fled ships once the new `Game` is live (§7).
 - [ ] Drop `h3`/`s3`/`l3` from `Colors` and every place that builds one, and take the new `Ships` address and ABI (§8).
 - [ ] Take the new `Maps`, `AIShips`, `Fleets` and `RoguelikeRun` ABIs; read a run's `rosterShipIds` fresh after each win, since its order can change (§9).
+- [ ] Treat DEC as a 0-decimal token: remove the divide-by-1e18 (`formatEther`) from every DEC display and amount (§10).
+- [ ] Replace the expired-ship "awaiting admin" state with a "builds a basic ship" notice, and drop `retargetExpired`/`RandomnessRetargeted` (§11).
+- [ ] Add the 4-hour-idle `capturePending` keeper to the backend behind an env var, disabled until mainnet production (§11).

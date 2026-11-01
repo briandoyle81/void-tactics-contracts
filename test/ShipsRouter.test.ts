@@ -94,7 +94,6 @@ describe("ShipsRouter", function () {
       zeroAddress, // metadataRenderer (unused here)
       shipAttributes.address,
       universalCredits.address,
-      droneEnergyCores.address,
       zeroAddress, // purchaseGate (unused here)
     ]);
     await ships.write.setIsAllowedToCreateShips([owner.account.address, true]);
@@ -274,13 +273,14 @@ describe("ShipsRouter", function () {
       // DEC, mirroring production's real mapping.
       const aiId = await allocateAiShip(aiShips, aiOwner.account.address, "AI Ship", 2);
 
-      const recycleReward = await ships.read.recycleReward();
       await gameRouter.write.setTimestampDestroyed([aiId, humanId]);
 
       expect(await aiShips.read.isShipDestroyed([aiId])).to.equal(true);
+      // One whole core per AI kill (docs/audit-4.md HA7-01), not UTC's
+      // 18-decimal recycleReward / 4.
       expect(
         await droneEnergyCores.read.balanceOf([human.account.address]),
-      ).to.equal(recycleReward >> 2n);
+      ).to.equal(1n);
       expect(
         await universalCredits.read.balanceOf([human.account.address]),
       ).to.equal(0n);
@@ -313,6 +313,22 @@ describe("ShipsRouter", function () {
 
       const aiShip = await aiShips.read.getShip([aiId]);
       expect(aiShip.shipData.shipsDestroyed).to.equal(0);
+    });
+
+    // docs/audit-4.md HA7-04: a ship only ever hit by its own side has no
+    // destroyer (0): it's marked destroyed, with no kill or reward.
+    it("pays nothing and credits no kill when a ship has no destroyer (HA7-04)", async function () {
+      const { gameRouter, ships, universalCredits, human } =
+        await loadFixture(deployFixture);
+      const shipId = await mintHumanShip(ships, human.account.address, "Victim");
+
+      await gameRouter.write.setTimestampDestroyed([shipId, 0n]);
+
+      expect((await ships.read.getShip([shipId])).shipData.timestampDestroyed).to.not.equal(0n);
+      expect((await ships.read.getShip([0n])).shipData.shipsDestroyed).to.equal(0);
+      expect(
+        await universalCredits.read.balanceOf([human.account.address]),
+      ).to.equal(0n);
     });
 
     it("still pays UTC correctly for a pure human-vs-human (PvP) kill", async function () {
@@ -459,12 +475,30 @@ describe("ShipsRouter", function () {
       const humanId = await mintHumanShip(ships, human.account.address, "Human Ship");
       const aiId = await allocateAiShip(aiShips, aiOwner.account.address, "Faction 3 Ship", 3);
 
-      const recycleReward = await ships.read.recycleReward();
       await gameRouter.write.setTimestampDestroyed([aiId, humanId]);
 
       expect(
         await newFactionToken.read.balanceOf([human.account.address]),
-      ).to.equal(recycleReward >> 2n);
+      ).to.equal(1n);
+    });
+
+    it("pays factionKillReward whole tokens per AI kill, settable only by the owner (HA7-01)", async function () {
+      const { shipsRouter, gameRouter, ships, aiShips, droneEnergyCores, human, aiOwner } =
+        await loadFixture(deployFixture);
+      expect(await droneEnergyCores.read.decimals()).to.equal(0);
+      expect(await shipsRouter.read.factionKillReward()).to.equal(1n);
+
+      await shipsRouter.write.setFactionKillReward([3n]);
+      const humanId = await mintHumanShip(ships, human.account.address, "Human Ship");
+      const aiId = await allocateAiShip(aiShips, aiOwner.account.address, "AI Ship", 2);
+      await gameRouter.write.setTimestampDestroyed([aiId, humanId]);
+      expect(
+        await droneEnergyCores.read.balanceOf([human.account.address]),
+      ).to.equal(3n);
+
+      await expect(
+        shipsRouter.write.setFactionKillReward([5n], { account: human.account }),
+      ).to.be.rejectedWith("OwnableUnauthorizedAccount");
     });
   });
 

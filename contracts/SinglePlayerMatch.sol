@@ -4,7 +4,6 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./Types.sol";
 import "./AIShips.sol";
-import "./Lobbies.sol";
 import "./Game.sol";
 import "./IGameOrchestrator.sol";
 import "./AIEncounters.sol";
@@ -22,11 +21,9 @@ import "./IGameEngineRegistry.sol";
 // mints both fleets directly through Fleets and kicks off Game.sol in one
 // call, with no lobby involved. gameId is offset into a range disjoint from
 // Lobbies-sourced (PvP) game ids so the two id spaces never collide (see
-// NODE_MATCH_ID_OFFSET). `lobbies` is kept only as a legacy reference —
-// nothing in this flow depends on it.
+// NODE_MATCH_ID_OFFSET).
 contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     AIShips public ships;
-    Lobbies public lobbies;
     Game public game;
     AIEncounters public aiEncounters;
     IMaps public maps;
@@ -125,7 +122,6 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
 
     constructor(
         address _ships,
-        address _lobbies,
         address _game,
         address _aiEncounters,
         address _maps,
@@ -134,7 +130,6 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         uint _engineIndex
     ) Ownable(msg.sender) {
         ships = AIShips(_ships);
-        lobbies = Lobbies(_lobbies);
         game = Game(_game);
         aiEncounters = AIEncounters(_aiEncounters);
         maps = IMaps(_maps);
@@ -151,10 +146,6 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // registered via GameEngineRegistry.
     function _requireNotLive() internal view {
         if (nodeMatchCount > 0) revert EngineAlreadyLive();
-    }
-
-    function setLobbiesAddress(address _lobbies) external onlyOwner {
-        lobbies = Lobbies(_lobbies);
     }
 
     // Lets a future AIShips pool (with a higher AI_SHIP_ID_OFFSET) be

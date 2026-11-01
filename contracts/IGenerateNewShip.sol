@@ -11,5 +11,11 @@ interface IGenerateNewShip {
         uint16 variant
     ) external view returns (Ship memory);
 
+    function generateBaselineShip(
+        uint id,
+        uint serialNumber,
+        uint16 variant
+    ) external view returns (Ship memory);
+
     function getTierOfTrait(uint _trait) external pure returns (uint8);
 }

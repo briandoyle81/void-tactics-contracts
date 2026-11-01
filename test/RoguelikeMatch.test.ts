@@ -382,10 +382,9 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
       const aiShipId = AI_SHIP_ID_OFFSET + 1n;
 
-      const [utcBefore, decBefore, recycleReward] = await Promise.all([
+      const [utcBefore, decBefore] = await Promise.all([
         universalCredits.read.balanceOf([human.account.address]),
         droneEnergyCores.read.balanceOf([human.account.address]),
-        ships.read.recycleReward(),
       ]);
 
       await shipsRouter.write.setTimestampDestroyed([aiShipId, 1n], {
@@ -397,7 +396,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         droneEnergyCores.read.balanceOf([human.account.address]),
       ]);
 
-      expect(decAfter - decBefore).to.equal(recycleReward >> 2n);
+      // One whole core per AI kill (docs/audit-4.md HA7-01).
+      expect(decAfter - decBefore).to.equal(1n);
       expect(utcAfter).to.equal(utcBefore);
     });
   });
@@ -1139,6 +1139,55 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       expect(attrsNextNode.hullPoints).to.equal(expectedPersisted);
     });
 
+    // docs/audit-4.md HA7-02: a survivor stored at its old max must not
+    // brick the next node after an attributes update lowers that max.
+    it("still enters the next node after an attributes update lowers a stored survivor's max HP", async function () {
+      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
+        await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, game, shipAttributes } =
+        deployed;
+      const { campaignId, rootNodeId, mapId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      const nextNode = await createCombatNode(roguelikeNodeMap, campaignId, mapId);
+      await roguelikeNodeMap.write.addChild([rootNodeId, nextNode]);
+      // A 100% floor stores the survivor at its full (old) max.
+      await roguelikeNodeMap.write.setCampaignAutoHealPercent([campaignId, 100]);
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+      const gameId = ROGUELIKE_GAME_ID_OFFSET + 1n;
+      const oldMax = (await game.read.getShipAttributes([gameId, 1n])).maxHullPoints;
+      await winCombatNode(game, humanGame, otherRoguelikeMatch, owner, human, gameId, 1n);
+      expect(
+        await deployed.roguelikeRun.read.getShipHP([human.account.address, 1n]),
+      ).to.equal(oldMax);
+
+      // Publish the ship's variant again with a lower base hull.
+      const variant = (await ships.read.getShip([1n])).traits.variant;
+      const current = await shipAttributes.read.getVariantAttributes([variant, 0]);
+      await shipAttributes.write.setVariantAttributes([
+        { ...current, variant, baseHull: current.baseHull - 10 },
+      ]);
+
+      await humanRoguelikeMatch.write.enterCombatNode([
+        nextNode,
+        [{ row: 0, col: 0 }],
+      ]);
+      const next = await game.read.getShipAttributes([
+        ROGUELIKE_GAME_ID_OFFSET + 2n,
+        1n,
+      ]);
+      expect(next.maxHullPoints).to.be.lessThan(oldMax);
+      expect(next.hullPoints).to.equal(next.maxHullPoints);
+    });
+
     it("carries a disabled (0 HP) survivor forward at 1 HP under a 0% floor, not as the 0 = full-HP sentinel", async function () {
       const { deployed, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
         await loadFixture(deployFixture);
@@ -1474,6 +1523,48 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         fled,
       ]);
       expect(attrsNext.hullPoints).to.equal(expected);
+    });
+
+    // docs/audit-4.md HA7-07: a fled ship that can't rejoin (here locked in
+    // another fleet mid-match, e.g. a PvP lobby) leaves the roster at the
+    // heal floor, not its pre-fight HP, so dropping and re-adding it can't
+    // repair it free.
+    it("stores a fled ship that doesn't rejoin at the heal floor, not its pre-fight HP (HA7-07)", async function () {
+      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
+        await loadFixture(deployFixture);
+      const { game } = deployed;
+      const { kept, fled, gameId } = await startTwoShipRun(
+        deployed,
+        human,
+        humanRoguelikeMatch,
+      );
+      await humanGame.write.moveShip([gameId, fled, 0, 0, ActionType.Retreat, 0n]);
+      // Unlocked once off the board: lock it in another fleet so it can't
+      // rejoin.
+      await deployed.fleets.write.setIsAllowedToManageFleets([
+        owner.account.address,
+        true,
+      ]);
+      await deployed.fleets.write.createFleet([
+        0n,
+        human.account.address,
+        [fled],
+        [{ row: 0, col: 0 }],
+        100000n,
+        true,
+        0n,
+      ]);
+      await aiSurrenders(game, otherRoguelikeMatch, gameId);
+
+      const run = await deployed.roguelikeRun.read.getRun([human.account.address]);
+      expect(run.rosterShipIds.map(String)).to.deep.equal([String(kept)]);
+      const maxHP = Number(
+        (await deployed.shipAttributes.read.calculateShipAttributesById([fled]))
+          .maxHullPoints,
+      );
+      expect(
+        await deployed.roguelikeRun.read.getShipHP([human.account.address, fled]),
+      ).to.equal(Math.floor((maxHP * 80) / 100));
     });
 
     it("keeps a ship rammed off the board by an AI Rammer in the roster at the 80% heal floor", async function () {
@@ -2784,7 +2875,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         humanRoguelikeMatch.write.startRun([campaignId, [1n]]),
       ).to.be.rejectedWith("ShipCostVersionMismatch");
 
-      await ships.write.syncShipCosts([[1n]]);
+      await ships.write.syncShipCosts([[1n]], { account: human.account });
       await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
     });
 
@@ -2814,7 +2905,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       ).to.be.rejectedWith("ShipCostVersionMismatch");
 
       // Once re-priced it can join; ship 1 (still on the old price) stays.
-      await ships.write.syncShipCosts([[2n]]);
+      await ships.write.syncShipCosts([[2n]], { account: human.account });
       await humanRoguelikeResupply.write.resupplyModifyRoster([[2n], []]);
       const run = await deployed.roguelikeRun.read.getRun([
         human.account.address,

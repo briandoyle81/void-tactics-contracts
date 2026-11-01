@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./IShips.sol";
 import "./IUniversalCredits.sol";
 import "./IShipPurchaser.sol";
-import "./IOnchainRandomShipNames.sol";
 import "./IGameView.sol";
 import "./Types.sol";
 
@@ -26,7 +25,6 @@ contract DroneYard is Ownable, ReentrancyGuard {
     IShips public immutable ships;
     IUniversalCredits public immutable universalCredits;
     IShipPurchaser public immutable shipPurchaser;
-    IOnchainRandomShipNames public immutable shipNames;
     // Wired post-deploy, same as GenerateNewShip.game — Game.sol doesn't
     // exist yet when this contract is constructed. Guarded everywhere it's
     // read: an unset game skips the special-slot check entirely rather than
@@ -36,13 +34,11 @@ contract DroneYard is Ownable, ReentrancyGuard {
     constructor(
         address _ships,
         address _universalCredits,
-        address _shipPurchaser,
-        address _shipNames
+        address _shipPurchaser
     ) Ownable(msg.sender) {
         ships = IShips(_ships);
         universalCredits = IUniversalCredits(_universalCredits);
         shipPurchaser = IShipPurchaser(_shipPurchaser);
-        shipNames = IOnchainRandomShipNames(_shipNames);
     }
 
     function setGameContract(address _game) external onlyOwner {
@@ -118,21 +114,8 @@ contract DroneYard is Ownable, ReentrancyGuard {
         return baseCost * costMultiplier;
     }
 
-    /**
-     * @dev Validate that a ship modification is valid
-     * @param _shipId The ID of the ship to modify
-     * @param _newShip The new ship configuration
-     */
-    function validateShip(
-        uint _shipId,
-        Ship memory _newShip
-    ) public view returns (bool) {
-        return _validateShip(ships.getShip(_shipId), _newShip);
-    }
-
-    // G-05: split out of validateShip for the same reason as
-    // _calculateCostToModify above — lets modifyShip reuse the Ship it
-    // already fetched instead of a second redundant ships.getShip call.
+    // Validates a ship modification against the ship's current record.
+    // Takes the Ship modifyShip already fetched (G-05).
     function _validateShip(
         Ship memory currentShip,
         Ship memory _newShip
@@ -208,8 +191,8 @@ contract DroneYard is Ownable, ReentrancyGuard {
             revert ShipInFleet(_shipId);
         }
 
-        // Validate the modification — reuse currentShip (already fetched
-        // above) instead of validateShip's own ships.getShip call (G-05).
+        // Validate the modification against currentShip (already fetched
+        // above, G-05).
         _validateShip(currentShip, _newShip);
 
         // Calculate cost — same reuse (G-05).

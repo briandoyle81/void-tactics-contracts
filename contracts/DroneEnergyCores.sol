@@ -25,6 +25,13 @@ contract DroneEnergyCores is ERC20, ERC20Burnable, Ownable {
 
     constructor() ERC20("Drone Energy Cores", "DEC") Ownable(msg.sender) {}
 
+    // Cores are indivisible (docs/audit-4.md HA7-01): every amount is a
+    // whole number of cores, so DroneStorefront tier costs, kill rewards
+    // and win bonuses are all plain counts.
+    function decimals() public pure override returns (uint8) {
+        return 0;
+    }
+
     /*
      * @dev Public Functions
      */

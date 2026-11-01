@@ -43,6 +43,10 @@ contract ShipsRouter is IShips, Ownable {
     mapping(address => bool) public isAllowedGame;
     address public fleetsAddress;
     address public lobbyAddress; // SinglePlayerMatch — see DestroyRewardLib
+    // AI faction tokens paid per AI kill, in whole tokens: faction tokens
+    // (DroneEnergyCores) have 0 decimals, unlike UTC's 18, so they can't
+    // reuse UTC's recycleReward-based amount (docs/audit-4.md HA7-01).
+    uint public factionKillReward = 1;
 
     error NotAuthorized(address);
     error NotSupported();
@@ -68,6 +72,10 @@ contract ShipsRouter is IShips, Ownable {
 
     function setFleetsAddress(address _fleetsAddress) external onlyOwner {
         fleetsAddress = _fleetsAddress;
+    }
+
+    function setFactionKillReward(uint _reward) external onlyOwner {
+        factionKillReward = _reward;
     }
 
     function setLobbyAddress(address _lobbyAddress) external onlyOwner {
@@ -127,6 +135,10 @@ contract ShipsRouter is IShips, Ownable {
             ? aiShips.markDestroyed(_id)
             : ships.markDestroyed(_id);
 
+        // No destroyer (0): the ship was only ever hit by its own side, so
+        // nobody gets kill credit or a reward (docs/audit-4.md HA7-04).
+        if (_destroyerId == 0) return;
+
         // docs/audit-3.md HA6-16: only a PvP kill (no AI ship on either
         // side) of a non-free ship counts toward the destroyer's kill count
         // (= rank). PvE kills and free-ship kills only look up the owner.
@@ -152,6 +164,7 @@ contract ShipsRouter is IShips, Ownable {
                 destroyedOwner,
                 destroyerOwner,
                 ships.recycleReward() >> 2, // Division by 4
+                factionKillReward,
                 destroyed.traits.variant,
                 universalCredits,
                 factionRewardTokenRegistry

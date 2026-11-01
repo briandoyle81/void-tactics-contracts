@@ -328,7 +328,6 @@ describe("GameEngineRegistry — in-flight engine upgrades", function () {
       // shared contract verbatim.
       const spmB = await hre.viem.deployContract("SinglePlayerMatch", [
         aiShips.address,
-        lobbies.address,
         game.address,
         aiEncounters.address,
         maps.address,

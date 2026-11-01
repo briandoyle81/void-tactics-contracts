@@ -140,17 +140,22 @@ describe("RandomManager", function () {
 
     // 2026-10-16: with a working EIP-2935 history contract (as on Base) the
     // window is 8191 blocks instead of 256 (BlockHashLib).
-    it("with EIP-2935, reveals past 256 blocks with the same result; an unrecorded block still expires", async function () {
+    it("with EIP-2935, reveals past 256 blocks with the same result, and a block captured by a later request outlives the history too", async function () {
       const { randomManager } = await loadFixture(deployFixture);
       await installHistoryContract();
       await randomManager.write.requestRandomness(); // id 1
-      await randomManager.write.requestRandomness(); // id 2: left to expire
       const { blockNumber: block1 } = await getResult(randomManager, 1n);
+      await hre.network.provider.send("evm_mine");
+      // id 2's request stores block1's hash (sealed, still readable).
+      await randomManager.write.requestRandomness(); // id 2
       const { blockNumber: block2 } = await getResult(randomManager, 2n);
+      // Only block2's hash is recorded in the history contract (on a real
+      // chain every block's is): block1 can only be served from blockSeed.
       await recordBlockHash(block2);
-      // Only block2's hash is recorded (on a real chain every block's is),
-      // so id 1 shows what happens when the history can't serve a block.
-      expect(block2).to.equal(block1 + 1n);
+      expect(await randomManager.read.blockSeed([block1])).to.not.equal(
+        `0x${"0".repeat(64)}`,
+      );
+      expect(block2).to.equal(block1 + 2n);
 
       await hre.network.provider.send("hardhat_mine", ["0x12c"]); // 300 blocks
       expect(await randomManager.read.isExpired([2n])).to.equal(false);
@@ -159,15 +164,14 @@ describe("RandomManager", function () {
       expect((await getResult(randomManager, 2n)).result).to.equal(
         await expectedResult(block2, 2n),
       );
-
-      // id 1's block hash was never recorded: unreadable past 256, so expired.
-      expect(await randomManager.read.isExpired([1n])).to.equal(true);
-      await expect(
-        randomManager.write.fulfillRandomRequest([1n]),
-      ).to.be.rejectedWith("RequestExpired");
+      // id 1 was captured by id 2's request, so it isn't expired either.
+      await randomManager.write.fulfillRandomRequest([1n]);
+      expect((await getResult(randomManager, 1n)).result).to.equal(
+        await expectedResult(block1, 1n),
+      );
     });
 
-    it("with EIP-2935, a request still expires once it's more than 8191 blocks old", async function () {
+    it("with EIP-2935, an uncaptured request expires once it's more than 8191 blocks old, for good", async function () {
       const { randomManager } = await loadFixture(deployFixture);
       await installHistoryContract();
       await randomManager.write.requestRandomness(); // id 1
@@ -182,47 +186,75 @@ describe("RandomManager", function () {
       await expect(
         randomManager.write.fulfillRandomRequest([1n]),
       ).to.be.rejectedWith("RequestExpired");
+      // A later capture can't revive it.
+      await randomManager.write.capturePending([5n]);
+      expect(await randomManager.read.isExpired([1n])).to.equal(true);
+    });
+  });
 
-      // The owner re-target still recovers it.
-      await randomManager.write.retargetExpired([[1n]]);
-      await hre.network.provider.send("evm_mine");
-      await randomManager.write.fulfillRandomRequest([1n]);
-      expect((await getResult(randomManager, 1n)).revealed).to.equal(true);
+  // docs/trustless-randomness-plan-2026-11-01.md (audit-4 HA7-10): nothing
+  // can re-roll a request, and ordinary calls store pending block hashes
+  // before they age out.
+  describe("capture instead of re-roll (HA7-10)", function () {
+    it("has no owner and no re-target", async function () {
+      const artifact = await hre.artifacts.readArtifact("RandomManager");
+      const names = artifact.abi.map((e: any) => e.name);
+      expect(names).to.not.include("retargetExpired");
+      expect(names).to.not.include("owner");
     });
 
-    it("lets only the owner re-target expired requests, skipping revealed and still-valid ones", async function () {
+    it("a later request in another block captures an earlier one, which then outlives the window on its original roll", async function () {
       const { randomManager } = await loadFixture(deployFixture);
-      await randomManager.write.requestRandomness(); // id 1: will expire
-      await randomManager.write.requestRandomness(); // id 2: will be revealed
-      await hre.network.provider.send("evm_mine");
-      await randomManager.write.revealRandomness([2n]);
-      const revealed2 = await getResult(randomManager, 2n);
-      await hre.network.provider.send("hardhat_mine", ["0x12c"]); // 300 blocks
-      await randomManager.write.requestRandomness(); // id 3: still valid
-      const before3 = await getResult(randomManager, 3n);
+      await randomManager.write.requestRandomness(); // id 1
+      const { blockNumber } = await getResult(randomManager, 1n);
+      await randomManager.write.requestRandomness(); // id 2, next block: captures id 1's block
+      await hre.network.provider.send("hardhat_mine", ["0x12c"]); // past 256
 
+      expect(await randomManager.read.isExpired([1n])).to.equal(false);
+      await randomManager.write.fulfillRandomRequest([1n]);
+      expect((await getResult(randomManager, 1n)).result).to.equal(
+        await expectedResult(blockNumber, 1n),
+      );
+    });
+
+    it("capturePending is permissionless, walks at most maxBlocks, stops at the current block and skips aged-out blocks", async function () {
+      const { randomManager } = await loadFixture(deployFixture);
+      await randomManager.write.requestRandomness(); // id 1, block A
+      const a = (await getResult(randomManager, 1n)).blockNumber;
+      await hre.network.provider.send("hardhat_mine", ["0x12c"]); // A ages out
+      await randomManager.write.capturePending([0n]); // walks nothing
+      await randomManager.write.requestRandomness(); // id 2: captures (skips) A
+      expect(await randomManager.read.isExpired([1n])).to.equal(true);
+      expect(await randomManager.read.blockSeed([a])).to.equal(`0x${"0".repeat(64)}`);
+
+      // Three more blocks with requests, none captured yet past id 2's own.
       const [, stranger] = await hre.viem.getWalletClients();
       const asStranger = await hre.viem.getContractAt(
         "RandomManager",
         randomManager.address,
         { client: { wallet: stranger } },
       );
-      await expect(
-        asStranger.write.retargetExpired([[1n]]),
-      ).to.be.rejectedWith("OwnableUnauthorizedAccount");
-
-      await randomManager.write.retargetExpired([[1n, 2n, 3n, 999n]]);
-      const after1 = await getResult(randomManager, 1n);
-      expect(await randomManager.read.isExpired([1n])).to.equal(false);
-      expect(await getResult(randomManager, 2n)).to.deep.equal(revealed2);
-      expect((await getResult(randomManager, 3n)).blockNumber).to.equal(
-        before3.blockNumber,
-      );
-
-      // The re-targeted request now resolves from its new block's hash.
-      await randomManager.write.fulfillRandomRequest([1n]);
-      expect((await getResult(randomManager, 1n)).result).to.equal(
-        await expectedResult(after1.blockNumber, 1n),
+      await hre.network.provider.send("evm_setAutomine", [false]);
+      try {
+        await randomManager.write.requestRandomness({ gas: 300_000n }); // id 3
+        await randomManager.write.requestRandomness({ gas: 300_000n }); // id 4, same block
+        await hre.network.provider.send("evm_mine");
+      } finally {
+        await hre.network.provider.send("evm_setAutomine", [true]);
+      }
+      // Queue: A (skipped), id 2's block (captured by id 3's request), id
+      // 3/4's block (queued once; id 4 couldn't capture its own block).
+      expect(await randomManager.read.pendingHead()).to.equal(2n);
+      expect(await randomManager.read.hasPendingCapture()).to.equal(true);
+      await asStranger.write.capturePending([0n]); // walks nothing
+      expect(await randomManager.read.pendingHead()).to.equal(2n);
+      await asStranger.write.capturePending([5n]); // only one left
+      expect(await randomManager.read.pendingHead()).to.equal(3n);
+      expect(await randomManager.read.hasPendingCapture()).to.equal(false);
+      const b34 = (await getResult(randomManager, 3n)).blockNumber;
+      expect((await getResult(randomManager, 4n)).blockNumber).to.equal(b34);
+      expect(await randomManager.read.blockSeed([b34])).to.not.equal(
+        `0x${"0".repeat(64)}`,
       );
     });
   });

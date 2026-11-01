@@ -1107,10 +1107,28 @@ library AIBehavior {
             range
         );
         if (!found) return (d, false);
-        return (
-            decision(_withinRangeOf(ctx, allyPos, range), healAction, allyId),
-            true
-        );
+        Position memory dest;
+        (dest, found) = reachWithin(ctx, allyPos, range);
+        if (!found) return (d, false);
+        return (decision(dest, healAction, allyId), true);
+    }
+
+    // A tile this ship can reach this turn from which `target` is within
+    // `range` (staying put if it already is), or found = false. A move-
+    // then-act decision must land in range: otherwise the resolver reverts
+    // OutOfRange and the ship passes, every turn, so the caller falls
+    // through instead (docs/audit-4.md HA7-06). Tries the direct approach
+    // first, then every tile within `range` of the target.
+    function reachWithin(
+        Ctx memory ctx,
+        Position memory target,
+        uint8 range
+    ) internal view returns (Position memory dest, bool found) {
+        if (_manhattan(ctx.pos, target) <= range) return (ctx.pos, true);
+        dest = _withinRangeOf(ctx, target, range);
+        if (_manhattan(dest, target) <= range) return (dest, true);
+        Stand memory s = _standTile(ctx, target, range);
+        return (s.pos, s.found);
     }
 
     // The injured ally (0-HP preferred, then lowest HP) within `range` plus

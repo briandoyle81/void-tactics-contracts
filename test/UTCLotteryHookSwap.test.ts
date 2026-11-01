@@ -1165,6 +1165,29 @@ describe("UTCLotteryHook — real swap integration", function () {
       expect(await hook.read.drawResolved([0n])).to.equal(true);
     });
 
+    // docs/audit-4.md HA7-09: any swap after the close block stores the
+    // close hash, even one too cheap to resolve, so the draw resolves on
+    // its original roll after the window instead of re-targeting.
+    it("a cheap swap after close stores the seed, so the draw can't be re-rolled past the window (HA7-09)", async function () {
+      const fixture = await prepareClosableDraw();
+      const { hook, trader, trader2 } = fixture;
+      await makeSellAs(fixture)(trader); // closes draw 0
+      const closeBlock = await hook.read.drawCloseBlock([0n]);
+
+      await sellWithGas(fixture, trader2, 700_000n); // below autoResolveMinGas
+      expect(await hook.read.drawResolved([0n])).to.equal(false);
+      const publicClient = await hre.viem.getPublicClient();
+      const { hash } = await publicClient.getBlock({ blockNumber: closeBlock });
+      expect(await hook.read.drawSeed([0n])).to.equal(hash);
+
+      await hre.network.provider.send("hardhat_mine", ["0x12c"]); // 300 blocks
+      await hook.write.resolveDraw([0n]);
+      expect(await hook.read.drawResolved([0n])).to.equal(true);
+      expect(await hook.read.drawCloseBlock([0n])).to.equal(closeBlock);
+      const retargets = await hook.getEvents.DrawRetargeted();
+      expect(retargets.find((e) => e.args.drawId === 0n)).to.be.undefined;
+    });
+
     // 2026-10-16: with a working EIP-2935 history contract (as on Base) the
     // close block's hash stays readable for 8191 blocks (BlockHashLib).
     it("with EIP-2935, resolves a draw left unresolved past 256 blocks without re-targeting", async function () {
@@ -1181,6 +1204,41 @@ describe("UTCLotteryHook — real swap integration", function () {
       expect(await hook.read.drawCloseBlock([0n])).to.equal(closeBlock);
       const retargets = await hook.getEvents.DrawRetargeted();
       expect(retargets.find((e) => e.args.drawId === 0n)).to.be.undefined;
+    });
+  });
+
+  // docs/trustless-randomness-plan-2026-11-01.md (decision D2): each swap
+  // also stores pending ship-roll block hashes, and can never fail over it.
+  describe("ship randomness capture on swaps (HA7-10)", function () {
+    it("a swap stores a pending ship-roll block hash", async function () {
+      const fixture = await loadFixture(deployFixture);
+      const { hookAsOwner, randomManager, trader } = fixture;
+      await setUpPoolAndLiquidity(fixture);
+      await hookAsOwner.write.setRandomManager([randomManager.address]);
+
+      await randomManager.write.requestRandomness();
+      const id = await randomManager.read.requestCount();
+      const block = (await randomManager.read.requests([id]))[0];
+      expect(await randomManager.read.hasPendingCapture()).to.equal(true);
+
+      await makeSellAs(fixture)(trader);
+      expect(await randomManager.read.hasPendingCapture()).to.equal(false);
+      expect(await randomManager.read.blockSeed([block])).to.not.equal(
+        `0x${"0".repeat(64)}`,
+      );
+    });
+
+    it("never reverts a swap when RandomManager is unset, not a contract, or doesn't capture", async function () {
+      const fixture = await loadFixture(deployFixture);
+      const { hookAsOwner, ships, trader, trader2 } = fixture;
+      await setUpPoolAndLiquidity(fixture);
+      const sellAs = makeSellAs(fixture);
+
+      await sellAs(trader); // unset
+      await hookAsOwner.write.setRandomManager([trader2.account.address]);
+      await sellAs(trader); // an EOA
+      await hookAsOwner.write.setRandomManager([ships.address]);
+      await sellAs(trader); // a contract with no capturePending: reverts, caught
     });
   });
 

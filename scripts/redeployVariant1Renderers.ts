@@ -20,6 +20,17 @@
 //      slot holding the deployed VariantPurchaseGate address); the script
 //      refuses to continue if it can't find it.
 //
+// Only safe while every renderer takes the same Ship struct as the live
+// Ships (audit-4 HA7-12, 2026-11-01): changing Ship (e.g. 653a918 dropping
+// h3/s3/l3) changes every render selector, so a new variant 1 tree under an
+// old Ships, or next to an old variant 2 tree, makes every tokenURI revert.
+// Before anything else the script checks that the live Ships, the variant 2
+// tree and every explosion/unconstructed part match the compiled code
+// (immutables and library links masked), and stops if any doesn't: run it
+// only after the full redeploy. It then renders real ships (one constructed
+// ship per variant, one destroyed, one unconstructed) through the new
+// RenderMetadata before setConfig, and through Ships.tokenURI after it.
+//
 // Crash-safe: each deploy's tx hash is saved to renderer-redeploy.json next
 // to the deployment journal as soon as it's sent, so a rerun picks up the
 // same contract instead of deploying a duplicate. Entries are keyed by
@@ -55,9 +66,6 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
-const APPLY = process.env.APPLY === "true";
-const VERIFY = process.env.VERIFY === "true";
-
 // Same order as DeployAndConfig.ts's constructor arrays (it matters: each
 // combiner assigns its immutables by array position).
 const COMBINERS: { name: string; leaves: string[] }[] = [
@@ -89,8 +97,17 @@ const NAME_TABLES = [
   ["setShieldsName", "shieldsNames"],
 ] as const;
 const MAX_ENUM_KEY = 15;
+// Variant 2's tree has the same shape (DeployAndConfig.ts): each name + "V2",
+// and its combiners expose their leaves as render0..renderN.
+const COMBINERS_V2 = COMBINERS.map((c) => ({ name: `${c.name}V2`, leaves: c.leaves.map((l) => `${l}V2`) }));
+// How far back from the newest ship to look for smoke-test samples.
+const SAMPLE_SCAN = 500n;
 
-async function main() {
+// Exported for test/RedeployVariant1Renderers.test.ts; `hardhat run` runs
+// the file as its own process, so the call at the bottom fires there.
+export async function main() {
+  const APPLY = process.env.APPLY === "true";
+  const VERIFY = process.env.VERIFY === "true";
   const publicClient = await hre.viem.getPublicClient();
   const chainId = await publicClient.getChainId();
   const deployDir =
@@ -109,8 +126,38 @@ async function main() {
   const read = async (name: string, address: Address, functionName: string, args: unknown[] = []) =>
     publicClient.readContract({ address, abi: (await artifact(name)).abi as Abi, functionName, args }) as Promise<any>;
 
-  // ---- 1. Walk the live renderer tree ---------------------------------------
+  // On-chain code vs. the compiled runtime code, with immutable and library
+  // slots zeroed on both sides (they hold deploy-time addresses).
+  const zeroRanges = (hex: string, ranges: { start: number; length: number }[]) => {
+    let s = hex.toLowerCase().replace(/^0x/, "");
+    for (const r of ranges) s = s.slice(0, r.start * 2) + "0".repeat(r.length * 2) + s.slice((r.start + r.length) * 2);
+    return s;
+  };
+  const matchesCompiled = async (name: string, address: Address) => {
+    const a = await artifact(name);
+    const buildInfo = await hre.artifacts.getBuildInfo(`${a.sourceName}:${a.contractName}`);
+    const evm: any = buildInfo!.output.contracts[a.sourceName][a.contractName].evm.deployedBytecode;
+    const ranges = [
+      ...Object.values(evm.immutableReferences ?? {}).flat(),
+      ...Object.values(evm.linkReferences ?? {}).flatMap((libs: any) => Object.values(libs).flat()),
+    ] as { start: number; length: number }[];
+    const onChain = (await publicClient.getCode({ address })) ?? "0x";
+    return zeroRanges(onChain, ranges) === zeroRanges(evm.object, ranges);
+  };
+
+  // ---- 0. Refuse to run against a Ship struct the renderers don't take ------
   const shipsAddress = getAddress(deployed["DeployModule#Ships"]);
+  const mismatched: string[] = [];
+  const expectCompiled = async (name: string, address: Address) => {
+    if (!(await matchesCompiled(name, address))) mismatched.push(`${name} ${address}`);
+  };
+  // Ships first: nothing below can be read reliably through a stale ABI.
+  await expectCompiled("Ships", shipsAddress);
+  if (mismatched.length)
+    throw new Error(
+      `Live Ships doesn't match the compiled Ships (${shipsAddress}). Its Ship struct may differ from the ` +
+        `renderers', which would make every tokenURI revert. Run this script only after the full redeploy.`,
+    );
   const config = await read("Ships", shipsAddress, "config");
   const [gameAddress, lobbyAddress, fleetsAddress, oldMetadata, randomManager, shipGenerator, shipAttributes] =
     config as Address[];
@@ -119,18 +166,48 @@ async function main() {
   const metadataOwner: Address = await read("RenderMetadata", oldMetadata, "owner");
   console.log(`Ships ${shipsAddress}\n  RenderMetadata ${oldMetadata}\n  ImageRenderer  ${oldImage} (variant 1)\n  ImageRendererV2 ${imageV2} (kept)`);
 
-  const readArray = async (getter: string) => {
+  const readArray = async (image: Address, getter: string) => {
     const out: Address[] = [];
     for (let i = 0; ; i++) {
       try {
-        out.push(await read("ImageRenderer", oldImage, getter, [BigInt(i)]));
+        out.push(await read("ImageRenderer", image, getter, [BigInt(i)]));
       } catch {
         return out;
       }
     }
   };
-  const destroyedParts = await readArray("destroyedParts");
-  const unconstructedParts = await readArray("unconstructedParts");
+  const destroyedParts = await readArray(oldImage, "destroyedParts");
+  const unconstructedParts = await readArray(oldImage, "unconstructedParts");
+
+  // Everything reused as is must take today's Ship: the variant 2 tree and
+  // both trees' explosion/unconstructed parts (named by array position, as
+  // DeployAndConfig.ts deploys them).
+  const expectParts = async (parts: Address[], prefix: string, suffix: string) => {
+    for (let i = 0; i < parts.length; i++) {
+      const name = `${prefix}${i + 1}${suffix}`;
+      try {
+        await expectCompiled(name, parts[i]);
+      } catch {
+        mismatched.push(`${name} ${parts[i]} (no such contract compiled)`);
+      }
+    }
+  };
+  await expectParts(destroyedParts, "RenderExplosion", "");
+  await expectParts(unconstructedParts, "RenderUnconstructed", "");
+  await expectCompiled("ImageRendererV2", imageV2);
+  for (const c of COMBINERS_V2) {
+    const combiner: Address = await read("ImageRendererV2", imageV2, getterFor(c.name.replace(/V2$/, "")));
+    await expectCompiled(c.name, combiner);
+    for (let i = 0; i < c.leaves.length; i++)
+      await expectCompiled(c.leaves[i], await read(c.name, combiner, `render${i}`));
+  }
+  await expectParts(await readArray(imageV2, "destroyedParts"), "RenderExplosion", "V2");
+  await expectParts(await readArray(imageV2, "unconstructedParts"), "RenderUnconstructed", "V2");
+  if (mismatched.length)
+    throw new Error(
+      `These reused renderers don't match the compiled code, so they may take a different Ship struct:\n  ` +
+        `${mismatched.join("\n  ")}\nRun this script only after the full redeploy.`,
+    );
 
   const plan: { name: string; old: Address; changed: boolean }[] = [];
   const changedLeaves = new Set<string>();
@@ -138,8 +215,7 @@ async function main() {
     const combiner: Address = await read("ImageRenderer", oldImage, getterFor(c.name));
     for (const leaf of c.leaves) {
       const addr: Address = await read(c.name, combiner, getterFor(leaf));
-      const onChain = (await publicClient.getCode({ address: addr })) ?? "0x";
-      const changed = onChain.toLowerCase() !== (await artifact(leaf)).deployedBytecode.toLowerCase();
+      const changed = !(await matchesCompiled(leaf, addr));
       if (changed) changedLeaves.add(leaf);
       plan.push({ name: leaf, old: addr, changed });
     }
@@ -193,7 +269,6 @@ async function main() {
   if (!gateFound)
     throw new Error(`Couldn't find Ships.purchaseGate (${expectedGate}) in storage -- it may have changed. Not calling setConfig.`);
   const universalCredits: Address = await read("Ships", shipsAddress, "universalCredits");
-  const droneEnergyCores: Address = await read("Ships", shipsAddress, "droneEnergyCores");
 
   if (!APPLY) {
     console.log(`\nPlan only (set APPLY=true to send). ${plan.filter((p) => p.changed).length} contracts to deploy, then Ships.setConfig.`);
@@ -284,6 +359,42 @@ async function main() {
     console.log(`  ownership -> ${metadataOwner}`);
   }
 
+  // ---- Smoke-test samples: real ships, newest first -------------------------
+  // One constructed ship per variant, one destroyed, one unconstructed: each
+  // takes a different path through the renderers.
+  const samples = new Map<string, bigint>();
+  const shipCount: bigint = await read("Ships", shipsAddress, "shipCount");
+  for (let id = shipCount; id >= 1n && id > shipCount - SAMPLE_SCAN; id--) {
+    const s = await read("Ships", shipsAddress, "getShip", [id]);
+    const kind =
+      s.shipData.timestampDestroyed > 0n
+        ? "destroyed"
+        : !s.shipData.constructed
+          ? "unconstructed"
+          : `variant ${s.traits.variant}`;
+    if (!samples.has(kind)) samples.set(kind, id);
+  }
+  for (const kind of [...Array.from({ length: maxVariant }, (_, i) => `variant ${i + 1}`), "destroyed", "unconstructed"])
+    if (!samples.has(kind)) console.warn(`  (no ${kind} ship in the last ${SAMPLE_SCAN} to smoke-test)`);
+  const renderSamples = async (label: string, render: (id: bigint) => Promise<string>) => {
+    for (const [kind, id] of samples) {
+      let uri: string;
+      try {
+        uri = await render(id);
+      } catch (e: any) {
+        throw new Error(`${label} failed for ship ${id} (${kind}): ${e?.shortMessage ?? e?.message}`);
+      }
+      if (!uri.startsWith("data:application/json;base64,"))
+        throw new Error(`${label} for ship ${id} (${kind}) isn't a JSON data URI`);
+      console.log(`  ${label}: ship ${id} (${kind}) renders (${uri.length} chars)`);
+    }
+  };
+  // Before setConfig, so a broken tree never goes live.
+  console.log("\nSmoke test (new RenderMetadata, live ships):");
+  await renderSamples("RenderMetadata.tokenURI", async (id) =>
+    read("RenderMetadata", newMetadata, "tokenURI", [await read("Ships", shipsAddress, "getShip", [id])]),
+  );
+
   // ---- 4. Point Ships at the new RenderMetadata ----------------------------
   console.log("\nShips.setConfig:");
   const shipsAbi = (await artifact("Ships")).abi as Abi;
@@ -299,7 +410,6 @@ async function main() {
       newMetadata,
       shipAttributes,
       universalCredits,
-      droneEnergyCores,
       expectedGate,
     ];
     const { request } = await publicClient.simulateContract({
@@ -320,35 +430,17 @@ async function main() {
   const expectAfter = [gameAddress, lobbyAddress, fleetsAddress, newMetadata, randomManager, shipGenerator, shipAttributes];
   if (after.some((a, i) => getAddress(a) !== getAddress(expectAfter[i])))
     throw new Error(`Ships.config() after setConfig is not what was sent: ${after.join(", ")}`);
-  if (getAddress(await read("Ships", shipsAddress, "universalCredits")) !== getAddress(universalCredits) ||
-      getAddress(await read("Ships", shipsAddress, "droneEnergyCores")) !== getAddress(droneEnergyCores))
-    throw new Error("Ships token addresses changed unexpectedly");
+  if (getAddress(await read("Ships", shipsAddress, "universalCredits")) !== getAddress(universalCredits))
+    throw new Error("Ships token address changed unexpectedly");
   console.log("  Ships config verified: only metadataRenderer changed.");
-  // Smoke test: the new tree renders a shiny variant 1 ship end to end.
-  const sample = {
-    name: "Sample",
-    id: 1n,
-    equipment: { mainWeapon: 0, armor: 1, shields: 0, special: 0 },
-    traits: {
-      serialNumber: 1n,
-      colors: { h1: 0, s1: 85, l1: 50, h2: 0, s2: 0, l2: 0 },
-      variant: 1,
-      accuracy: 1,
-      hull: 1,
-      speed: 1,
-    },
-    shipData: {
-      shipsDestroyed: 1, costsVersion: 1, cost: 100, modified: 0, shiny: true,
-      constructed: true, inFleet: false, isFreeShip: false, timestampDestroyed: 0n,
-    },
-    owner: shipsOwner,
-  };
-  const uri: string = await read("RenderMetadata", newMetadata, "tokenURI", [sample]);
-  console.log(`  New RenderMetadata renders a sample shiny ship (${uri.length} chars).`);
+  // The path players and marketplaces actually call.
+  await renderSamples("Ships.tokenURI", (id) => read("Ships", shipsAddress, "tokenURI", [id]));
   console.log(`\nDone. New RenderMetadata: ${newMetadata}, ImageRenderer: ${newImage}`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

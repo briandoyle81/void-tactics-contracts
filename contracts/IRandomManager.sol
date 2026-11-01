@@ -9,4 +9,6 @@ interface IRandomManager {
     function fulfillRandomRequest(uint) external returns (uint64);
 
     function isExpired(uint) external view returns (bool);
+
+    function capturePending(uint) external;
 }

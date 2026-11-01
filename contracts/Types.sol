@@ -114,6 +114,10 @@ struct Traits {
     uint8 speed;
 }
 
+// A ship's HSL colors, rolled at mint. Renderers read only the first color
+// today. The second (h2/s2/l2) has no reader yet but is needed for a
+// planned future feature (2026-10-31): don't remove it as unused, and keep
+// rolling it at mint.
 struct Colors {
     uint16 h1;
     uint8 s1;

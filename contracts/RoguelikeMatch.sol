@@ -325,10 +325,18 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         // Seed persisted damage from a previous node, if any (0 = never
         // damaged this run — the fresh 100% calculateShipAttributes just
         // set inside startGame is already correct, skip the call). One
-        // RoguelikeRun read for the whole roster (2026-10-31).
+        // RoguelikeRun read for the whole roster (2026-10-31). A stored
+        // value at or above the ship's max for this game is also left at
+        // full: an attributes update that lowered the max since it was
+        // stored would otherwise make Game reject the override and revert
+        // every entry for the run (docs/audit-4.md HA7-02).
         uint8[] memory hps = runLedger.getRosterHP(msg.sender);
         for (uint i = 0; i < hps.length; i++) {
-            if (hps[i] != 0) {
+            if (
+                hps[i] != 0 &&
+                hps[i] <
+                game.getShipAttributes(gameId, shipIds[i]).maxHullPoints
+            ) {
                 game.setInitialHullPointsOverride(gameId, shipIds[i], hps[i]);
             }
         }
@@ -526,6 +534,43 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         }
     }
 
+    // A ship that fled (status 2) and isn't rejoining keeps the heal floor
+    // (from 0 HP, the same value a rejoiner gets) as its HP for the rest of
+    // the run. Otherwise RoguelikeRun's stash would keep its pre-fight HP,
+    // and dropping it then adding it back at a resupply stop would repair
+    // its battle damage for free (docs/audit-4.md HA7-07). Runs after
+    // setRosterAndHP, so these ships are out of the roster and setShipHP
+    // writes the stash. Never reverts: this is inside the winning move.
+    function _stashFledHP(
+        uint _gameId,
+        address _player,
+        uint[] memory _oldRoster,
+        uint[] memory _newRoster
+    ) internal {
+        for (uint i = 0; i < _oldRoster.length; i++) {
+            uint shipId = _oldRoster[i];
+            bool kept = false;
+            for (uint j = 0; j < _newRoster.length; j++) {
+                if (_newRoster[j] == shipId) {
+                    kept = true;
+                    break;
+                }
+            }
+            if (kept || game.getShipPosition(_gameId, shipId).status != 2) {
+                continue;
+            }
+            try shipAttributes.calculateShipAttributesById(shipId) returns (
+                Attributes memory attrs
+            ) {
+                runLedger.setShipHP(
+                    _player,
+                    shipId,
+                    _healedHP(_gameId, 0, attrs.maxHullPoints)
+                );
+            } catch {}
+        }
+    }
+
     function _healedHP(
         uint _gameId,
         uint8 _hullPoints,
@@ -636,6 +681,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         // node graph.
         bool isFinalNode = isFinalNodeAtStart[_gameId];
         runLedger.setRosterAndHP(player, newRoster, hps);
+        _stashFledHP(_gameId, player, run.rosterShipIds, newRoster);
 
         // Pluggable win effects (bonus currency, extra heal beyond the
         // floor above, a granted ship, etc.) — run after the roster/HP

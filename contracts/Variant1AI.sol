@@ -178,24 +178,19 @@ contract Variant1AI is IVariantAI, Ownable {
                 uint16 reach = uint16(ramRange) + ctx.attrs.movement;
                 uint16 dist = _distance(ctx.pos, victimPos);
                 if (dist <= reach) {
-                    Position memory dest = ctx.pos;
-                    if (dist > ramRange) {
-                        uint16 gap = dist - ramRange;
-                        dest = AIBehavior.stepTowardReachable(
-                            ctx,
-                            victimPos,
-                            gap < ctx.attrs.movement
-                                ? uint8(gap)
-                                : ctx.attrs.movement,
-                            0
-                        );
+                    // Only a landing tile within Ram's range; otherwise the
+                    // ram would revert and the ship pass (HA7-06), so fight
+                    // like a Grunt instead.
+                    (Position memory dest, bool canRam) = AIBehavior
+                        .reachWithin(ctx, victimPos, ramRange);
+                    if (canRam) {
+                        return
+                            AIBehavior.decision(
+                                dest,
+                                ActionType.FactionAbility,
+                                victim
+                            );
                     }
-                    return
-                        AIBehavior.decision(
-                            dest,
-                            ActionType.FactionAbility,
-                            victim
-                        );
                 }
             }
         }

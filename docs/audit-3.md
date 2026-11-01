@@ -1,5 +1,7 @@
 # Void Tactics — Open Security/Audit Items (Pass HA6)
 
+_**Superseded 2026-10-31 by `docs/audit-4.md` (pass HA7), now the live tracker.** This file stays as the record of pass HA6._
+
 _Written 2026-10-13. Live tracker, replacing `docs/audit-2.md` as the place for new findings and status changes. `audit-2.md` stays as written; its still-open items are listed under **Carried forward** below and are not duplicated here._
 
 **Scope:** every non-mock contract in `contracts/` at `0949a65`, plus the uncommitted Roguelike node-clear-guard diff (`GameLens`, `RoguelikeMatch`, `RoguelikeNodeMap`, `RoguelikeRun`, `DeployAndConfig.ts`). `Renderers/` and `RenderersV2/` got a light pass only (tokenURI reverts, gas, string injection).
@@ -567,7 +569,7 @@ _Note 2026-10-14: the lottery no longer uses RandomManager, so this now affects 
 - **Root Resupply node's `costCapOverride`:** can be skipped by walking straight to its child. The node kind is read live, so an admin `updateNode` changes the leave-gating of a node a run is standing on.
 - **Tournament World ID:** a fixed `externalNullifier` makes a human's participation linkable across tournaments (privacy). The signal is correctly bound to `msg.sender`.
 - **`Create2Deployer.deploy` is permissionless:** squatting deploys identical code. The deploy script should treat "code already at address" as success.
-- **Dead or unused code:** `CadenceArchCaller` is unused, and `UniversalCredits.withdrawAll` is dead (no payable path).
+- **Dead or unused code:** ~~`CadenceArchCaller` is unused~~ (removed 2026-10-31), and `UniversalCredits.withdrawAll` is dead (no payable path).
 - **`TutorialClaim`:** Sybil-able while `eligibilityProvider` is unset. Intentional for now.
 - **`tx.origin`:** no uses anywhere, only comments in `UTCLotteryHook`.
 

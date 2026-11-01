@@ -40,7 +40,6 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
     uint[] public flowTierPrices;
 
     mapping(address => uint) public referralCount;
-    mapping(address => bool) public isAllowedToCreateShips;
 
     constructor(address _ships, address _universalCredits) Ownable(msg.sender) {
         ships = IShips(_ships);

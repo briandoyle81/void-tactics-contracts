@@ -370,6 +370,45 @@ describe("Per-variant AI behavior trees", function () {
       expect(rammer.action).to.equal(ActionType.FactionAbility);
     });
 
+    // docs/audit-4.md HA7-06: a heal or ram that can't land in range this
+    // turn must fall through, not pick an out-of-range tile (the resolver
+    // reverts OutOfRange and the ship passes, every turn).
+    it("Rammer that can't get next to a downed enemy fights instead of passing (HA7-06)", async function () {
+      // Live humans fill every tile within Ram range 1 of the downed one.
+      const r = await run({
+        ai: [{ variant: 1, archetype: RAMMER, at: [5, 10] }],
+        humans: [
+          { at: [5, 7] },
+          { at: [5, 6], downed: true },
+          { at: [4, 6] },
+          { at: [6, 6] },
+          { at: [5, 5] },
+        ],
+      });
+      expect(r.action).to.not.equal(ActionType.FactionAbility);
+      expect(r.action).to.not.equal(ActionType.Pass);
+    });
+
+    it("Support that can't reach Repair Drones range of its ally fights instead of passing (HA7-06)", async function () {
+      // Repair Drones range 3, movement 5: live humans fill every tile it
+      // could reach this turn that's within range 3 of the downed ally.
+      const r = await run({
+        ai: [
+          { variant: 1, archetype: SUPPORT, special: 2, at: [5, 10] },
+          { variant: 1, archetype: GRUNT, at: [5, 4], downed: true },
+        ],
+        humans: [
+          { at: [5, 7] },
+          { at: [5, 6] },
+          { at: [5, 5] },
+          { at: [4, 6] },
+          { at: [6, 6] },
+        ],
+      });
+      expect(r.action).to.not.equal(ActionType.Special);
+      expect(r.action).to.not.equal(ActionType.Pass);
+    });
+
     it("Rammer fights like a Grunt when there is nothing to ram", async function () {
       const r = await run({
         ai: [{ variant: 1, archetype: RAMMER, at: [5, 10] }],

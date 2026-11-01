@@ -175,6 +175,35 @@ contract GenerateNewShip is Ownable {
         return newShip;
     }
 
+    // The ship an expired, never-captured random request builds
+    // (docs/trustless-randomness-plan-2026-11-01.md, audit-4 HA7-10): no
+    // better than any real roll in anything that matters, so letting a bad
+    // roll expire on purpose never pays. Tier 0 traits, no shiny, minimum
+    // rank (Ships keeps a purchase tier's preset kills), the Generic
+    // weapon, no armor or shields, no special. Name and colors are cosmetic and come
+    // from a seed fixed at mint, so they offer no choice either.
+    function generateBaselineShip(
+        uint id,
+        uint serialNumber,
+        uint16 variant
+    ) external view returns (Ship memory ship) {
+        ship = this.generateShip(
+            id,
+            serialNumber,
+            uint64(uint(keccak256(abi.encode("baseline", serialNumber)))),
+            variant
+        );
+        ship.traits.accuracy = 0;
+        ship.traits.hull = 0;
+        ship.traits.speed = 0;
+        ship.equipment.mainWeapon = MainWeapon(0);
+        ship.equipment.armor = Armor(0);
+        ship.equipment.shields = Shields(0);
+        ship.equipment.special = Special.None;
+        ship.shipData.shiny = false;
+        ship.shipData.shipsDestroyed = 1;
+    }
+
     // WARNING: This function is duplicated in Ships.sol
     function getTierOfTrait(uint _trait) public pure returns (uint8) {
         if (_trait < 50) {

@@ -386,6 +386,9 @@ async function main() {
   const variantPurchaseGateAddress = getAddress(
     deployed["DeployModule#VariantPurchaseGate"],
   );
+  const randomManagerAddress = getAddress(
+    deployed["DeployModule#RandomManager"],
+  );
 
   for (const [label, addr] of [
     ["PoolManager", POOL_MANAGER],
@@ -968,6 +971,44 @@ async function main() {
       "MANUAL STEP REQUIRED -- submit this from the VariantPurchaseGate owner wallet:",
     );
     console.log("  to:  ", variantPurchaseGateAddress);
+    console.log("  data:", calldata);
+  }
+
+  // ---- Step 13c: point the hook at RandomManager --------------------------
+  // Each swap stores pending ship-roll block hashes before they age out
+  // (docs/trustless-randomness-plan-2026-11-01.md, decision D2).
+  const currentRandomManager = getAddress(
+    (await publicClient.readContract({
+      address: hookAddress,
+      abi: hookAbi,
+      functionName: "randomManager",
+    })) as `0x${string}`,
+  );
+  if (currentRandomManager === randomManagerAddress) {
+    console.log("Hook already points at RandomManager -- skipping.");
+  } else if (hookOwnerClient) {
+    const { request } = await publicClient.simulateContract({
+      address: hookAddress,
+      abi: hookAbi,
+      functionName: "setRandomManager",
+      args: [randomManagerAddress],
+      account: hookOwnerClient.account,
+    });
+    const hash = await hookOwnerClient.writeContract(request);
+    console.log("setRandomManager tx:", hash);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") {
+      throw new Error(`setRandomManager tx reverted: ${hash}`);
+    }
+    console.log("Hook now captures ship randomness on swaps.");
+  } else {
+    const calldata = encodeFunctionData({
+      abi: hookAbi,
+      functionName: "setRandomManager",
+      args: [randomManagerAddress],
+    });
+    console.log("MANUAL STEP REQUIRED -- submit this from the hook owner wallet:");
+    console.log("  to:  ", hookAddress);
     console.log("  data:", calldata);
   }
 

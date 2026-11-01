@@ -57,8 +57,4 @@ contract GameBlobRegistry is Ownable {
         blobs[gameId][player] = blobId;
         emit BlobRecorded(gameId, player, blobId);
     }
-
-    function getBlob(uint256 gameId, address player) external view returns (bytes32) {
-        return blobs[gameId][player];
-    }
 }

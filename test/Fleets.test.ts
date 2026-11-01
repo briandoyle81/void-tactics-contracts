@@ -88,8 +88,8 @@ describe("Fleets — deployment zones (per-map)", function () {
       [f.creator.account.address, 0n, f.creator.account.address, 1],
       { value: parseEther("4.99") },
     );
-    // The permissionless sync stamps a current costsVersion on it (L-03).
-    await f.ships.write.syncShipCosts([[6n]]);
+    // Its owner's sync stamps a current costsVersion on it.
+    await f.ships.write.syncShipCosts([[6n]], { account: f.creator.account });
     await expect(
       f.fleets.write.createFleet([
         0n,
@@ -340,6 +340,24 @@ describe("Fleets.transferFleet", function () {
     }
   });
 
+  // audit-4 Info (2026-11-01): a handed-off or cleared fleet reads back
+  // with no ships, no positions and no cost, not stale ones.
+  it("leaves the old fleet and a cleared fleet with no positions and no cost", async function () {
+    const f = await loadFixture(deployFixture);
+    await transfer(f);
+    const newId = await f.fleets.read.fleetCount();
+    const old = await f.fleets.read.getFleet([f.reservationId]);
+    expect(old.startingPositions).to.deep.equal([]);
+    expect(old.totalCost).to.equal(0n);
+
+    await f.fleets.write.clearFleet([newId]);
+    const cleared = await f.fleets.read.getFleet([newId]);
+    expect(cleared.shipIds).to.deep.equal([]);
+    expect(cleared.startingPositions).to.deep.equal([]);
+    expect(cleared.totalCost).to.equal(0n);
+    expect(await f.fleets.read.getFleetShipIdsAndPositions([newId])).to.deep.equal([[], []]);
+  });
+
   it("rejects ids that aren't the old fleet's, in the same order", async function () {
     const f = await loadFixture(deployFixture);
     await expect(transfer(f, { ids: [2n, 1n, 3n] })).to.be.rejectedWith(
@@ -474,6 +492,25 @@ describe("Fleets.reserveFleet", function () {
     for (const id of [1n, 2n, 3n]) {
       expect((await f.ships.read.getShip([id])).shipData.inFleet).to.equal(true);
     }
+  });
+
+  // audit-4 Info (2026-11-01): removeShipFromFleet moves each ship's
+  // position with it, and the emptied combat fleet keeps no positions or cost.
+  it("keeps positions aligned with ship ids after a removal, and empties the old fleet fully", async function () {
+    const f = await loadFixture(deployFixture);
+    // Ship 3 took ship 2's slot, and its position (row 2) came with it.
+    const combat = await f.fleets.read.getFleet([f.combatId]);
+    expect(combat.shipIds).to.deep.equal([1n, 3n]);
+    expect(combat.startingPositions).to.deep.equal([
+      { row: 0, col: 0 },
+      { row: 2, col: 0 },
+    ]);
+    expect(combat.totalCost).to.equal((await costOf(f, 1n)) + (await costOf(f, 3n)));
+
+    await reserve(f, [1n, 3n]);
+    const old = await f.fleets.read.getFleet([f.combatId]);
+    expect(old.startingPositions).to.deep.equal([]);
+    expect(old.totalCost).to.equal(0n);
   });
 
   it("re-reserves the survivors alone", async function () {

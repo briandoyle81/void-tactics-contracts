@@ -37,6 +37,7 @@ library DestroyRewardLib {
         address _destroyedShipOwner,
         address _destroyerOwner,
         uint _reward,
+        uint _factionReward,
         uint16 _destroyedShipVariant,
         IUniversalCredits _universalCredits,
         IFactionRewardTokenRegistry _registry
@@ -73,7 +74,7 @@ library DestroyRewardLib {
                 emit RewardSkipped(_destroyedShipVariant, _destroyerOwner);
                 return;
             }
-            try IMintableToken(token).mint(_destroyerOwner, _reward) {} catch {
+            try IMintableToken(token).mint(_destroyerOwner, _factionReward) {} catch {
                 emit RewardSkipped(_destroyedShipVariant, _destroyerOwner);
             }
         } else {
