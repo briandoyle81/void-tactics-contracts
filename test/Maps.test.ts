@@ -2082,6 +2082,64 @@ describe("Line of Sight System", function () {
         );
       });
 
+      // Per-game scoring tiles are one packed list (2026-10-31). A used
+      // onlyOnce tile stays in it at 0 points with its flag, the way the
+      // old per-cell mappings kept it.
+      it("uses up an onlyOnce tile, can re-enable it, and re-applies idempotently", async function () {
+        const scoringPositions = [
+          { row: 5, col: 5, points: 10, onlyOnce: true },
+          { row: 8, col: 8, points: 15, onlyOnce: false },
+        ];
+        await maps.write.createPresetScoringMap([scoringPositions, MapMode.Both], {
+          account: owner.address,
+        });
+        const mapId = await maps.read.mapCount();
+        const gameId = 77n;
+        await maps.write.applyPresetScoringMapToGame([gameId, mapId], {
+          account: owner.address,
+        });
+        expect(await maps.read.getGameScoringPositions([gameId])).to.deep.equal(
+          scoringPositions,
+        );
+
+        const score = async (row: number, col: number) => {
+          const points = await maps.simulate.getScoreAndZeroOut(
+            [gameId, row, col],
+            { account: owner.address },
+          );
+          await maps.write.getScoreAndZeroOut([gameId, row, col], {
+            account: owner.address,
+          });
+          return points.result;
+        };
+        expect(await score(5, 5)).to.equal(10);
+        expect(await score(5, 5)).to.equal(0);
+        expect(await score(8, 8)).to.equal(15);
+        expect(await score(8, 8)).to.equal(15);
+        expect(await score(0, 0)).to.equal(0);
+        expect(await maps.read.isTileScoring([gameId, 5, 5])).to.equal(0);
+        expect(await maps.read.getGameScoringPositions([gameId])).to.deep.equal([
+          scoringPositions[1],
+        ]);
+
+        // Re-enabled by an editor: keeps its onlyOnce flag.
+        await maps.write.setScoringTile([gameId, 5, 5, 7], {
+          account: owner.address,
+        });
+        expect(await maps.read.getGameScoringPositions([gameId])).to.deep.equal([
+          { row: 5, col: 5, points: 7, onlyOnce: true },
+          scoringPositions[1],
+        ]);
+
+        // Applying the preset again restores its values, no duplicates.
+        await maps.write.applyPresetScoringMapToGame([gameId, mapId], {
+          account: owner.address,
+        });
+        expect(await maps.read.getGameScoringPositions([gameId])).to.deep.equal(
+          scoringPositions,
+        );
+      });
+
       it("Should apply preset scoring map to multiple games independently", async function () {
         const scoringPositions = [
           { row: 5, col: 5, points: 1, onlyOnce: false },

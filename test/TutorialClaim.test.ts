@@ -72,23 +72,18 @@ describe("TutorialClaim", function () {
     return out;
   }
 
-  /** `playerStats` mapping returns `[wins, losses, totalGames]` from viem. */
+  /** `playerStats` mapping returns `[wins, losses]` from viem; total games is their sum. */
   function expectStats(
-    raw:
-      | readonly [bigint, bigint, bigint]
-      | { wins: bigint; losses: bigint; totalGames: bigint },
+    raw: readonly [bigint, bigint] | { wins: bigint; losses: bigint },
     wins: bigint,
     losses: bigint,
     totalGames: bigint,
   ) {
     const w = Array.isArray(raw) ? raw[0] : (raw as { wins: bigint }).wins;
     const l = Array.isArray(raw) ? raw[1] : (raw as { losses: bigint }).losses;
-    const t = Array.isArray(raw)
-      ? raw[2]
-      : (raw as { totalGames: bigint }).totalGames;
     expect(w).to.equal(wins);
     expect(l).to.equal(losses);
-    expect(t).to.equal(totalGames);
+    expect(w + l).to.equal(totalGames);
   }
 
   it("completes win path once, mints 2 ships, records win", async function () {
@@ -258,9 +253,6 @@ describe("TutorialClaim", function () {
           h2: 20,
           s2: 20,
           l2: 20,
-          h3: 0,
-          s3: 0,
-          l3: 0,
         },
         variant: 1,
         accuracy: 1,

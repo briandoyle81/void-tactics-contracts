@@ -76,7 +76,6 @@ contract Lobbies is Ownable, ReentrancyGuard {
     error LobbyNotFound();
     error LobbyFull();
     error LobbyNotOpen();
-    error LobbyAlreadyStarted();
     error InvalidFleetCost();
     error ShipAlreadyInFleet();
     error ShipNotOwned();
@@ -86,7 +85,6 @@ contract Lobbies is Ownable, ReentrancyGuard {
     error LobbyCreationPaused();
     error NotInLobby();
     error FleetAlreadyCreated();
-    error InvalidShipCount();
     error CannotLeaveStartedGame();
     error InvalidTurnTime();
     error TimeoutNotReached();
@@ -332,7 +330,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
         address _reservedJoiner
     ) public payable nonReentrant {
         if (paused) revert LobbyCreationPaused();
-        if (_turnTime < MIN_TIMEOUT || _turnTime > MAX_TURN_TIME)
+        if (_turnTime < MIN_TURN_TIME || _turnTime > MAX_TURN_TIME)
             revert InvalidTurnTime();
         if (_costLimit > maxFleetCostLimit) revert MaxFleetCostExceeded();
         if (_reservedJoiner == msg.sender) revert PlayerAlreadyInLobby();
@@ -345,11 +343,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
 
         // Check if player is in timeout
         PlayerLobbyState storage state = playerStates[msg.sender];
-        if (state.kickCount > 0) {
-            uint timeoutEnd = state.lastKickTime +
-                (state.kickCount * KICK_PENALTY_PER_HOUR);
-            if (block.timestamp < timeoutEnd) revert PlayerInTimeout();
-        }
+        if (block.timestamp < getPlayerTimeoutEnd(msg.sender)) revert PlayerInTimeout();
 
         // If reserving for a specific player, charge 1 UTC (no ETH involved).
         if (_reservedJoiner != address(0)) {
@@ -430,11 +424,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
         PlayerLobbyState storage state = playerStates[msg.sender];
 
         // Check if player is in timeout
-        if (state.kickCount > 0) {
-            uint timeoutEnd = state.lastKickTime +
-                (state.kickCount * KICK_PENALTY_PER_HOUR);
-            if (block.timestamp < timeoutEnd) revert PlayerInTimeout();
-        }
+        if (block.timestamp < getPlayerTimeoutEnd(msg.sender)) revert PlayerInTimeout();
 
         // Check if player needs to pay for additional lobbies (only for non-reserved lobbies)
         if (lobby.players.reservedJoiner == address(0)) {
@@ -487,11 +477,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
         PlayerLobbyState storage state = playerStates[msg.sender];
 
         // Check if player is in timeout
-        if (state.kickCount > 0) {
-            uint timeoutEnd = state.lastKickTime +
-                (state.kickCount * KICK_PENALTY_PER_HOUR);
-            if (block.timestamp < timeoutEnd) revert PlayerInTimeout();
-        }
+        if (block.timestamp < getPlayerTimeoutEnd(msg.sender)) revert PlayerInTimeout();
 
         lobby.players.joiner = msg.sender;
         lobby.state.status = LobbyStatus.FleetSelection;
@@ -738,7 +724,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
         uint _selectedMapId,
         uint _maxScore
     ) public onlyOwner {
-        if (_turnTime < MIN_TIMEOUT || _turnTime > MAX_TURN_TIME)
+        if (_turnTime < MIN_TURN_TIME || _turnTime > MAX_TURN_TIME)
             revert InvalidTurnTime();
         if (_creator == _joiner) revert PlayerAlreadyInLobby();
         if (_costLimit > maxFleetCostLimit) revert MaxFleetCostExceeded();

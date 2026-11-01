@@ -24,6 +24,10 @@ interface IAIShips {
     // Called only by ShipsRouter (gated by the configured router address).
     function getShip(uint _id) external view returns (Ship memory);
 
+    function getShipStatsInput(
+        uint _id
+    ) external view returns (ShipStatsInput memory);
+
     function isShipDestroyed(uint _id) external view returns (bool);
 
     function markDestroyed(uint _id) external returns (address ownerOut);

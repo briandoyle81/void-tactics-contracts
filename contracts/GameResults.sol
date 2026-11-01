@@ -11,9 +11,6 @@ contract GameResults is Ownable {
     // Mapping from game ID to game result
     mapping(uint => GameResult) public gameResults;
 
-    // Total number of games tracked
-    uint public totalGamesTracked;
-
     // Contracts allowed to record game results — in practice each is a
     // PvPMatch instance (PvPMatch.onGameEnded calls recordGameResult, not
     // Game.sol directly — "gameContract" is a legacy name). Was a single
@@ -129,8 +126,6 @@ contract GameResults is Ownable {
         _updatePlayerStats(_winner, true); // Winner
         _updatePlayerStats(_loser, false); // Loser
 
-        totalGamesTracked++;
-
         emit GameResultRecorded(_gameId, _winner, _loser, block.timestamp);
     }
 
@@ -148,13 +143,11 @@ contract GameResults is Ownable {
             stats.losses++;
         }
 
-        stats.totalGames++;
-
         emit PlayerStatsUpdated(
             _player,
             stats.wins,
             stats.losses,
-            stats.totalGames
+            stats.wins + stats.losses
         );
     }
 
@@ -189,39 +182,5 @@ contract GameResults is Ownable {
      */
     function isGameResultRecorded(uint _gameId) external view returns (bool) {
         return gameResults[_gameId].gameId != 0;
-    }
-
-    /**
-     * @dev Get the total number of games a player has participated in
-     * @param _player The player address
-     * @return The total number of games
-     */
-    function getPlayerTotalGames(address _player) external view returns (uint) {
-        return playerStats[_player].totalGames;
-    }
-
-    /**
-     * @dev Get the win rate of a player (wins / total games)
-     * @param _player The player address
-     * @return The win rate as a percentage (0-100)
-     */
-    function getPlayerWinRate(address _player) external view returns (uint) {
-        PlayerStats memory stats = playerStats[_player];
-        if (stats.totalGames == 0) return 0;
-        return (stats.wins * 100) / stats.totalGames;
-    }
-
-    /**
-     * @dev Get the top players by wins (limited to top N)
-     * @param _limit The maximum number of players to return
-     * @return Array of player addresses sorted by wins (descending)
-     */
-    function getTopPlayersByWins(
-        uint _limit
-    ) external view returns (address[] memory) {
-        // This is a simplified implementation - in production you might want to use a more sophisticated approach
-        // For now, we'll return an empty array as this would require iterating over all players
-        // which could be gas-intensive
-        return new address[](0);
     }
 }

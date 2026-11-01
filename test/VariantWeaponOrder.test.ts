@@ -24,7 +24,7 @@ describe("Variant 2 weapon order: guns, names and art agree", function () {
       equipment: { mainWeapon, armor: 0, shields: 0, special: 0 },
       traits: {
         serialNumber: 1n,
-        colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 },
+        colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0 },
         variant: 2,
         accuracy: 0,
         hull: 0,

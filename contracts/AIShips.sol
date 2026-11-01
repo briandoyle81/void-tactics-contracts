@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./Types.sol";
-import "./IShipAttributes.sol";
 import "./IAIShips.sol";
 
 // Non-NFT store for single-player AI ships, sitting behind ShipsRouter.
@@ -28,35 +27,37 @@ contract AIShips is Ownable, IAIShips {
 
     mapping(uint => Ship) private ships; // keyed by LOCAL id, 1-indexed
     uint public slotCount;
+    // The free list is freeSlots[0 .. freeSlotCount). The array never
+    // shrinks (2026-10-31): entries past freeSlotCount are stale and get
+    // overwritten by the next release. Popping zeroed each entry, so every
+    // release paid a ~20k first write per ship to refill it.
     uint[] public freeSlots;
-    // HA3-04: per-slot free/in-use tracking, keyed by LOCAL id. Defaults to
-    // false for both "currently allocated" and "never yet allocated" slots,
-    // which is correct either way — only set true while a slot actually sits
-    // in freeSlots. Lets releaseShips detect (and skip, not corrupt state
-    // over) a redundant release instead of silently duplicating a slot in
-    // freeSlots, which would let allocateShip hand the same globalId out
+    uint public freeSlotCount;
+    // HA3-04: per-slot free/in-use tracking, keyed by LOCAL id, as a bitmap
+    // (bit localId % 256 of word localId / 256). Set only while a slot sits
+    // in the free list. Lets releaseShips detect (and skip, not corrupt
+    // state over) a redundant release instead of duplicating a slot in the
+    // free list, which would let allocateShip hand the same globalId out
     // twice. Not currently reachable (Game._endGame's single-invocation
     // guard — see pre-audit.md L-08 — means onGameEnded, the only caller of
     // releaseShips, can't fire twice for one game), but defense-in-depth
     // per this project's "assume hostile/buggy callers" standing rule.
-    mapping(uint => bool) private isFreeSlot;
+    // Bit 0 of word 0 (local id 0, never used) stays set from construction,
+    // so emptying the free list never zeroes that word and the next
+    // release doesn't pay a first write for it.
+    mapping(uint => uint256) private freeSlotBits;
 
     address public router;
     mapping(address => bool) public isAllowedToCreateShips;
-    IShipAttributes public shipAttributes;
 
     error NotAuthorized(address);
 
-    constructor() Ownable(msg.sender) {}
+    constructor() Ownable(msg.sender) {
+        freeSlotBits[0] = 1;
+    }
 
     function setRouter(address _router) external onlyOwner {
         router = _router;
-    }
-
-    function setShipAttributesAddress(
-        address _shipAttributes
-    ) external onlyOwner {
-        shipAttributes = IShipAttributes(_shipAttributes);
     }
 
     function setIsAllowedToCreateShips(
@@ -66,10 +67,6 @@ contract AIShips is Ownable, IAIShips {
         isAllowedToCreateShips[_address] = _isAllowed;
     }
 
-    function freeSlotCount() external view returns (uint) {
-        return freeSlots.length;
-    }
-
     function allocateShip(
         address _to,
         Ship calldata _template
@@ -77,11 +74,11 @@ contract AIShips is Ownable, IAIShips {
         if (!isAllowedToCreateShips[msg.sender]) revert NotAuthorized(msg.sender);
 
         uint localId;
-        uint freeCount = freeSlots.length;
+        uint freeCount = freeSlotCount;
         if (freeCount > 0) {
             localId = freeSlots[freeCount - 1];
-            freeSlots.pop();
-            isFreeSlot[localId] = false;
+            freeSlotCount = freeCount - 1;
+            freeSlotBits[localId >> 8] &= ~(uint256(1) << (localId & 255));
         } else {
             slotCount++;
             localId = slotCount;
@@ -107,31 +104,57 @@ contract AIShips is Ownable, IAIShips {
         ship.shipData.inFleet = false;
         ship.shipData.isFreeShip = false;
         ship.shipData.timestampDestroyed = 0;
-        // Recomputed live every allocation — Fleets.createFleet reverts on
-        // a stale costsVersion, so a remembered value from a prior
-        // occupant's allocation is not safe to reuse.
-        ship.shipData.costsVersion = shipAttributes.getCurrentCostsVersion(
-            ship.traits.variant
-        );
-        ship.shipData.cost = shipAttributes.calculateShipCost(ship);
+        // AI ships aren't priced (2026-10-30): AI fleets have no cost cap
+        // and Fleets skips the costs-version check for them, so the two
+        // ShipAttributes calls this used to make were wasted gas. Zeroed so
+        // a reused slot never shows an earlier occupant's price.
+        ship.shipData.costsVersion = 0;
+        ship.shipData.cost = 0;
     }
 
     function releaseShips(uint[] calldata _shipIds) external {
         if (!isAllowedToCreateShips[msg.sender]) revert NotAuthorized(msg.sender);
+        uint freeCount = freeSlotCount;
+        uint stored = freeSlots.length;
         for (uint i = 0; i < _shipIds.length; i++) {
             uint localId = _shipIds[i] - AI_SHIP_ID_OFFSET;
+            uint256 bit = uint256(1) << (localId & 255);
+            uint256 word = freeSlotBits[localId >> 8];
             // Skip (don't revert the whole batch over) an already-free
             // slot — same griefing-resistant reasoning as
             // RandomManager.revealRandomnessBatch and Fleets.clearFleet's
             // idempotent-redundant-call handling elsewhere in this repo.
-            if (isFreeSlot[localId]) continue;
-            isFreeSlot[localId] = true;
-            freeSlots.push(localId);
+            if (word & bit != 0) continue;
+            freeSlotBits[localId >> 8] = word | bit;
+            if (freeCount < stored) {
+                freeSlots[freeCount] = localId;
+            } else {
+                freeSlots.push(localId);
+                stored++;
+            }
+            freeCount++;
         }
+        freeSlotCount = freeCount;
     }
 
     function getShip(uint _id) external view returns (Ship memory) {
         return ships[_id - AI_SHIP_ID_OFFSET];
+    }
+
+    function getShipStatsInput(
+        uint _id
+    ) external view returns (ShipStatsInput memory) {
+        Ship storage s = ships[_id - AI_SHIP_ID_OFFSET];
+        return
+            ShipStatsInput(
+                s.id,
+                s.equipment,
+                s.traits.variant,
+                s.traits.accuracy,
+                s.traits.hull,
+                s.traits.speed,
+                s.shipData.shipsDestroyed
+            );
     }
 
     function isShipDestroyed(uint _id) external view returns (bool) {

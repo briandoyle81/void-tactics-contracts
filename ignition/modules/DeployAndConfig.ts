@@ -457,12 +457,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // AI ship ids)
   const shipAttributes = m.contract("ShipAttributes", [ships]);
 
-  const setAiShipsShipAttributesCall = m.call(
-    aiShips,
-    "setShipAttributesAddress",
-    [shipAttributes],
-  );
-
   // Deploy ShipsRouter: the facade Game.sol/Fleets.sol/ShipAttributes talk
   // to instead of Ships.sol directly, so a single shipId space can resolve
   // against both Ships.sol (human) and AIShips.sol (AI) — see the
@@ -1560,19 +1554,28 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // empty creatorZone/joinerZone means "use the engine default column
   // band" (Maps.sol's own convention), so those calls are skipped entirely
   // rather than sent as a no-op empty-array write.
+  // Zone calls per map, so the map's AI fleet is placed after them:
+  // AIEncounters only accepts placements inside the joiner zone, so a fleet
+  // outside the default band reverts if it lands first (2026-10-26).
+  const zoneCalls: Record<string, ReturnType<typeof m.call>[]> = {};
   allMaps.forEach((map) => {
     const capitalizedKey = `${map.key[0].toUpperCase()}${map.key.slice(1)}`;
+    zoneCalls[map.key] = [];
     if (map.creatorZone?.length) {
-      m.call(maps, "setCreatorZone", [mapIds[map.key], map.creatorZone], {
-        id: `SetCreatorZone${capitalizedKey}`,
-        after: [mapCalls[map.key]],
-      });
+      zoneCalls[map.key].push(
+        m.call(maps, "setCreatorZone", [mapIds[map.key], map.creatorZone], {
+          id: `SetCreatorZone${capitalizedKey}`,
+          after: [mapCalls[map.key]],
+        }),
+      );
     }
     if (map.joinerZone?.length) {
-      m.call(maps, "setJoinerZone", [mapIds[map.key], map.joinerZone], {
-        id: `SetJoinerZone${capitalizedKey}`,
-        after: [mapCalls[map.key]],
-      });
+      zoneCalls[map.key].push(
+        m.call(maps, "setJoinerZone", [mapIds[map.key], map.joinerZone], {
+          id: `SetJoinerZone${capitalizedKey}`,
+          after: [mapCalls[map.key]],
+        }),
+      );
     }
   });
 
@@ -1631,7 +1634,11 @@ const DeployModule = buildModule("DeployModule", (m) => {
         ],
         {
           id: `Place${capitalizedKey}AIFleet`,
-          after: [mapCalls[placement.mapKey], setMaxPlacementsPerMapCall],
+          after: [
+            mapCalls[placement.mapKey],
+            ...zoneCalls[placement.mapKey],
+            setMaxPlacementsPerMapCall,
+          ],
         },
       ),
     );
@@ -2447,7 +2454,6 @@ const DeployModule = buildModule("DeployModule", (m) => {
     m.call(aiShips, "transferOwnership", [MAP_EDITOR], {
       id: "TransferAIShipsOwnership",
       after: [
-        setAiShipsShipAttributesCall,
         setAiShipsRouterCall,
         allowSinglePlayerMatchToCreateAIShipsCall,
         allowRoguelikeMatchToCreateAIShipsCall,

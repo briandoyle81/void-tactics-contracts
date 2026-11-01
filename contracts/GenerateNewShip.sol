@@ -27,16 +27,6 @@ contract GenerateNewShip is Ownable {
         game = IGameView(_game);
     }
 
-    function generateSpecificShip(
-        uint id,
-        uint,
-        Ship memory ship
-    ) external pure returns (Ship memory) {
-        ship.id = id;
-        ship.traits.serialNumber = 0;
-        return ship;
-    }
-
     function generateShip(
         uint id,
         uint serialNumber,

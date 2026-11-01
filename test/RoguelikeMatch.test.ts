@@ -96,9 +96,6 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
         h2: 0,
         s2: 0,
         l2: 0,
-        h3: 0,
-        s3: 0,
-        l3: 0,
       },
       variant,
       accuracy: 0,
@@ -226,7 +223,7 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
     return {
       name: "Node Reward",
       equipment: { mainWeapon: 1, armor: 0, shields: 2, special: 0 },
-      colors: { h1: 10, s1: 20, l1: 30, h2: 40, s2: 50, l2: 60, h3: 70, s3: 80, l3: 90 },
+      colors: { h1: 10, s1: 20, l1: 30, h2: 40, s2: 50, l2: 60 },
       variant: 2,
       accuracy: 2,
       hull: 1,

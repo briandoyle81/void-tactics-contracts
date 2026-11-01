@@ -242,6 +242,36 @@ describe("Lobbies", function () {
       ).to.be.rejectedWith("InvalidTurnTime");
     });
 
+    // The minimum turn time is MIN_TURN_TIME (60s). Until 2026-10-30 the
+    // check compared against MIN_TIMEOUT (300s, the kick-penalty constant).
+    it("accepts a 60-second turn time and rejects 59 seconds", async function () {
+      const { creatorLobbies, joinerLobbies } = await loadFixture(
+        deployLobbiesFixture
+      );
+
+      await creatorLobbies.write.createLobby([
+        1000n,
+        60n,
+        true,
+        0n, // selectedMapId - no preset map
+        100n, // maxScore
+        zeroAddress, // reservedJoiner - no reservation
+      ]);
+      const lobby = await creatorLobbies.read.getLobby([1n]);
+      expect(lobby.gameConfig.turnTime).to.equal(60n);
+
+      await expect(
+        joinerLobbies.write.createLobby([
+          1000n,
+          59n,
+          true,
+          0n,
+          100n,
+          zeroAddress,
+        ])
+      ).to.be.rejectedWith("InvalidTurnTime");
+    });
+
     it("should revert with InvalidMapId when selectedMapId is a PvE-only map", async function () {
       const { creatorLobbies, maps, owner } = await loadFixture(
         deployLobbiesFixture

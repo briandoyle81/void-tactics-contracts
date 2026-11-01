@@ -100,9 +100,6 @@ describe("SinglePlayerMatch", function () {
       h2: 0,
       s2: 0,
       l2: 0,
-      h3: 0,
-      s3: 0,
-      l3: 0,
     },
     variant: 1,
     accuracy: 0,
@@ -473,7 +470,7 @@ describe("SinglePlayerMatch", function () {
     await maps.write.createPresetMap([[], MapMode.Both]);
     const mapId = await maps.read.mapCount();
     const equipment = { mainWeapon: 0, armor: 0, shields: 0, special: 0 };
-    const colors = { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 };
+    const colors = { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0 };
     for (const [variant, row] of [[1, 0], [2, 2]] as const) {
       await aiEncounters.write.createAIShipConfig([
         `AI v${variant}`,
@@ -929,19 +926,19 @@ describe("SinglePlayerMatch", function () {
   });
 
   describe("Deploy-seeded starter maps", function () {
-    it("seeds sixty-seven starter maps scaling from an easy opener (m01) through a matched-difficulty midpoint (m15) to the hardest finale (f06)", async function () {
+    it("seeds sixty-eight starter maps scaling from an easy opener (m01) through a matched-difficulty midpoint (m15) to the hardest finale (f06)", async function () {
       const { maps, aiEncounters } = await loadFixture(deploySinglePlayerFixture);
 
-      // 30 campaign maps (ids 1-30), 31 dedicated roguelike maps (ids
-      // 31-61 — every roguelike Combat node has its own map since the
-      // 2026-09-23 pass, not just the first three missions' variant-1
-      // rosters; map67 "Repair Facility DS7" added 2026-10-20), plus 6
-      // PvP-only maps (ids 62-67, not attached to any node — pvp06 added
+      // 30 campaign maps (ids 1-30), 32 roguelike maps (ids 31-62 — every
+      // roguelike Combat node has its own map since the 2026-09-23 pass,
+      // not just the first three missions' variant-1 rosters; map67
+      // "Repair Facility DS7" added 2026-10-20, chainMap67 exported from
+      // the 2026-10-19 deploy's editor edits 2026-10-26), plus 6 PvP-only
+      // maps (ids 63-68, not attached to any node — pvp06 added
       // 2026-09-28). Everything below reads campaign maps by id, so the
-      // rest don't disturb it. (On the live 2026-10-19 Base Sepolia deploy,
-      // map67 was appended by scripts/syncStarterContent.ts instead, so
-      // there it is id 67 and PvP stays 61-66.)
-      expect(await maps.read.mapCount()).to.equal(67n);
+      // rest don't disturb it. Live deploys created some of these with
+      // scripts/syncStarterContent.ts, so their ids differ there.
+      expect(await maps.read.mapCount()).to.equal(68n);
 
       // Map 1 (m01, id 1): easiest mission — thematically generated "Open
       // Void" terrain (light cover, long sightlines), one contested
@@ -1015,9 +1012,9 @@ describe("SinglePlayerMatch", function () {
       expect(m02Creator.length).to.be.greaterThan(0);
       expect(m02Joiner.length).to.be.greaterThan(0);
 
-      // PvP (ids 62-67 since map67 joined the roguelike list, 2026-10-20):
-      // id 62 is pvp01, the first-ever PvP preset map.
-      expect(await maps.read.mapMode([62n])).to.equal(0); // MapMode.PvP
+      // PvP (ids 63-68 since chainMap67 joined the roguelike list,
+      // 2026-10-26): id 63 is pvp01, the first-ever PvP preset map.
+      expect(await maps.read.mapMode([63n])).to.equal(0); // MapMode.PvP
     });
 
     it("seeds a thirty-node campaign graph — a 15-mission mainline, a 6-mission dead end, and a 3-mission shortcut that reconverges into a 6-mission final stretch", async function () {

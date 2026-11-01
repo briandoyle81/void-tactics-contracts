@@ -110,10 +110,7 @@ contract TutorialClaim is Ownable, ReentrancyGuard {
                 l1: 50,
                 h2: 220,
                 s2: 70,
-                l2: 40,
-                h3: 0,
-                s3: 0,
-                l3: 0
+                l2: 40
             }),
             variant: 1,
             // Tier indices 0–2 for costs/attributes
@@ -147,10 +144,7 @@ contract TutorialClaim is Ownable, ReentrancyGuard {
                 l1: 60,
                 h2: 270,
                 s2: 80,
-                l2: 50,
-                h3: 0,
-                s3: 0,
-                l3: 0
+                l2: 50
             }),
             variant: 1,
             accuracy: 1,
@@ -179,10 +173,7 @@ contract TutorialClaim is Ownable, ReentrancyGuard {
                 l1: 55,
                 h2: 170,
                 s2: 60,
-                l2: 45,
-                h3: 0,
-                s3: 0,
-                l3: 0
+                l2: 45
             }),
             variant: 1,
             accuracy: 1,

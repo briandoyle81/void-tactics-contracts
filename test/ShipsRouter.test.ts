@@ -99,7 +99,6 @@ describe("ShipsRouter", function () {
     ]);
     await ships.write.setIsAllowedToCreateShips([owner.account.address, true]);
 
-    await aiShips.write.setShipAttributesAddress([shipAttributes.address]);
     await aiShips.write.setRouter([shipsRouter.address]);
     await aiShips.write.setIsAllowedToCreateShips([owner.account.address, true]);
 
@@ -157,7 +156,7 @@ describe("ShipsRouter", function () {
   const defaultEquipment = { mainWeapon: 0, armor: 0, shields: 0, special: 0 };
   const defaultTraits = {
     serialNumber: 0n,
-    colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 },
+    colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0 },
     variant: 1,
     accuracy: 0,
     hull: 0,
@@ -523,5 +522,83 @@ describe("ShipsRouter", function () {
         await ships.read.recycleReward(),
       );
     });
+  });
+});
+
+// ShipsRouter.getShipStatsInput / ShipAttributes.calculateBoardStatsByIds
+// (2026-10-31): the slim stats read must give exactly what the full-Ship
+// paths give, for human and AI ships alike.
+describe("ShipsRouter slim stats read", function () {
+  async function deployFixture() {
+    const [owner, player] = await hre.viem.getWalletClients();
+    const { default: DeployModule } = await import("../ignition/modules/DeployAndConfig");
+    const { parseEther } = await import("viem");
+    const { tupleToShip } = await import("./types");
+    const deployed = await hre.ignition.deploy(DeployModule);
+    await deployed.ships.write.purchaseWithFlow(
+      [player.account.address, 0n, player.account.address, 1],
+      { value: parseEther("4.99") },
+    );
+    for (let i = 1; i <= 5; i++) {
+      const ship = tupleToShip((await deployed.ships.read.ships([BigInt(i)])) as any);
+      await deployed.randomManager.write.revealRandomness([ship.traits.serialNumber]);
+    }
+    await deployed.ships.write.constructAllMyShips({ account: player.account });
+    await deployed.aiShips.write.setIsAllowedToCreateShips([owner.account.address, true]);
+    await deployed.aiShips.write.allocateShip([
+      owner.account.address,
+      {
+        name: "AI Ship",
+        id: 0n,
+        equipment: { mainWeapon: 1, armor: 1, shields: 0, special: 1 },
+        traits: {
+          serialNumber: 0n,
+          colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0 },
+          variant: 1,
+          accuracy: 1,
+          hull: 2,
+          speed: 1,
+        },
+        shipData: {
+          shipsDestroyed: 3, costsVersion: 0, cost: 0, modified: 0, shiny: false,
+          constructed: false, inFleet: false, isFreeShip: false, timestampDestroyed: 0n,
+        },
+        owner: zeroAddress,
+      },
+    ]);
+    return { deployed, ids: [1n, 2n, 3n, 4n, 5n, 2n ** 40n + 1n] };
+  }
+
+  it("matches getShip and calculateShipAttributesById for every ship", async function () {
+    const { deployed, ids } = await loadFixture(deployFixture);
+    const { shipsRouter, shipAttributes } = deployed;
+    for (const id of ids) {
+      const full = await shipsRouter.read.getShip([id]);
+      const slim = await shipsRouter.read.getShipStatsInput([id]);
+      expect(slim).to.deep.equal({
+        id: full.id,
+        equipment: full.equipment,
+        variant: full.traits.variant,
+        accuracy: full.traits.accuracy,
+        hull: full.traits.hull,
+        speed: full.traits.speed,
+        shipsDestroyed: full.shipData.shipsDestroyed,
+      });
+    }
+    const [attrs, variants, specials] = await shipAttributes.read.calculateBoardStatsByIds([ids]);
+    for (let i = 0; i < ids.length; i++) {
+      const full = await shipsRouter.read.getShip([ids[i]]);
+      expect(attrs[i]).to.deep.equal(await shipAttributes.read.calculateShipAttributesById([ids[i]]));
+      expect(attrs[i]).to.deep.equal(await shipAttributes.read.calculateShipAttributes([full]));
+      expect(variants[i]).to.equal(full.traits.variant);
+      expect(specials[i]).to.equal(full.equipment.special);
+    }
+  });
+
+  it("reverts ShipNotFound for a missing ship", async function () {
+    const { deployed } = await loadFixture(deployFixture);
+    await expect(
+      deployed.shipAttributes.read.calculateBoardStatsByIds([[1n, 999n]]),
+    ).to.be.rejectedWith("ShipNotFound");
   });
 });

@@ -44,8 +44,13 @@ library AIBehavior {
     // runs out of stack slots quickly once a view function has ~6+
     // parameters plus a handful of locals, the same issue SpecialEffectsLib
     // hit earlier for the same reason.
+    // The orchestrator fills board, maps, gameId, shipId and mainWeapon;
+    // the AI contract fills the rest from `board` with loadView
+    // (2026-10-31). `board` is Game.getAIBoard's flat array, cheap to pass
+    // on compared with the decoded AIView.
     struct Ctx {
-        GameDataView g;
+        AIView g;
+        uint[] board;
         IMaps maps;
         uint gameId;
         uint shipId;
@@ -55,13 +60,138 @@ library AIBehavior {
         ScoringPosition[] scoringPositions;
         int16 gridWidth;
         int16 gridHeight;
+        // From Game (GameData.occupied / live), filled by loadView.
+        uint256 occupied;
+        uint256 creatorLive;
+        uint256 joinerLive;
+        // This ship's own cell, for excluding it from `occupied`.
+        uint256 selfBit;
     }
 
-    // ---- shared lookups over GameDataView (already fetched once per
-    // takeAITurn call — these never make a new Game call) ----
+    // Game.GRID_WIDTH / GRID_HEIGHT.
+    int16 constant GRID_WIDTH = 17;
+    int16 constant GRID_HEIGHT = 11;
+
+    error ShipNotInView();
+
+    // Fills in the board data from the game: the view, this ship's own
+    // position and stats, the scoring tiles and the grid size. Called first
+    // by every IVariantAI.decide. Reverts if the ship isn't active; the
+    // orchestrator's try/catch turns that into a pass.
+    function loadView(Ctx memory ctx) internal view {
+        uint[] memory board = ctx.board;
+        ctx.g = unpackBoard(board);
+        ctx.occupied = board[0];
+        ctx.creatorLive = board[1];
+        ctx.joinerLive = board[2];
+        bool found;
+        (ctx.pos, found) = findPosition(ctx.g, ctx.shipId);
+        if (!found) revert ShipNotInView();
+        (ctx.attrs, ) = findAttributes(ctx.g, ctx.shipId);
+        ctx.selfBit = _cellBit(ctx.pos);
+        ctx.scoringPositions = ctx.maps.getGameScoringPositions(ctx.gameId);
+        ctx.gridWidth = GRID_WIDTH;
+        ctx.gridHeight = GRID_HEIGHT;
+    }
+
+    // Game.getAIBoard's header length, before the per-ship pairs.
+    uint constant BOARD_HEADER = 7;
+
+    // What an AI orchestrator (always the joiner) needs before an AI move,
+    // from Game.getAIBoard's array: whether the joiner has a live ship, and
+    // the next joiner ship to move, the first in the active list with
+    // HP > 0 that hasn't moved this round (0 if none), with its position.
+    function turnState(
+        uint[] memory board
+    )
+        internal
+        pure
+        returns (
+            bool ended,
+            address currentTurn,
+            address creator,
+            bool hasLiveShip,
+            uint nextShipId,
+            Position memory nextPosition
+        )
+    {
+        ended = board[4] != 0;
+        currentTurn = address(uint160(board[5]));
+        creator = address(uint160(board[6]));
+        hasLiveShip = board[2] != 0;
+        uint round = board[3];
+        for (uint i = BOARD_HEADER; i + 1 < board.length; i += 2) {
+            uint w = board[i + 1];
+            // Skip creator ships (isCreator @4), 0 HP (hullPoints @11) and
+            // ships that moved this round (movedInRound u24 @16).
+            if (
+                uint8(w >> 32) != 0 ||
+                uint8(w >> 88) == 0 ||
+                uint24(w >> 128) == round
+            ) continue;
+            return (
+                ended,
+                currentTurn,
+                creator,
+                hasLiveShip,
+                board[i],
+                Position(int16(uint16(w)), int16(uint16(w >> 16)))
+            );
+        }
+    }
+
+    // Rebuilds the AIView from Game.getAIBoard's flat array (2026-10-31):
+    // the header, then an id and a raw board word per ship. Byte
+    // offsets follow ShipBoardState in Types.sol, from the word's lowest
+    // byte: row i16 @0, col i16 @2, isCreator @4, status @5, version u16
+    // @7, range @9, gunDamage @10, hullPoints @11, maxHullPoints @12,
+    // movement @13, damageReduction @14, reactorCriticalTimer @15.
+    function unpackBoard(
+        uint[] memory board
+    ) internal pure returns (AIView memory v) {
+        uint n = (board.length - BOARD_HEADER) / 2;
+        v.shipIds = new uint[](n);
+        v.shipAttributes = new Attributes[](n);
+        v.shipPositions = new ShipPosition[](n);
+        for (uint i = 0; i < n; i++) {
+            uint id = board[BOARD_HEADER + 2 * i];
+            uint w = board[BOARD_HEADER + 1 + 2 * i];
+            v.shipIds[i] = id;
+            v.shipPositions[i] = ShipPosition(
+                id,
+                Position(int16(uint16(w)), int16(uint16(w >> 16))),
+                uint8(w >> 32) != 0,
+                uint8(w >> 40)
+            );
+            v.shipAttributes[i] = Attributes(
+                uint16(w >> 56),
+                uint8(w >> 72),
+                uint8(w >> 80),
+                uint8(w >> 88),
+                uint8(w >> 96),
+                uint8(w >> 104),
+                uint8(w >> 112),
+                uint8(w >> 120)
+            );
+        }
+    }
+
+    // A cell's bit in Game's bitmaps; 0 for a cell off the board, so an
+    // off-board cell never aliases a real one.
+    function _cellBit(Position memory p) private pure returns (uint256) {
+        if (p.row < 0 || p.col < 0 || p.row >= GRID_HEIGHT || p.col >= GRID_WIDTH) {
+            return 0;
+        }
+        return
+            uint256(1) <<
+            (uint(uint16(p.row)) * uint(uint16(GRID_WIDTH)) + uint(uint16(p.col)));
+    }
+
+    // ---- shared lookups over the AIView (fetched once per decision by
+    // loadView — these never make a new Game call) ----
 
     function findPosition(
-        GameDataView memory g,
+        AIView memory g,
         uint shipId
     ) internal pure returns (Position memory pos, bool found) {
         for (uint i = 0; i < g.shipPositions.length; i++) {
@@ -81,7 +211,7 @@ library AIBehavior {
     // below ever needs), shipAttributes[i] is already that exact ship's
     // attributes — read it directly instead of re-scanning for it (G-01).
     function findAttributes(
-        GameDataView memory g,
+        AIView memory g,
         uint shipId
     ) internal pure returns (Attributes memory attrs, bool found) {
         for (uint i = 0; i < g.shipIds.length; i++) {
@@ -104,25 +234,12 @@ library AIBehavior {
     // comment for why that's not optional).
     function _shipOccupiedBitmap(
         Ctx memory ctx,
-        bool isCreatorSide,
-        uint excludeShipId
-    ) private pure returns (uint256 bitmap) {
-        for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
-            ShipPosition memory sp = ctx.g.shipPositions[i];
-            // Disabled (0 HP) ships never block — same rule as
-            // Game._enemyOccupiedBitmap. shipAttributes[i] is this same
-            // ship's (see the parallel-array note on the lookups above).
-            if (
-                sp.status != 0 ||
-                sp.isCreator != isCreatorSide ||
-                sp.shipId == excludeShipId ||
-                ctx.g.shipAttributes[i].hullPoints == 0
-            ) continue;
-            bitmap |= (uint256(1) <<
-                (uint(uint16(sp.position.row)) *
-                    uint(uint16(ctx.gridWidth)) +
-                    uint(uint16(sp.position.col))));
-        }
+        bool isCreatorSide
+    ) private pure returns (uint256) {
+        // Game's live bitmap for that side (2026-10-31; was a loop over
+        // every ship): on the board with HP > 0, the same set this used to
+        // build.
+        return isCreatorSide ? ctx.creatorLive : ctx.joinerLive;
     }
 
     // Shared by _bestEnemyWithin/_enemyThreatensTile: LOS from `fromPos` to
@@ -196,7 +313,7 @@ library AIBehavior {
         // to exclude that candidate's own tile (see hasMapsAvoidingShips for
         // why the shot's own target can never count as blocking itself).
         uint256 enemyBitmap = needsLineOfSight
-            ? _shipOccupiedBitmap(ctx, true, 0)
+            ? _shipOccupiedBitmap(ctx, true)
             : 0;
         for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
             ShipPosition memory sp = ctx.g.shipPositions[i];
@@ -345,13 +462,9 @@ library AIBehavior {
         Ctx memory ctx,
         Position memory p
     ) private pure returns (bool) {
-        for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
-            ShipPosition memory sp = ctx.g.shipPositions[i];
-            if (sp.shipId == ctx.shipId || sp.status != 0) continue;
-            if (sp.position.row == p.row && sp.position.col == p.col)
-                return true;
-        }
-        return false;
+        // Game's occupied bitmap minus this ship's own cell (2026-10-31; was
+        // a loop over every ship). Off-board cells are never occupied.
+        return (ctx.occupied & ~ctx.selfBit & _cellBit(p)) != 0;
     }
 
     // True if `dest` is actually reachable from ctx.pos this turn: not
@@ -427,7 +540,7 @@ library AIBehavior {
         uint8 maxSteps,
         uint8 stopShortBy
     ) private view returns (Position memory dest) {
-        uint256 enemyBitmap = _shipOccupiedBitmap(ctx, true, 0);
+        uint256 enemyBitmap = _shipOccupiedBitmap(ctx, true);
         bool moved;
         (dest, moved) = _primaryAttempt(
             ctx,
@@ -613,7 +726,7 @@ library AIBehavior {
         // caller's point of view. Computed once, reused for every creator
         // candidate below (tilePos and the blocking side don't change
         // per-candidate).
-        uint256 joinerBitmap = _shipOccupiedBitmap(ctx, false, 0);
+        uint256 joinerBitmap = _shipOccupiedBitmap(ctx, false);
         for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
             ShipPosition memory sp = ctx.g.shipPositions[i];
             if (sp.status != 0 || !sp.isCreator) continue;
@@ -755,91 +868,6 @@ library AIBehavior {
 
     // ---- per-archetype rule lists ----
 
-    // Grunt & Aggressor share this v1: shoot from here if anything's in
-    // range, else close distance if that would actually bring an enemy into
-    // range this turn, else redirect toward a scoring tile (see
-    // _approachOrSeekTile) — a direct generalization of the original v0
-    // script's "adjacent enemy: fire; else step left and fire if now
-    // adjacent" shape, just toward the nearest enemy instead of a fixed
-    // direction. _bestEnemyInRange already focuses the weakest/on-tile
-    // target, which covers the "prioritize kills" intent for both without
-    // inventing a fake distinction between the two.
-    function decideEngageOrApproach(
-        Ctx memory ctx
-    ) internal view returns (Decision memory d) {
-        (uint target, bool found) = _bestEnemyInRange(
-            ctx,
-            ctx.pos,
-            ctx.attrs.range
-        );
-        if (found) {
-            d.destRow = ctx.pos.row;
-            d.destCol = ctx.pos.col;
-            d.action = ActionType.Shoot;
-            d.actionTarget = target;
-            return d;
-        }
-
-        if (_shouldHoldScoringTile(ctx)) return _holdDecision(ctx);
-
-        (Position memory enemyPos, bool enemyFound) = _nearestEnemyPosition(
-            ctx,
-            false
-        );
-        return _approachOrSeekTile(ctx, enemyPos, enemyFound);
-    }
-
-    // Shoots from range without moving when possible; retreats (steps away
-    // from the nearest enemy) rather than staying adjacent to engage. When
-    // out of range entirely, closes the gap only if that would bring an
-    // enemy into range this turn, else redirects toward a scoring tile (see
-    // _approachOrSeekTile) — the Sniper archetype is always equipped with
-    // the long-range MainWeapon.Sniper, so this naturally biases it toward
-    // tiles on its own side. (Two different "Sniper"s: Archetype.Sniper is
-    // this AI behavior tag; MainWeapon.Sniper is the weapon it wields.)
-    function decideSniper(
-        Ctx memory ctx
-    ) internal view returns (Decision memory d) {
-        (Position memory enemyPos, bool enemyFound) = _nearestEnemyPosition(
-            ctx,
-            false
-        );
-        if (!enemyFound) {
-            if (_shouldHoldScoringTile(ctx)) return _holdDecision(ctx);
-            return _approachOrSeekTile(ctx, enemyPos, false);
-        }
-        uint16 dist = _manhattan(ctx.pos, enemyPos);
-
-        if (dist > 1) {
-            (uint target, bool found) = _bestEnemyInRange(
-                ctx,
-                ctx.pos,
-                ctx.attrs.range
-            );
-            if (found) {
-                d.destRow = ctx.pos.row;
-                d.destCol = ctx.pos.col;
-                d.action = ActionType.Shoot;
-                d.actionTarget = target;
-                return d;
-            }
-            if (_shouldHoldScoringTile(ctx)) return _holdDecision(ctx);
-            return _approachOrSeekTile(ctx, enemyPos, true);
-        }
-
-        // adjacent to an enemy: retreat rather than engage
-        d.action = ActionType.Pass;
-        Position memory awayPos = _stepAway(
-            ctx.pos,
-            enemyPos,
-            ctx.attrs.movement,
-            ctx.gridHeight,
-            ctx.gridWidth
-        );
-        d.destRow = awayPos.row;
-        d.destCol = awayPos.col;
-    }
-
     // ---- toolbox for the per-variant trees (Variant1AI / Variant2AI) ----
     // Small, cheap primitives each faction's tree composes; what a faction
     // DOES with them (kite vs brawl, which special is a heal, whether it can
@@ -903,16 +931,8 @@ library AIBehavior {
         return _bestEnemyWithin(ctx, from, range, needsLineOfSight);
     }
 
-    function stepToward(
-        Position memory from,
-        Position memory to,
-        uint8 budget
-    ) internal pure returns (Position memory) {
-        return _stepToward(from, to, budget);
-    }
-
     // Public wrapper for _stepTowardReachable — see that function's own
-    // comment. Unlike stepToward above, this guarantees the result is an
+    // comment. Unlike a plain greedy step, this guarantees the result is an
     // actually-legal moveShip destination (not blocked by an enemy ship or
     // occupied by anyone), backing off and detouring as needed.
     function stepTowardReachable(
@@ -958,7 +978,7 @@ library AIBehavior {
         uint8 budget = _min8(range - d, ctx.attrs.movement);
         if (budget == 0) return ctx.pos;
         stand = _retreatStep(ctx, enemyPos, budget);
-        if (!_isReachable(ctx, stand, _shipOccupiedBitmap(ctx, true, 0)))
+        if (!_isReachable(ctx, stand, _shipOccupiedBitmap(ctx, true)))
             return ctx.pos;
     }
 
@@ -1244,7 +1264,7 @@ library AIBehavior {
         // naturally finds a genuinely different approach angle when the
         // straight line happens to be blocked — no separate detour logic
         // needed (2026-09-26).
-        uint256 enemyBitmap = _shipOccupiedBitmap(ctx, true, 0);
+        uint256 enemyBitmap = _shipOccupiedBitmap(ctx, true);
         int16 r = int16(uint16(range));
         for (int16 dr = -r; dr <= r; dr++) {
             int16 rem = r - (dr < 0 ? -dr : dr);

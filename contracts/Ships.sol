@@ -687,6 +687,24 @@ contract Ships is ERC721, Ownable, ReentrancyGuard {
         return ships[_id];
     }
 
+    // The fields ShipAttributes needs for a ship's stats (2026-10-31): 4
+    // slots read instead of a full Ship's ~10 (see ShipStatsInput).
+    function getShipStatsInput(
+        uint _id
+    ) external view returns (ShipStatsInput memory) {
+        Ship storage s = ships[_id];
+        return
+            ShipStatsInput(
+                s.id,
+                s.equipment,
+                s.traits.variant,
+                s.traits.accuracy,
+                s.traits.hull,
+                s.traits.speed,
+                s.shipData.shipsDestroyed
+            );
+    }
+
     // Used by game contract
     function isShipDestroyed(uint _id) external view returns (bool) {
         return ships[_id].shipData.timestampDestroyed != 0;

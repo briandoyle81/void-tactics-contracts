@@ -24,9 +24,4 @@ interface IGameResults {
 
     // function isGameResultRecorded(uint _gameId) external view returns (bool);
 
-    // function getPlayerTotalGames(address _player) external view returns (uint);
-
-    // function getPlayerWinRate(address _player) external view returns (uint);
-
-    // function totalGamesTracked() external view returns (uint);
 }

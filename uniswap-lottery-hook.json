@@ -1,5 +1,5 @@
 {
-  "address": "0x5557bD3029e2A867efE9ea2C62d62e08fFd1a040",
+  "address": "0x31cB582846700DF93cD7FC9158716dea002da040",
   "abi": [
     {
       "inputs": [
@@ -11,11 +11,6 @@
         {
           "internalType": "address",
           "name": "_ships",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "_randomManager",
           "type": "address"
         },
         {
@@ -56,7 +51,18 @@
           "type": "uint256"
         }
       ],
-      "name": "DrawNotStarted",
+      "name": "DrawNotClosed",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "drawId",
+          "type": "uint256"
+        }
+      ],
+      "name": "DrawNotReady",
       "type": "error"
     },
     {
@@ -143,6 +149,31 @@
           "type": "uint256"
         },
         {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "closeBlock",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "totalWeight",
+          "type": "uint256"
+        }
+      ],
+      "name": "DrawClosed",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "drawId",
+          "type": "uint256"
+        },
+        {
           "indexed": true,
           "internalType": "address",
           "name": "winner",
@@ -177,17 +208,11 @@
         {
           "indexed": false,
           "internalType": "uint256",
-          "name": "requestId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "totalWeight",
+          "name": "closeBlock",
           "type": "uint256"
         }
       ],
-      "name": "DrawStarted",
+      "name": "DrawRetargeted",
       "type": "event"
     },
     {
@@ -207,25 +232,6 @@
         }
       ],
       "name": "OwnershipTransferred",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "drawId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "winner",
-          "type": "address"
-        }
-      ],
-      "name": "PrizeMintFailed",
       "type": "event"
     },
     {
@@ -703,6 +709,19 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "autoResolveMinGas",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "address",
@@ -1099,6 +1118,44 @@
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "drawCloseBlock",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "drawEffectiveTotalWeight",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "drawInterval",
       "outputs": [
@@ -1143,12 +1200,12 @@
           "type": "uint256"
         }
       ],
-      "name": "drawRandomRequestId",
+      "name": "drawResolved",
       "outputs": [
         {
-          "internalType": "uint256",
+          "internalType": "bool",
           "name": "",
-          "type": "uint256"
+          "type": "bool"
         }
       ],
       "stateMutability": "view",
@@ -1158,16 +1215,16 @@
       "inputs": [
         {
           "internalType": "uint256",
-          "name": "",
+          "name": "_drawId",
           "type": "uint256"
         }
       ],
-      "name": "drawResolved",
+      "name": "drawSegmentCount",
       "outputs": [
         {
-          "internalType": "bool",
+          "internalType": "uint256",
           "name": "",
-          "type": "bool"
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -1181,6 +1238,35 @@
           "internalType": "uint16",
           "name": "",
           "type": "uint16"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_drawId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_index",
+          "type": "uint256"
+        }
+      ],
+      "name": "getDrawSegment",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "end",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -1376,6 +1462,19 @@
     {
       "inputs": [],
       "name": "minTotalWeightWei",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "nextDrawToResolve",
       "outputs": [
         {
           "internalType": "uint256",
@@ -1679,19 +1778,6 @@
     },
     {
       "inputs": [],
-      "name": "randomManager",
-      "outputs": [
-        {
-          "internalType": "contract IRandomManager",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
       "name": "renounceOwnership",
       "outputs": [],
       "stateMutability": "nonpayable",
@@ -1706,6 +1792,19 @@
         }
       ],
       "name": "resolveDraw",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_autoResolveMinGas",
+          "type": "uint256"
+        }
+      ],
+      "name": "setAutoResolveMinGas",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -1797,19 +1896,6 @@
         }
       ],
       "name": "setMinTotalWeightWei",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "_randomManager",
-          "type": "address"
-        }
-      ],
-      "name": "setRandomManager",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -1910,12 +1996,12 @@
       "type": "function"
     }
   ],
-  "poolId": "0x0ca1358ac2ee530041619f5e4e4d5a600fde9a11501e48efba67f2e7dd50c654",
+  "poolId": "0x7a481be6df7c5ee25fe47a5e5de3176435c281edd32c640a56cecae39d43c2c3",
   "poolKey": {
     "currency0": "0x0000000000000000000000000000000000000000",
-    "currency1": "0x777Bee9332148782448D0e4F49AB35C39CE6c3f2",
+    "currency1": "0xf6bf2068bF1D5D566af5Ca0fAF4B81E1565573a6",
     "fee": 3000,
     "tickSpacing": 60,
-    "hooks": "0x5557bD3029e2A867efE9ea2C62d62e08fFd1a040"
+    "hooks": "0x31cB582846700DF93cD7FC9158716dea002da040"
   }
 }

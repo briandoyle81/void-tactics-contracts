@@ -15,12 +15,25 @@ Options:
   --skip-verify        Do not pass `--verify` to hardhat ignition deploy
   --no-auto-confirm   Do not auto-answer "y" to any deploy confirmation prompts
   --sleep-seconds <n> Sleep seconds between retries on transient errors (see retry conditions below)
+  --skip-content-export
+                      Don't run scripts/exportStarterContent.ts first (see
+                      below).
   --with-lottery-pool After the Ignition deploy succeeds, run
                       scripts/deployUTCLotteryPool.ts (UTCLotteryHook + its
                       Uniswap v4 pool) with the same retry handling. Its env
                       vars (MAP_EDITOR_KEY, SKIP_SMOKE_TEST, DRY_RUN_ONLY, ...)
                       pass straight through; see that script's header. Safe to
                       retry: every step skips work a prior run already did.
+
+Content export (added 2026-10-26): before a fresh real-network deploy (no
+ignition/deployments/chain-<id> folder on disk), the script runs
+scripts/exportStarterContent.ts with WRITE=true. It reads the previous
+deployment from its copy committed at git HEAD, then writes the chain's maps,
+AI configs, AI fleets and roguelike campaign (edits made in the frontend's
+editors) into ignition/data/, so the new deploy seeds with them. Titles,
+descriptions and map names aren't on chain; download those from the
+frontend's seed export first. The deploy stops if the export fails. A resumed
+deploy (folder on disk) skips the export.
 
 Environment variables:
   LOG_FILE            Log file to write (default: ignition_deploy_retry.log)
@@ -59,6 +72,7 @@ DEPLOY_SCRIPT=""
 VERIFY=1
 AUTO_CONFIRM=1
 WITH_LOTTERY_POOL=0
+CONTENT_EXPORT=1
 SLEEP_SECONDS_DEFAULT="5"
 
 LOG_FILE="${LOG_FILE:-ignition_deploy_retry.log}"
@@ -88,6 +102,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --with-lottery-pool)
       WITH_LOTTERY_POOL=1
+      shift 1
+      ;;
+    --skip-content-export)
+      CONTENT_EXPORT=0
       shift 1
       ;;
     -h|--help)
@@ -141,6 +159,17 @@ p.write_text(s2)
 # can never again leave it committed as true (see CLAUDE.md's documented
 # 2026-08-26 incident: PRODUCTION left true broke every test with no error
 # pointing at the actual cause).
+# Pull editor changes from the previous deployment into ignition/data/ before
+# a fresh real-network deploy seeds from it (see "Content export" in usage).
+if [[ "$CONTENT_EXPORT" == "1" && "$NETWORK" != "hardhat" && "$NETWORK" != "localhost" ]]; then
+  echo "Exporting on-chain content from the previous deployment into ignition/data/..."
+  if ! ONLY_IF_FRESH=true WRITE=true npx hardhat run scripts/exportStarterContent.ts --network "$NETWORK"; then
+    echo "Content export failed; not deploying. Fix it, or pass --skip-content-export." >&2
+    exit 1
+  fi
+  git --no-pager diff --stat -- ignition/data || true
+fi
+
 if [[ "$NETWORK" != "hardhat" && "$NETWORK" != "localhost" ]]; then
   echo "Setting PRODUCTION = true in $DEPLOY_MODULE_FILE for this real-network deploy..."
   set_production_flag true

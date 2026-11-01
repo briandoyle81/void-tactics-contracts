@@ -86,6 +86,15 @@ contract ShipsRouter is IShips, Ownable {
         return _isAI(_id) ? aiShips.getShip(_id) : ships.getShip(_id);
     }
 
+    function getShipStatsInput(
+        uint _id
+    ) external view returns (ShipStatsInput memory) {
+        return
+            _isAI(_id)
+                ? aiShips.getShipStatsInput(_id)
+                : ships.getShipStatsInput(_id);
+    }
+
     function isShipDestroyed(uint _id) external view returns (bool) {
         return _isAI(_id) ? aiShips.isShipDestroyed(_id) : ships.isShipDestroyed(_id);
     }

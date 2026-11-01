@@ -56,6 +56,7 @@ contract Variant1AI is IVariantAI, Ownable {
         Archetype archetype,
         Special special
     ) external view override returns (AIBehavior.Decision memory) {
+        AIBehavior.loadView(ctx);
         // Every ship has Ram: evicting a downed enemy that is holding a
         // scoring tile (and taking the tile) outranks anything else, as long
         // as the tick it costs the rammer's own reactor is affordable.

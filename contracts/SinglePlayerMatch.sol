@@ -77,9 +77,11 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     // Full AI roster minted for a game, recorded at mint time so it can be
     // released back to AIShips' pool as a whole at game end — surviving
     // *and* destroyed ships alike, since destroyed ships are spliced out of
-    // Game.sol's playerActiveShipIds mid-match and can't be reconstructed
-    // from that set alone.
-    mapping(uint => uint[]) public gameIdToAiShipIds;
+    // Game.sol's active-ship lists mid-match and can't be reconstructed
+    // from those alone.
+    // 64-bit ids, four per slot (2026-10-31): AI ids are 2^40 + a pool
+    // slot, far below 2^64.
+    mapping(uint => uint64[]) public gameIdToAiShipIds;
 
     // Static per-ship info cached at setupAIFleet mint time (from the same
     // AIShipConfig already fetched there), so takeAITurn's decision engine
@@ -337,8 +339,8 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
                 // no AI — failing loudly up front instead of mid-match.
                 ai: aiRegistry.aiFor(config.traits.variant)
             });
+            gameIdToAiShipIds[_gameId].push(uint64(shipIds[i]));
         }
-        gameIdToAiShipIds[_gameId] = shipIds;
 
         fleetId = fleets.createFleet(
             _gameId,
@@ -410,12 +412,22 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         uint _gameId,
         bool _strict
     ) internal returns (bool) {
-        GameDataView memory g = game.getGame(_gameId);
-        if (g.metadata.ended) {
+        // Game's flat AI board instead of the whole getGame (2026-10-31):
+        // read the turn state here, then hand the same array to the AI.
+        uint[] memory board = game.getAIBoard(_gameId);
+        (
+            bool ended,
+            address currentTurn,
+            address creator,
+            bool hasLiveShip,
+            uint shipId,
+            Position memory pos
+        ) = AIBehavior.turnState(board);
+        if (ended) {
             if (_strict) revert GameEnded();
             return false;
         }
-        if (g.turnState.currentTurn != address(this)) {
+        if (currentTurn != address(this)) {
             if (_strict) revert NotAITurn();
             return false;
         }
@@ -432,40 +444,29 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         // PvPMatch uses for a human flee/timeout — SinglePlayerMatch is the
         // orchestrator of its own games (Game.startGame set it at kickoff),
         // so it's equally entitled to call forceEndSession.
-        if (!_hasAnyLiveShip(g)) {
-            game.forceEndSession(_gameId, g.metadata.creator, address(this));
+        if (!hasLiveShip) {
+            game.forceEndSession(_gameId, creator, address(this));
             return false;
         }
 
-        uint shipId = _findUnmovedShip(g);
+        // The first joiner ship with HP > 0 that hasn't moved this round
+        // (AIBehavior.turnState); 0 if none.
         if (shipId == 0) return false;
 
-        return _takeShipTurn(_gameId, g, shipId);
-    }
-
-    function _hasAnyLiveShip(
-        GameDataView memory g
-    ) internal pure returns (bool) {
-        // Joiner ships occupy shipAttributes[creatorActiveShipIds.length ..]
-        // in the exact same order as joinerActiveShipIds — see Game.sol's
-        // getGame() construction order (G-01) — so this is a direct index
-        // read instead of an O(n) findAttributes scan per candidate.
-        uint base = g.creatorActiveShipIds.length;
-        for (uint i = 0; i < g.joinerActiveShipIds.length; i++) {
-            if (g.shipAttributes[base + i].hullPoints > 0) return true;
-        }
-        return false;
+        return _takeShipTurn(_gameId, shipId, pos, board);
     }
 
     function _takeShipTurn(
         uint _gameId,
-        GameDataView memory g,
-        uint _shipId
+        uint _shipId,
+        Position memory _pos,
+        uint[] memory _board
     ) internal returns (bool) {
         (AIBehavior.Decision memory d, bool decided) = _decideMove(
             _gameId,
-            g,
-            _shipId
+            _shipId,
+            _pos,
+            _board
         );
         // HA6-12: _decideMove fell back to Pass; surface it so a broken AI
         // fails loudly instead of silently passing forever.
@@ -487,60 +488,39 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
             emit AITurnTaken(_gameId, _shipId, d.action, d.actionTarget);
             return true;
         } catch {
-            (Position memory myPos, bool found) = AIBehavior.findPosition(
-                g,
-                _shipId
-            );
-            if (found) {
-                try
-                    game.moveShip(
-                        _gameId,
-                        _shipId,
-                        myPos.row,
-                        myPos.col,
-                        ActionType.Pass,
-                        0
-                    )
-                {
-                    emit AITurnTaken(_gameId, _shipId, ActionType.Pass, 0);
-                    return true;
-                } catch {}
-            }
+            try
+                game.moveShip(
+                    _gameId,
+                    _shipId,
+                    _pos.row,
+                    _pos.col,
+                    ActionType.Pass,
+                    0
+                )
+            {
+                emit AITurnTaken(_gameId, _shipId, ActionType.Pass, 0);
+                return true;
+            } catch {}
         }
         return false;
     }
 
     function _decideMove(
         uint _gameId,
-        GameDataView memory g,
-        uint _shipId
+        uint _shipId,
+        Position memory _pos,
+        uint[] memory _board
     ) internal view returns (AIBehavior.Decision memory d, bool decided) {
-        (Position memory myPos, bool posFound) = AIBehavior.findPosition(
-            g,
-            _shipId
-        );
-        (Attributes memory myAttrs, bool attrsFound) = AIBehavior
-            .findAttributes(g, _shipId);
-        if (!posFound || !attrsFound) {
-            d.destRow = myPos.row;
-            d.destCol = myPos.col;
-            d.action = ActionType.Pass;
-            return (d, true);
-        }
-
+        // The AI unpacks the board itself (AIBehavior.loadView); only the
+        // flat board array and the ship's identity and loadout go across
+        // (2026-10-31).
         AIShipInfo memory info = aiShipInfo[_shipId];
-        AIBehavior.Ctx memory ctx = AIBehavior.Ctx({
-            g: g,
-            maps: maps,
-            gameId: _gameId,
-            shipId: _shipId,
-            pos: myPos,
-            attrs: myAttrs,
-            mainWeapon: info.mainWeapon,
-            scoringPositions: maps.getGameScoringPositions(_gameId),
-            gridWidth: game.GRID_WIDTH(),
-            gridHeight: game.GRID_HEIGHT()
-        });
+        AIBehavior.Ctx memory ctx;
+        ctx.board = _board;
+        ctx.maps = maps;
+        ctx.gameId = _gameId;
+        ctx.shipId = _shipId;
+        ctx.mainWeapon = info.mainWeapon;
 
         // Each faction has its own AI built around its own abilities (e.g.
         // healing is an equipped special for variant 1 but a faction ability
@@ -555,8 +535,8 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
         // game stuck on the AI's turn. (The code-length checks matter: a
         // call to an address with no code returns empty data, and the
         // resulting decode failure isn't catchable.)
-        d.destRow = myPos.row;
-        d.destCol = myPos.col;
+        d.destRow = _pos.row;
+        d.destCol = _pos.col;
         d.action = ActionType.Pass;
         if (address(info.ai).code.length == 0) return (d, false);
         try info.ai.decide(ctx, info.archetype, info.special) returns (
@@ -565,45 +545,6 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
             return (chosen, true);
         } catch {}
         return (d, false);
-    }
-
-    function _findUnmovedShip(
-        GameDataView memory g
-    ) internal pure returns (uint) {
-        uint[] memory active = g.joinerActiveShipIds;
-        uint[] memory moved = g.joinerMovedShipIds;
-
-        for (uint i = 0; i < active.length; i++) {
-            bool hasMoved = false;
-            for (uint j = 0; j < moved.length; j++) {
-                if (moved[j] == active[i]) {
-                    hasMoved = true;
-                    break;
-                }
-            }
-            if (hasMoved) continue;
-
-            // A 0-HP ship's only legal moveShip action is Retreat (see
-            // Game.sol's hullPoints==0 guard) — _takeShipTurn never
-            // attempts that, so picking it here would revert every time
-            // and this ship would never enter joinerMovedShipIds. Since
-            // this loop always returns the *first* unmoved ship, that
-            // would permanently block every other ship behind it too,
-            // and — because currentTurn only advances inside a
-            // successful moveShip — deadlock the whole match. Game.sol's
-            // own round-completion math already treats a 0-HP ship as
-            // accounted for without requiring it to move (shipsWithZeroHP
-            // / _setShipHPToZero), so mirror that here: skip it and keep
-            // looking for a ship that can actually act.
-            (Attributes memory attrs, bool found) = AIBehavior.findAttributes(
-                g,
-                active[i]
-            );
-            if (found && attrs.hullPoints == 0) continue;
-
-            return active[i];
-        }
-        return 0;
     }
 
     // IGameOrchestrator: called by core Game.sol whenever a session this
@@ -617,7 +558,10 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     function onGameEnded(uint _gameId, address _winner, address) external {
         if (msg.sender != address(game)) revert NotGame();
 
-        ships.releaseShips(gameIdToAiShipIds[_gameId]);
+        uint64[] storage aiIds = gameIdToAiShipIds[_gameId];
+        uint[] memory releaseIds = new uint[](aiIds.length);
+        for (uint i = 0; i < aiIds.length; i++) releaseIds[i] = aiIds[i];
+        ships.releaseShips(releaseIds);
         delete gameIdToAiShipIds[_gameId];
 
         uint nodeId = gameIdToNodeId[_gameId];

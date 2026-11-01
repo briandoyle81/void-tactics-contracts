@@ -53,7 +53,7 @@ describe("Per-variant AI behavior trees", function () {
 
   const traits = (variant: number) => ({
     serialNumber: 0n,
-    colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 },
+    colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0 },
     variant,
     accuracy: 0,
     hull: 0,

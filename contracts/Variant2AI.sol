@@ -67,6 +67,7 @@ contract Variant2AI is IVariantAI, Ownable {
         Archetype archetype,
         Special special
     ) external view override returns (AIBehavior.Decision memory) {
+        AIBehavior.loadView(ctx);
         uint8 healRange = healAbility.range();
         (AIBehavior.Decision memory d, bool ok) = AIBehavior.healOnScoringTile(
             ctx,

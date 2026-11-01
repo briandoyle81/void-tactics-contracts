@@ -120,7 +120,6 @@ export interface Fleet {
 export interface PlayerStats {
   wins: bigint;
   losses: bigint;
-  totalGames: bigint;
 }
 
 export interface GameResult {
@@ -147,7 +146,6 @@ export interface Attributes {
   movement: number;
   damageReduction: number;
   reactorCriticalTimer: number;
-  statusEffects: number[];
 }
 
 export interface GameData {

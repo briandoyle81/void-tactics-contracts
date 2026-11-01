@@ -24,10 +24,12 @@ import "./IGameEngineRegistry.sol";
 // draw, or explicit retreat). This sits entirely alongside the existing
 // NodeMap/SinglePlayerMatch campaign, which is untouched.
 //
-// The roster is never a *permanent* Fleets.Fleet with a matching Game — see
-// _reserveRoster. It's torn down and recreated around every combat node
-// specifically to reuse Fleets' own MixedVariantFleet/cost-cap/ownership
-// checks for free at every roster change, rather than reimplementing them.
+// The roster is held in a placeholder Fleets.Fleet with no matching Game
+// (see _rosterPositions) between combat nodes. Fleets.transferFleet moves
+// it into each combat fleet and Fleets.reserveFleet back out after a win,
+// keeping the ships locked; ships joining the roster get Fleets' own
+// MixedVariantFleet/cost-cap/ownership checks rather than reimplemented
+// ones.
 contract RoguelikeMatch is Ownable, IGameOrchestrator {
     AIShips public aiShips;
     IShips public humanShips;
@@ -73,7 +75,9 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     uint public matchCount;
 
     mapping(uint gameId => address player) public gameIdToPlayer;
-    mapping(uint gameId => uint[] aiShipIds) public gameIdToAiShipIds;
+    // 64-bit ids, four per slot (2026-10-31): AI ids are 2^40 + a pool
+    // slot, far below 2^64.
+    mapping(uint gameId => uint64[] aiShipIds) public gameIdToAiShipIds;
 
     struct AIShipInfo {
         Archetype archetype;
@@ -224,7 +228,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         uint initialCostCap = nodeMap.campaignInitialCostCap(_campaignId);
         // Checked createFleet: a run's prices must be current when it
         // starts. Every later fleet for the run uses frozen prices (see
-        // _reserveRoster).
+        // _rosterPositions).
         uint fleetId = fleets.createFleet(
             0,
             msg.sender,
@@ -270,8 +274,6 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
 
         uint[] memory shipIds = run.rosterShipIds;
 
-        fleets.clearFleet(run.reservationFleetId);
-
         matchCount++;
         gameId =
             ROGUELIKE_GAME_ID_OFFSET +
@@ -288,7 +290,10 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             nodeMap.getChildren(_targetNodeId).length == 0;
         winEffectsAtStart[gameId] = nodeMap.getNodeWinEffects(_targetNodeId);
 
-        uint humanFleetId = fleets.createFleetFrozenPrices(
+        // Moves the roster out of its reservation fleet without unlocking
+        // it (see Fleets.transferFleet), leaving the reservation empty.
+        uint humanFleetId = fleets.transferFleet(
+            run.reservationFleetId,
             gameId,
             msg.sender,
             shipIds,
@@ -319,11 +324,12 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
 
         // Seed persisted damage from a previous node, if any (0 = never
         // damaged this run — the fresh 100% calculateShipAttributes just
-        // set inside startGame is already correct, skip the call).
-        for (uint i = 0; i < shipIds.length; i++) {
-            uint8 hp = runLedger.getShipHP(msg.sender, shipIds[i]);
-            if (hp != 0) {
-                game.setInitialHullPointsOverride(gameId, shipIds[i], hp);
+        // set inside startGame is already correct, skip the call). One
+        // RoguelikeRun read for the whole roster (2026-10-31).
+        uint8[] memory hps = runLedger.getRosterHP(msg.sender);
+        for (uint i = 0; i < hps.length; i++) {
+            if (hps[i] != 0) {
+                game.setInitialHullPointsOverride(gameId, shipIds[i], hps[i]);
             }
         }
 
@@ -440,30 +446,13 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         // happens on simply *entering* it.
     }
 
-    // Synthetic grid positions — this fleet never has a matching Game, so
-    // these are never rendered/read by anything except Fleets' own
-    // structural validation (bounds, no duplicates, creator-side columns).
-    // Frozen prices (docs/audit-3.md HA6-09): the roster was priced at run
-    // start (or, for resupply adds, checked by RoguelikeResupply), and a
-    // mid-run ShipAttributes.setCosts must not break re-reservation.
-    function _reserveRoster(
-        address _player,
-        uint[] memory _shipIds,
-        uint _costCap
-    ) internal returns (uint fleetId) {
-        // mapId 0: this fleet is map-agnostic (synthetic, see the doc
-        // comment above), so Fleets falls back to its default column rule.
-        fleetId = fleets.createFleetFrozenPrices(
-            0,
-            _player,
-            _shipIds,
-            _rosterPositions(_shipIds.length),
-            _costCap,
-            true,
-            0
-        );
-    }
-
+    // Synthetic grid positions for a reservation fleet — that fleet never
+    // has a matching Game, so these are never rendered/read by anything
+    // except Fleets' own structural validation (bounds, no duplicates,
+    // creator-side columns). Re-reservations use frozen prices
+    // (docs/audit-3.md HA6-09): the roster was priced at run start (or, for
+    // resupply adds, checked by RoguelikeResupply), and a mid-run
+    // ShipAttributes.setCosts must not break re-reservation.
     function _rosterPositions(
         uint _count
     ) internal pure returns (Position[] memory positions) {
@@ -476,67 +465,72 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         }
     }
 
-    // Post-win roster + stored HP (auto-heal floor applied). A ship that's
-    // no longer on the board has no Attributes left to read
-    // (Game._removeShipFromGame deletes them): a destroyed one is dropped,
-    // but a fled one (rammed or retreated) rejoins the roster at the heal
-    // floor — its HP at the moment it left is gone with its Attributes, so
-    // it's treated as 0 and the floor applies, against its live max (the
-    // same max the next node's Game will compute). On-board survivors come
-    // first in the returned roster, rejoiners after, so onGameEnded's
-    // reservation fallback can drop rejoiners by truncating to
-    // `survivorCount`. Split out of onGameEnded for stack depth.
+    // Post-win roster + HP (auto-heal floor applied). The survivors are
+    // the combat fleet's ships, in the fleet's own order (Game removes a
+    // ship from its fleet when it leaves the board), so Fleets.reserveFleet
+    // can keep them locked. A ship that's no longer on the board has no
+    // Attributes left to read (Game._removeShipFromGame deletes them): a
+    // destroyed one is dropped, but a fled one (rammed or retreated)
+    // rejoins the roster at the heal floor — its HP at the moment it left
+    // is gone with its Attributes, so it's treated as 0 and the floor
+    // applies, against its live max (the same max the next node's Game
+    // will compute). Rejoiners come after the survivors, so onGameEnded's
+    // reservation fallback can drop them by truncating to `survivorCount`.
+    // Split out of onGameEnded for stack depth.
     function _postWinRoster(
         uint _gameId,
         address _player,
-        uint[] memory _oldRoster
-    ) internal returns (uint[] memory roster, uint survivorCount) {
-        roster = new uint[](_oldRoster.length);
-        uint[] memory rejoiners = new uint[](_oldRoster.length);
-        uint rejoinerCount;
+        uint[] memory _oldRoster,
+        uint _fleetId
+    )
+        internal
+        view
+        returns (uint[] memory roster, uint8[] memory hps, uint survivorCount)
+    {
+        (uint[] memory survivors, ) = fleets.getFleetShipIdsAndPositions(
+            _fleetId
+        );
+        survivorCount = survivors.length;
+        roster = new uint[](survivorCount + _oldRoster.length);
+        hps = new uint8[](roster.length);
+        for (uint i = 0; i < survivorCount; i++) {
+            Attributes memory attrs = game.getShipAttributes(
+                _gameId,
+                survivors[i]
+            );
+            roster[i] = survivors[i];
+            hps[i] = _healedHP(_gameId, attrs.hullPoints, attrs.maxHullPoints);
+        }
+        uint total = survivorCount;
         for (uint i = 0; i < _oldRoster.length; i++) {
             uint shipId = _oldRoster[i];
-            try game.getShipAttributes(_gameId, shipId) returns (
-                Attributes memory attrs
-            ) {
-                _storeHealedHP(
-                    _gameId,
-                    _player,
-                    shipId,
-                    attrs.hullPoints,
-                    attrs.maxHullPoints
-                );
-                roster[survivorCount] = shipId;
-                survivorCount++;
-            } catch {
-                if (!_canRejoin(_gameId, _player, shipId)) continue;
-                _storeHealedHP(
-                    _gameId,
-                    _player,
-                    shipId,
-                    0,
-                    shipAttributes.calculateShipAttributesById(shipId).maxHullPoints
-                );
-                rejoiners[rejoinerCount] = shipId;
-                rejoinerCount++;
+            bool survived = false;
+            for (uint j = 0; j < survivorCount; j++) {
+                if (survivors[j] == shipId) {
+                    survived = true;
+                    break;
+                }
             }
+            if (survived || !_canRejoin(_gameId, _player, shipId)) continue;
+            roster[total] = shipId;
+            hps[total] = _healedHP(
+                _gameId,
+                0,
+                shipAttributes.calculateShipAttributesById(shipId).maxHullPoints
+            );
+            total++;
         }
-        for (uint i = 0; i < rejoinerCount; i++) {
-            roster[survivorCount + i] = rejoiners[i];
-        }
-        uint total = survivorCount + rejoinerCount;
         assembly {
             mstore(roster, total)
+            mstore(hps, total)
         }
     }
 
-    function _storeHealedHP(
+    function _healedHP(
         uint _gameId,
-        address _player,
-        uint _shipId,
         uint8 _hullPoints,
         uint8 _maxHullPoints
-    ) internal {
+    ) internal view returns (uint8) {
         // UA-11 fix: pinned at entry (see healPercentAtStart), not the
         // live campaign config.
         uint16 floor = (uint16(_maxHullPoints) * healPercentAtStart[_gameId]) /
@@ -549,7 +543,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         // healed. Carry it forward at 1 HP. Same for a rejoiner under a 0%
         // floor.
         if (healed == 0) healed = 1;
-        runLedger.setShipHP(_player, _shipId, uint8(healed));
+        return uint8(healed);
     }
 
     // A ship that left the board mid-fight (status 2 = fled: rammed by the
@@ -577,7 +571,10 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
     function onGameEnded(uint _gameId, address _winner, address) external {
         if (msg.sender != address(game)) revert NotGame();
 
-        aiShips.releaseShips(gameIdToAiShipIds[_gameId]);
+        uint64[] storage aiIds = gameIdToAiShipIds[_gameId];
+        uint[] memory releaseIds = new uint[](aiIds.length);
+        for (uint i = 0; i < aiIds.length; i++) releaseIds[i] = aiIds[i];
+        aiShips.releaseShips(releaseIds);
         delete gameIdToAiShipIds[_gameId];
 
         address player = gameIdToPlayer[_gameId];
@@ -618,27 +615,27 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         runLedger.setNodeDefeated(player, run.currentNodeId);
 
         // The combat fleet's survivors are still inFleet (Game._endGame
-        // only clears fleets *after* this callback returns — see the
-        // comment above), so they must be released here, before
-        // re-reserving them, or _reserveRoster below would revert
-        // MixedVariantFleet/ShipAlreadyInFleet trying to re-fleet a ship
-        // that's still (nominally) in the just-finished combat fleet.
+        // only clears fleets *after* this callback returns), and stay
+        // locked: Fleets.reserveFleet below moves them straight into the
+        // next reservation fleet (2026-10-31; this used to clear the
+        // combat fleet and re-fleet every survivor). On a final node,
+        // Game._endGame's own cleanup releases them.
         // getGameMetadataAndTurnState instead of getGame() — only
         // .metadata.creatorFleetId is needed here (G-04).
         (GameMetadata memory gameMetadata, ) = game
             .getGameMetadataAndTurnState(_gameId);
-        fleets.clearFleet(gameMetadata.creatorFleetId);
+        uint combatFleetId = gameMetadata.creatorFleetId;
 
-        (uint[] memory newRoster, uint survivorCount) = _postWinRoster(
-            _gameId,
-            player,
-            run.rosterShipIds
-        );
+        (
+            uint[] memory newRoster,
+            uint8[] memory hps,
+            uint survivorCount
+        ) = _postWinRoster(_gameId, player, run.rosterShipIds, combatFleetId);
 
         // UA-11 fix: pinned at entry (see isFinalNodeAtStart), not the live
         // node graph.
         bool isFinalNode = isFinalNodeAtStart[_gameId];
-        runLedger.setRoster(player, newRoster);
+        runLedger.setRosterAndHP(player, newRoster, hps);
 
         // Pluggable win effects (bonus currency, extra heal beyond the
         // floor above, a granted ship, etc.) — run after the roster/HP
@@ -678,14 +675,12 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             // pre-rejoin behavior) rather than ever reverting here.
             uint newFleetId;
             try
-                fleets.createFleetFrozenPrices(
-                    0,
+                fleets.reserveFleet(
+                    combatFleetId,
                     player,
                     newRoster,
                     _rosterPositions(newRoster.length),
-                    run.currentCostCap,
-                    true,
-                    0
+                    run.currentCostCap
                 )
             returns (uint fleetId) {
                 newFleetId = fleetId;
@@ -694,7 +689,13 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
                     mstore(newRoster, survivorCount)
                 }
                 runLedger.setRoster(player, newRoster);
-                newFleetId = _reserveRoster(player, newRoster, run.currentCostCap);
+                newFleetId = fleets.reserveFleet(
+                    combatFleetId,
+                    player,
+                    newRoster,
+                    _rosterPositions(survivorCount),
+                    run.currentCostCap
+                );
             }
             runLedger.setReservationFleetId(player, newFleetId);
         }
@@ -727,8 +728,8 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
                 // no AI — failing loudly up front instead of mid-match.
                 ai: aiRegistry.aiFor(config.traits.variant)
             });
+            gameIdToAiShipIds[_gameId].push(uint64(shipIds[i]));
         }
-        gameIdToAiShipIds[_gameId] = shipIds;
 
         fleetId = fleets.createFleet(
             _gameId,
@@ -778,50 +779,49 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         uint _gameId,
         bool _strict
     ) internal returns (bool) {
-        GameDataView memory g = game.getGame(_gameId);
-        if (g.metadata.ended) {
+        // Game's flat AI board instead of the whole getGame (2026-10-31):
+        // read the turn state here, then hand the same array to the AI.
+        uint[] memory board = game.getAIBoard(_gameId);
+        (
+            bool ended,
+            address currentTurn,
+            address creator,
+            bool hasLiveShip,
+            uint shipId,
+            Position memory pos
+        ) = AIBehavior.turnState(board);
+        if (ended) {
             if (_strict) revert GameEnded();
             return false;
         }
-        if (g.turnState.currentTurn != address(this)) {
+        if (currentTurn != address(this)) {
             if (_strict) revert NotAITurn();
             return false;
         }
 
-        if (!_hasAnyLiveShip(g)) {
-            game.forceEndSession(_gameId, g.metadata.creator, address(this));
+        if (!hasLiveShip) {
+            game.forceEndSession(_gameId, creator, address(this));
             return false;
         }
 
-        uint shipId = _findUnmovedShip(g);
+        // The first joiner ship with HP > 0 that hasn't moved this round
+        // (AIBehavior.turnState); 0 if none.
         if (shipId == 0) return false;
 
-        return _takeShipTurn(_gameId, g, shipId);
-    }
-
-    function _hasAnyLiveShip(
-        GameDataView memory g
-    ) internal pure returns (bool) {
-        // Joiner ships occupy shipAttributes[creatorActiveShipIds.length ..]
-        // in the exact same order as joinerActiveShipIds — see Game.sol's
-        // getGame() construction order (G-01) — so this is a direct index
-        // read instead of an O(n) findAttributes scan per candidate.
-        uint base = g.creatorActiveShipIds.length;
-        for (uint i = 0; i < g.joinerActiveShipIds.length; i++) {
-            if (g.shipAttributes[base + i].hullPoints > 0) return true;
-        }
-        return false;
+        return _takeShipTurn(_gameId, shipId, pos, board);
     }
 
     function _takeShipTurn(
         uint _gameId,
-        GameDataView memory g,
-        uint _shipId
+        uint _shipId,
+        Position memory _pos,
+        uint[] memory _board
     ) internal returns (bool) {
         (AIBehavior.Decision memory d, bool decided) = _decideMove(
             _gameId,
-            g,
-            _shipId
+            _shipId,
+            _pos,
+            _board
         );
         // HA6-12: _decideMove fell back to Pass; surface it so a broken AI
         // fails loudly instead of silently passing forever.
@@ -840,60 +840,39 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             emit AITurnTaken(_gameId, _shipId, d.action, d.actionTarget);
             return true;
         } catch {
-            (Position memory myPos, bool found) = AIBehavior.findPosition(
-                g,
-                _shipId
-            );
-            if (found) {
-                try
-                    game.moveShip(
-                        _gameId,
-                        _shipId,
-                        myPos.row,
-                        myPos.col,
-                        ActionType.Pass,
-                        0
-                    )
-                {
-                    emit AITurnTaken(_gameId, _shipId, ActionType.Pass, 0);
-                    return true;
-                } catch {}
-            }
+            try
+                game.moveShip(
+                    _gameId,
+                    _shipId,
+                    _pos.row,
+                    _pos.col,
+                    ActionType.Pass,
+                    0
+                )
+            {
+                emit AITurnTaken(_gameId, _shipId, ActionType.Pass, 0);
+                return true;
+            } catch {}
         }
         return false;
     }
 
     function _decideMove(
         uint _gameId,
-        GameDataView memory g,
-        uint _shipId
+        uint _shipId,
+        Position memory _pos,
+        uint[] memory _board
     ) internal view returns (AIBehavior.Decision memory d, bool decided) {
-        (Position memory myPos, bool posFound) = AIBehavior.findPosition(
-            g,
-            _shipId
-        );
-        (Attributes memory myAttrs, bool attrsFound) = AIBehavior
-            .findAttributes(g, _shipId);
-        if (!posFound || !attrsFound) {
-            d.destRow = myPos.row;
-            d.destCol = myPos.col;
-            d.action = ActionType.Pass;
-            return (d, true);
-        }
-
+        // The AI unpacks the board itself (AIBehavior.loadView); only the
+        // flat board array and the ship's identity and loadout go across
+        // (2026-10-31).
         AIShipInfo memory info = aiShipInfo[_shipId];
-        AIBehavior.Ctx memory ctx = AIBehavior.Ctx({
-            g: g,
-            maps: maps,
-            gameId: _gameId,
-            shipId: _shipId,
-            pos: myPos,
-            attrs: myAttrs,
-            mainWeapon: info.mainWeapon,
-            scoringPositions: maps.getGameScoringPositions(_gameId),
-            gridWidth: game.GRID_WIDTH(),
-            gridHeight: game.GRID_HEIGHT()
-        });
+        AIBehavior.Ctx memory ctx;
+        ctx.board = _board;
+        ctx.maps = maps;
+        ctx.gameId = _gameId;
+        ctx.shipId = _shipId;
+        ctx.mainWeapon = info.mainWeapon;
 
         // Chosen by variant first (each faction's AI is built around its own
         // abilities), then by archetype inside that faction's contract. A
@@ -906,8 +885,8 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         // game stuck on the AI's turn. (The code-length checks matter: a
         // call to an address with no code returns empty data, and the
         // resulting decode failure isn't catchable.)
-        d.destRow = myPos.row;
-        d.destCol = myPos.col;
+        d.destRow = _pos.row;
+        d.destCol = _pos.col;
         d.action = ActionType.Pass;
         if (address(info.ai).code.length == 0) return (d, false);
         try info.ai.decide(ctx, info.archetype, info.special) returns (
@@ -918,30 +897,4 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         return (d, false);
     }
 
-    function _findUnmovedShip(
-        GameDataView memory g
-    ) internal pure returns (uint) {
-        uint[] memory active = g.joinerActiveShipIds;
-        uint[] memory moved = g.joinerMovedShipIds;
-
-        for (uint i = 0; i < active.length; i++) {
-            bool hasMoved = false;
-            for (uint j = 0; j < moved.length; j++) {
-                if (moved[j] == active[i]) {
-                    hasMoved = true;
-                    break;
-                }
-            }
-            if (hasMoved) continue;
-
-            (Attributes memory attrs, bool found) = AIBehavior.findAttributes(
-                g,
-                active[i]
-            );
-            if (found && attrs.hullPoints == 0) continue;
-
-            return active[i];
-        }
-        return 0;
-    }
 }

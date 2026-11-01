@@ -16,6 +16,10 @@ interface IShips {
 
     function getShip(uint _id) external view returns (Ship memory);
 
+    function getShipStatsInput(
+        uint _id
+    ) external view returns (ShipStatsInput memory);
+
     function isShipDestroyed(uint _id) external view returns (bool);
 
     function setTimestampDestroyed(uint _id, uint _destroyerId) external;

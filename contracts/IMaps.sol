@@ -60,8 +60,8 @@ interface IMaps {
     ) external view returns (bool);
 
     // hasMaps/hasMovementPath, but ALSO blocked by any tile in
-    // _enemyOccupiedBitmap (a bit-per-cell mask the caller builds from live
-    // enemy ship positions -- Maps.sol has no ship-position knowledge of its
+    // _enemyOccupiedBitmap (a bit-per-cell mask of live enemy ships, from
+    // Game's GameData.live -- Maps.sol has no ship-position knowledge of its
     // own). See Maps.sol's own comments for the ally/enemy split and, for
     // hasMapsAvoidingShips, why the shot's own target must be excluded from
     // the bitmap.
@@ -149,6 +149,11 @@ interface IMaps {
     function getCreatorZonePositions(
         uint _mapId
     ) external view returns (Position[] memory);
+
+    function getDeploymentZoneBitmap(
+        uint _mapId,
+        bool _isCreator
+    ) external view returns (uint256);
 
     function getJoinerZonePositions(
         uint _mapId

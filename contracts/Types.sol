@@ -121,9 +121,6 @@ struct Colors {
     uint16 h2;
     uint8 s2;
     uint8 l2;
-    uint16 h3;
-    uint8 s3;
-    uint8 l3;
 }
 
 struct Equipment {
@@ -144,7 +141,6 @@ struct Attributes {
     uint8 movement;
     uint8 damageReduction;
     uint8 reactorCriticalTimer;
-    uint8[] statusEffects;
 }
 
 // Grid position structure
@@ -168,6 +164,59 @@ struct ShipPosition {
     Position position;
     bool isCreator;
     uint8 status;
+}
+
+// Everything Game stores about one ship in one game, packed into one slot.
+// AIBehavior.unpackBoard and turnState read this layout from the raw word;
+// keep them in step (test/helpers/aiView.ts checks them against getGame on
+// every AI turn of the GasBudget fights).
+// (2026-10-30): its board position and status, and its stats. Before this,
+// ShipPosition took 3 slots (its shipId repeats the mapping key, and the
+// nested Position starts a slot of its own) and Attributes took another.
+// `placed` replaces the stored shipId as the "this ship was put on this
+// board" marker, since all-zero row/col/flags is a real state for a joiner
+// ship. The stat fields keep Attributes' names; version 0 means "no stats"
+// (never snapshotted, or cleared when the ship left the game). The two
+// round fields replaced an EnumerableSet of moved ships and a mapping;
+// activeIndex replaced the active-ships EnumerableSets' index mapping.
+// Game.getShipPosition/getAllShipPositions/getShipAttributes/getGame
+// rebuild ShipPosition and Attributes from it.
+struct ShipBoardState {
+    int16 row;
+    int16 col;
+    bool isCreator;
+    uint8 status; // 0 = alive, 1 = destroyed, 2 = fled
+    bool placed;
+    uint16 version; // Attributes version, also the game's ShipAttributes pin
+    uint8 range;
+    uint8 gunDamage;
+    uint8 hullPoints;
+    uint8 maxHullPoints;
+    uint8 movement;
+    uint8 damageReduction;
+    uint8 reactorCriticalTimer;
+    // The round this ship last moved in: it has moved this round iff this
+    // equals turnState.currentRound (rounds start at 1, so 0 never matches).
+    // A new round needs no clearing pass, unlike the old moved-ships set.
+    // 24 bits (2026-10-31, was 32): 16.7M rounds, each at least two
+    // transactions, is out of reach.
+    uint24 movedInRound;
+    // docs/audit-3.md HA6-24: the round in which a ship that had ALREADY
+    // moved was knocked to 0 HP (which clears its moved flag). A revive in
+    // that same round marks it moved again so it can't act twice; a ship
+    // downed before moving keeps its move.
+    uint24 zeroedAfterMovingRound;
+    // 1-based position of this ship in its side's active list
+    // (GameData.creatorActive/joinerActive); 0 = not active.
+    uint8 activeIndex;
+    // Copied from the ship at startGame (2026-10-31) so moves never read
+    // the Ships contracts: both are frozen while the ship is inFleet.
+    uint16 variant;
+    Special special;
+    // Kill credit: id of the ship that last damaged this one (was a
+    // separate per-game mapping, 2026-10-31). Ids fit 48 bits: AI ids are
+    // 2^40 plus a pool slot.
+    uint48 lastDamager;
 }
 
 // Game metadata - basic game identification and players
@@ -215,37 +264,61 @@ struct GameData {
     uint maxScore; // Maximum score needed to win the game
     uint creatorScore; // Current score of the creator player
     uint joinerScore; // Current score of the joiner player
-    LastMove lastMove; // Most recent move in the game
+    LastMoveRecord lastMove; // Most recent move in the game (one slot; see LastMoveRecord)
     // Keep all mappings in GameData
-    mapping(uint => Attributes) shipAttributes; // shipId => attributes
-    // Grid state - grid[row][column] = shipId (0 if empty)
-    mapping(int16 row => mapping(int16 column => uint shipId)) grid;
-    // Board position and status for each ship (status: 0 = alive, 1 = destroyed, 2 = fled)
-    mapping(uint => ShipPosition) shipPositions; // shipId => position + status
-    // Kill-credit tracking: target shipId => shipId of its last damager, scoped per
-    // game (was a top-level Game.sol mapping shared across all games; a ship id
-    // reused in a later game would inherit a stale entry from an earlier one).
-    mapping(uint => uint) lastDamage;
-    EnumerableSet.UintSet shipMovedThisRound; // movedShipIds in current round
+    // Occupied cells, one bit each (bit row * 17 + col; 11 * 17 = 187 fits
+    // in one word, same indexing as Maps). Was a row => col => shipId
+    // mapping, one slot per cell (2026-10-31); only scoring needed the id,
+    // and it uses the per-side live bitmaps instead.
+    uint256 occupied;
+    // Board position, status and stats for each ship, one slot each (see ShipBoardState)
+    mapping(uint => ShipBoardState) shipBoard; // shipId => position, status, stats
+    // Ships moved this round (movedInRound == currentRound) is
+    // movedTotal - movedAtRoundStart. A running total plus a round-start
+    // snapshot (2026-10-31) instead of a count reset to 0 each round, which
+    // made every round's first move pay a 0 -> nonzero write. Full-width
+    // slots: packing the pair cost Game ~220 bytes of masking code.
+    uint movedTotal;
+    uint movedAtRoundStart;
     EnumerableSet.UintSet shipsWithZeroHP; // shipIds with 0 hull points
     // Store active ship IDs for each player to avoid repeated fleet calls
-    mapping(address => EnumerableSet.UintSet) playerActiveShipIds; // player => shipIds
+    // Each side's active (on-board) ship ids, 64 bits each so four share a
+    // slot (2026-10-30; was a per-player EnumerableSet, two fresh slots per
+    // ship). Order is not meaningful: removal swaps in the last id.
+    uint64[] creatorActive;
+    uint64[] joinerActive;
     // Round completion: use counts at round start so destroyed/retreated ships don't shrink the threshold
     uint[] goneShipIds; // shipIds that have been destroyed or retreated this round
     uint totalActiveShipsAtRoundStart; // set at start of each round
-    uint shipsRemovedThisRound; // destroyed or retreated this round (incremented in _removeShipFromGame)
+    // Destroyed or retreated this round is shipsRemovedTotal -
+    // removedAtRoundStart, the same total-plus-snapshot pattern as the
+    // moved count (2026-10-31), so the slots never go back to 0.
+    uint shipsRemovedTotal; // incremented in _removeShipFromGame
+    uint removedAtRoundStart;
     // UA-06 fix (2026-09-29): Game.healCapPercent's value snapshotted once
     // at startGame, so a later live change can't retroactively affect an
     // already-active game's heal effects. Not surfaced on GameDataView —
     // internal scheduling detail for SpecialEffectsLib, not player-facing
     // game state.
     uint8 healCapPercentAtStart;
-    // docs/audit-3.md HA6-24: the round in which a ship that had ALREADY
-    // moved was knocked to 0 HP (which clears its moved flag). A revive in
-    // that same round puts it back in shipMovedThisRound so it can't act
-    // twice; a ship downed before moving keeps its move. Rounds start at 1,
-    // so the default 0 never matches.
-    mapping(uint => uint) zeroedAfterMovingInRound;
+    // Each side's cells holding a live ship: on the board with HP > 0, the
+    // same ships as "active and not in shipsWithZeroHP" (0 = creator,
+    // 1 = joiner; bits as in `occupied`). Stored (2026-10-31) instead of
+    // rebuilt from every enemy's board slot on each move and shot. Every
+    // change to a ship's position, HP-zero state or presence must update
+    // it: placement, moves, relocations, HP to 0, revives and removals.
+    uint256[2] live;
+}
+
+// What an AI decision reads (2026-10-31): the active ships only, creator
+// side first, then joiner — the same order getGame uses, so entry i of
+// each array is the same ship (AIBehavior relies on this, G-01). The AI
+// builds it in memory from Game.getAIBoard (AIBehavior.unpackBoard);
+// getGame builds its active-ship arrays the same way.
+struct AIView {
+    uint[] shipIds;
+    Attributes[] shipAttributes;
+    ShipPosition[] shipPositions;
 }
 
 struct GameDataView {
@@ -275,6 +348,20 @@ struct Ship {
     Traits traits;
     ShipData shipData;
     address owner;
+}
+
+// The slice of a Ship that ShipAttributes needs to compute its stats
+// (2026-10-31): 4 storage slots to read instead of the ~10 a full Ship
+// takes, and a much smaller value to encode between contracts. id 0 means
+// no such ship.
+struct ShipStatsInput {
+    uint id;
+    Equipment equipment;
+    uint16 variant;
+    uint8 accuracy;
+    uint8 hull;
+    uint8 speed;
+    uint32 shipsDestroyed;
 }
 
 struct ShipData {
@@ -482,11 +569,25 @@ struct LastMove {
     uint timestamp; // When the move was made
 }
 
+// Storage form of LastMove, packed into one slot (2026-10-31; LastMove
+// took four, rewritten on every move). Ship ids fit 64 bits (Fleets
+// already stores them that way) and timestamps fit 40. getGame converts it
+// back to LastMove, so the ABI is unchanged.
+struct LastMoveRecord {
+    uint64 shipId;
+    int16 oldRow;
+    int16 oldCol;
+    int16 newRow;
+    int16 newCol;
+    ActionType actionType;
+    uint64 targetShipId;
+    uint40 timestamp;
+}
+
 // Player statistics for tracking wins and losses
 struct PlayerStats {
     uint wins;
     uint losses;
-    uint totalGames;
 }
 
 // Game result structure for tracking individual game outcomes

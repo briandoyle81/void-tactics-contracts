@@ -89,20 +89,38 @@ contract ShipAttributes is IShipAttributes, Ownable {
     function calculateShipAttributes(
         Ship memory _ship
     ) public view returns (Attributes memory) {
+        return
+            _calculate(
+                ShipStatsInput(
+                    _ship.id,
+                    _ship.equipment,
+                    _ship.traits.variant,
+                    _ship.traits.accuracy,
+                    _ship.traits.hull,
+                    _ship.traits.speed,
+                    _ship.shipData.shipsDestroyed
+                )
+            );
+    }
+
+    // The stats calculation, from just the fields it uses (ShipStatsInput).
+    function _calculate(
+        ShipStatsInput memory _ship
+    ) internal view returns (Attributes memory) {
         if (_ship.id == 0) revert ShipNotFound();
 
         VariantAttributeData storage variantData = _currentData(
-            _ship.traits.variant
+            _ship.variant
         );
         // rank = 1 + number of thresholds the ship's kills have reached;
         // the bonus table is indexed by rank - 1.
         uint8 rankMultiplier = variantData.rankBonusPct[
-            _rankOf(variantData, _ship.shipData.shipsDestroyed) - 1
+            _rankOf(variantData, _ship.shipsDestroyed) - 1
         ];
 
         Attributes memory attributes;
         // Calculate base attributes from ship traits and equipment
-        attributes.version = _currentAttributesVersion[_ship.traits.variant];
+        attributes.version = _currentAttributesVersion[_ship.variant];
         attributes.range = variantData
             .guns[uint8(_ship.equipment.mainWeapon)]
             .range;
@@ -112,7 +130,7 @@ contract ShipAttributes is IShipAttributes, Ownable {
 
         // Apply fore accuracy bonus to range as percentage increase (bridge + level extend range)
         uint8 foreAccuracyBonus = variantData.foreAccuracy[
-            uint8(_ship.traits.accuracy)
+            uint8(_ship.accuracy)
         ];
         calculatedBonus = (uint(attributes.range) * foreAccuracyBonus) / 100;
         attributes.range += uint8(calculatedBonus);
@@ -151,9 +169,6 @@ contract ShipAttributes is IShipAttributes, Ownable {
         if (attributes.damageReduction > 100) {
             attributes.damageReduction = 100;
         }
-        // Initialize empty status effects array
-        attributes.statusEffects = new uint8[](0);
-
         return attributes;
     }
 
@@ -170,9 +185,33 @@ contract ShipAttributes is IShipAttributes, Ownable {
     function calculateShipAttributesById(
         uint _shipId
     ) public view returns (Attributes memory) {
-        Ship memory ship = ships.getShip(_shipId);
-        if (ship.id == 0) revert ShipNotFound();
-        return calculateShipAttributes(ship);
+        return _calculate(ships.getShipStatsInput(_shipId));
+    }
+
+    // For Game.startGame (2026-10-31): each ship's stats plus the two fields
+    // Game keeps on its board for the rest of the match, for a whole fleet
+    // in one call, read through the slim ShipStatsInput (Game never decodes
+    // a full Ship).
+    function calculateBoardStatsByIds(
+        uint[] calldata _shipIds
+    )
+        external
+        view
+        returns (
+            Attributes[] memory attributes,
+            uint16[] memory variants,
+            Special[] memory specials
+        )
+    {
+        attributes = new Attributes[](_shipIds.length);
+        variants = new uint16[](_shipIds.length);
+        specials = new Special[](_shipIds.length);
+        for (uint i = 0; i < _shipIds.length; i++) {
+            ShipStatsInput memory input = ships.getShipStatsInput(_shipIds[i]);
+            attributes[i] = _calculate(input);
+            variants[i] = input.variant;
+            specials[i] = input.equipment.special;
+        }
     }
 
     // Calculate attributes for multiple ships by their IDs
@@ -182,9 +221,7 @@ contract ShipAttributes is IShipAttributes, Ownable {
         Attributes[] memory results = new Attributes[](_shipIds.length);
 
         for (uint i = 0; i < _shipIds.length; i++) {
-            Ship memory ship = ships.getShip(_shipIds[i]);
-            if (ship.id == 0) revert ShipNotFound();
-            results[i] = calculateShipAttributes(ship);
+            results[i] = _calculate(ships.getShipStatsInput(_shipIds[i]));
         }
 
         return results;
@@ -230,22 +267,22 @@ contract ShipAttributes is IShipAttributes, Ownable {
 
     function _calculateHullPoints(
         VariantAttributeData storage variantData,
-        Ship memory _ship
+        ShipStatsInput memory _ship
     ) internal view returns (uint8) {
         uint8 baseHull = variantData.baseHull;
-        // uint8 traitBonus = _ship.traits.hull * 10; // Convert trait to hull points
-        uint8 traitBonus = variantData.hull[_ship.traits.hull];
+        // uint8 traitBonus = _ship.hull * 10; // Convert trait to hull points
+        uint8 traitBonus = variantData.hull[_ship.hull];
         return baseHull + traitBonus;
     }
 
     function _calculateMovement(
         VariantAttributeData storage variantData,
-        Ship memory _ship
+        ShipStatsInput memory _ship
     ) internal view returns (uint8) {
         int8 baseMovement = int8(variantData.baseSpeed);
 
         // Add trait bonus
-        baseMovement += int8(variantData.engineSpeeds[_ship.traits.speed]);
+        baseMovement += int8(variantData.engineSpeeds[_ship.speed]);
 
         // Extract equipment bonuses as int8 to avoid stack-too-deep or type mismatch
         int8 gunMovement = variantData
@@ -292,7 +329,7 @@ contract ShipAttributes is IShipAttributes, Ownable {
 
     function _calculateDamageReduction(
         VariantAttributeData storage variantData,
-        Ship memory _ship
+        ShipStatsInput memory _ship
     ) internal view returns (uint8) {
         uint8 damageReduction = 0;
 

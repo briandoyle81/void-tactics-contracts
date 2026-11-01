@@ -56,18 +56,15 @@
     {
       "key": "m06",
       "kind": "Combat",
-      "mapKey": "rlM06",
+      "mapKey": "m13",
       "turnTime": 600,
       "maxScore": 45,
       "creatorGoesFirst": true
     },
     {
       "key": "m07",
-      "kind": "Combat",
-      "mapKey": "rlM07",
-      "turnTime": 600,
-      "maxScore": 51,
-      "creatorGoesFirst": true
+      "kind": "Resupply",
+      "costCapOverride": 1500
     },
     {
       "key": "m08",
@@ -136,12 +133,40 @@
     {
       "key": "d01",
       "kind": "Combat",
-      "mapKey": "rlD01",
+      "mapKey": "map67",
       "turnTime": 600,
-      "maxScore": 27,
+      "maxScore": 0,
       "creatorGoesFirst": true,
       "title": "Sneak Attack",
-      "description": "Admiral, our scouts report that the enemy has a base hidden in a gas cloud.  If we're careful, we can sneak through and take them by surprise.  Reports indicate that there's a small defensive contingent guarding the station, and an inactive ship that looks particularly powerful.\n\n    The good news is that the enemy does seem to be following more of the rules. The station itself appears unarmed and unarmored.  We can't legally fire on the space station itself, but we don't have to worry about it shooting at us either.\n\n    There's no resources to claim with Central.  Knock out the enemy ships, so we can send a team to seize the ship, then get out.\n    "
+      "description": "Admiral, our scouts report that the enemy has a base hidden in a gas cloud.  If we're careful, we can sneak through and take them by surprise.  Reports indicate that there's a small defensive contingent guarding the station, and an inactive ship that looks particularly powerful.\n\n    The good news is that the enemy does seem to be following more of the rules. The station itself appears unarmed and unarmored.  We can't legally fire on the space station itself, but we don't have to worry about it shooting at us either.\n\n    There's no resources to claim with Central.  Knock out the enemy ships, so we can send a team to seize the ship, then get out.\n    ",
+      "winEffects": [
+        "SHIP_GRANT_WIN_EFFECT"
+      ],
+      "shipGrant": {
+        "name": "33 Hybrid Melody",
+        "equipment": {
+          "mainWeapon": 3,
+          "armor": 2,
+          "shields": 0,
+          "special": 0
+        },
+        "colors": {
+          "h1": 17,
+          "s1": 86,
+          "l1": 55,
+          "h2": 220,
+          "s2": 50,
+          "l2": 50
+        },
+        "variant": 1,
+        "accuracy": 1,
+        "hull": 2,
+        "speed": 2,
+        "shipsDestroyed": 33,
+        "shiny": true,
+        "isFreeShip": true,
+        "oncePerAddress": true
+      }
     },
     {
       "key": "d02",
@@ -258,7 +283,7 @@
     {
       "key": "r01",
       "kind": "Combat",
-      "mapKey": "map67",
+      "mapKey": "chainMap67",
       "turnTime": 0,
       "maxScore": 0,
       "creatorGoesFirst": true,
@@ -13473,6 +13498,633 @@
           "col": 16
         }
       ]
+    },
+    {
+      "key": "chainMap67",
+      "name": "Map 67 (from chain)",
+      "mode": "PvE",
+      "type": "full",
+      "blockedTiles": [
+        {
+          "row": 0,
+          "col": 11
+        },
+        {
+          "row": 0,
+          "col": 12
+        },
+        {
+          "row": 0,
+          "col": 13
+        },
+        {
+          "row": 0,
+          "col": 14
+        },
+        {
+          "row": 0,
+          "col": 15
+        },
+        {
+          "row": 0,
+          "col": 16
+        },
+        {
+          "row": 1,
+          "col": 12
+        },
+        {
+          "row": 1,
+          "col": 13
+        },
+        {
+          "row": 1,
+          "col": 14
+        },
+        {
+          "row": 1,
+          "col": 15
+        },
+        {
+          "row": 1,
+          "col": 16
+        },
+        {
+          "row": 2,
+          "col": 12
+        },
+        {
+          "row": 2,
+          "col": 13
+        },
+        {
+          "row": 2,
+          "col": 14
+        },
+        {
+          "row": 2,
+          "col": 15
+        },
+        {
+          "row": 2,
+          "col": 16
+        },
+        {
+          "row": 3,
+          "col": 14
+        },
+        {
+          "row": 4,
+          "col": 1
+        },
+        {
+          "row": 4,
+          "col": 2
+        },
+        {
+          "row": 4,
+          "col": 3
+        },
+        {
+          "row": 4,
+          "col": 4
+        },
+        {
+          "row": 4,
+          "col": 12
+        },
+        {
+          "row": 4,
+          "col": 13
+        },
+        {
+          "row": 4,
+          "col": 14
+        },
+        {
+          "row": 5,
+          "col": 0
+        },
+        {
+          "row": 5,
+          "col": 1
+        },
+        {
+          "row": 5,
+          "col": 2
+        },
+        {
+          "row": 5,
+          "col": 3
+        },
+        {
+          "row": 5,
+          "col": 4
+        },
+        {
+          "row": 5,
+          "col": 12
+        },
+        {
+          "row": 5,
+          "col": 13
+        },
+        {
+          "row": 5,
+          "col": 14
+        },
+        {
+          "row": 5,
+          "col": 15
+        },
+        {
+          "row": 5,
+          "col": 16
+        },
+        {
+          "row": 6,
+          "col": 0
+        },
+        {
+          "row": 6,
+          "col": 1
+        },
+        {
+          "row": 6,
+          "col": 3
+        },
+        {
+          "row": 6,
+          "col": 4
+        },
+        {
+          "row": 6,
+          "col": 5
+        },
+        {
+          "row": 6,
+          "col": 12
+        },
+        {
+          "row": 6,
+          "col": 13
+        },
+        {
+          "row": 6,
+          "col": 14
+        },
+        {
+          "row": 6,
+          "col": 15
+        },
+        {
+          "row": 6,
+          "col": 16
+        },
+        {
+          "row": 7,
+          "col": 0
+        },
+        {
+          "row": 7,
+          "col": 1
+        },
+        {
+          "row": 7,
+          "col": 4
+        },
+        {
+          "row": 7,
+          "col": 5
+        },
+        {
+          "row": 7,
+          "col": 6
+        },
+        {
+          "row": 7,
+          "col": 15
+        },
+        {
+          "row": 7,
+          "col": 16
+        },
+        {
+          "row": 8,
+          "col": 0
+        },
+        {
+          "row": 8,
+          "col": 5
+        },
+        {
+          "row": 8,
+          "col": 6
+        },
+        {
+          "row": 9,
+          "col": 5
+        },
+        {
+          "row": 9,
+          "col": 6
+        },
+        {
+          "row": 9,
+          "col": 7
+        },
+        {
+          "row": 9,
+          "col": 8
+        },
+        {
+          "row": 9,
+          "col": 9
+        },
+        {
+          "row": 9,
+          "col": 14
+        },
+        {
+          "row": 9,
+          "col": 15
+        },
+        {
+          "row": 10,
+          "col": 6
+        },
+        {
+          "row": 10,
+          "col": 7
+        },
+        {
+          "row": 10,
+          "col": 8
+        },
+        {
+          "row": 10,
+          "col": 9
+        },
+        {
+          "row": 10,
+          "col": 10
+        },
+        {
+          "row": 10,
+          "col": 11
+        },
+        {
+          "row": 10,
+          "col": 12
+        },
+        {
+          "row": 10,
+          "col": 13
+        },
+        {
+          "row": 10,
+          "col": 14
+        },
+        {
+          "row": 10,
+          "col": 15
+        },
+        {
+          "row": 10,
+          "col": 16
+        }
+      ],
+      "impassableTiles": [
+        {
+          "row": 0,
+          "col": 10
+        },
+        {
+          "row": 1,
+          "col": 9
+        },
+        {
+          "row": 1,
+          "col": 10
+        },
+        {
+          "row": 2,
+          "col": 9
+        },
+        {
+          "row": 2,
+          "col": 10
+        },
+        {
+          "row": 3,
+          "col": 9
+        },
+        {
+          "row": 3,
+          "col": 10
+        },
+        {
+          "row": 4,
+          "col": 8
+        },
+        {
+          "row": 4,
+          "col": 9
+        },
+        {
+          "row": 4,
+          "col": 10
+        },
+        {
+          "row": 4,
+          "col": 12
+        },
+        {
+          "row": 4,
+          "col": 13
+        },
+        {
+          "row": 4,
+          "col": 14
+        },
+        {
+          "row": 5,
+          "col": 8
+        },
+        {
+          "row": 5,
+          "col": 9
+        },
+        {
+          "row": 5,
+          "col": 12
+        },
+        {
+          "row": 5,
+          "col": 13
+        },
+        {
+          "row": 5,
+          "col": 14
+        },
+        {
+          "row": 6,
+          "col": 8
+        },
+        {
+          "row": 6,
+          "col": 12
+        },
+        {
+          "row": 6,
+          "col": 13
+        },
+        {
+          "row": 6,
+          "col": 14
+        },
+        {
+          "row": 9,
+          "col": 5
+        },
+        {
+          "row": 9,
+          "col": 11
+        },
+        {
+          "row": 10,
+          "col": 5
+        },
+        {
+          "row": 10,
+          "col": 11
+        },
+        {
+          "row": 10,
+          "col": 12
+        }
+      ],
+      "scoringTiles": [],
+      "creatorZone": [
+        {
+          "row": 5,
+          "col": 0
+        },
+        {
+          "row": 5,
+          "col": 1
+        },
+        {
+          "row": 6,
+          "col": 0
+        },
+        {
+          "row": 6,
+          "col": 1
+        },
+        {
+          "row": 6,
+          "col": 2
+        },
+        {
+          "row": 7,
+          "col": 0
+        },
+        {
+          "row": 7,
+          "col": 1
+        },
+        {
+          "row": 7,
+          "col": 2
+        },
+        {
+          "row": 7,
+          "col": 3
+        },
+        {
+          "row": 8,
+          "col": 0
+        },
+        {
+          "row": 8,
+          "col": 1
+        },
+        {
+          "row": 8,
+          "col": 2
+        },
+        {
+          "row": 8,
+          "col": 3
+        },
+        {
+          "row": 8,
+          "col": 4
+        },
+        {
+          "row": 9,
+          "col": 0
+        },
+        {
+          "row": 9,
+          "col": 1
+        },
+        {
+          "row": 9,
+          "col": 2
+        },
+        {
+          "row": 9,
+          "col": 3
+        },
+        {
+          "row": 9,
+          "col": 4
+        },
+        {
+          "row": 10,
+          "col": 0
+        },
+        {
+          "row": 10,
+          "col": 1
+        },
+        {
+          "row": 10,
+          "col": 2
+        },
+        {
+          "row": 10,
+          "col": 3
+        },
+        {
+          "row": 10,
+          "col": 4
+        }
+      ],
+      "joinerZone": [
+        {
+          "row": 2,
+          "col": 13
+        },
+        {
+          "row": 2,
+          "col": 14
+        },
+        {
+          "row": 2,
+          "col": 15
+        },
+        {
+          "row": 2,
+          "col": 16
+        },
+        {
+          "row": 3,
+          "col": 11
+        },
+        {
+          "row": 3,
+          "col": 12
+        },
+        {
+          "row": 3,
+          "col": 13
+        },
+        {
+          "row": 3,
+          "col": 14
+        },
+        {
+          "row": 3,
+          "col": 15
+        },
+        {
+          "row": 3,
+          "col": 16
+        },
+        {
+          "row": 4,
+          "col": 11
+        },
+        {
+          "row": 4,
+          "col": 15
+        },
+        {
+          "row": 4,
+          "col": 16
+        },
+        {
+          "row": 5,
+          "col": 11
+        },
+        {
+          "row": 5,
+          "col": 15
+        },
+        {
+          "row": 5,
+          "col": 16
+        },
+        {
+          "row": 6,
+          "col": 11
+        },
+        {
+          "row": 6,
+          "col": 15
+        },
+        {
+          "row": 6,
+          "col": 16
+        },
+        {
+          "row": 7,
+          "col": 11
+        },
+        {
+          "row": 7,
+          "col": 12
+        },
+        {
+          "row": 7,
+          "col": 13
+        },
+        {
+          "row": 7,
+          "col": 14
+        },
+        {
+          "row": 7,
+          "col": 15
+        },
+        {
+          "row": 7,
+          "col": 16
+        },
+        {
+          "row": 8,
+          "col": 12
+        },
+        {
+          "row": 8,
+          "col": 13
+        },
+        {
+          "row": 8,
+          "col": 14
+        },
+        {
+          "row": 8,
+          "col": 15
+        },
+        {
+          "row": 8,
+          "col": 16
+        }
+      ]
     }
   ],
   "mapPlacements": [
@@ -14632,6 +15284,38 @@
         "v2sniper2",
         "v2sniper3"
       ]
+    },
+    {
+      "mapKey": "chainMap67",
+      "positions": [
+        {
+          "row": 5,
+          "col": 11
+        },
+        {
+          "row": 5,
+          "col": 15
+        },
+        {
+          "row": 6,
+          "col": 11
+        },
+        {
+          "row": 7,
+          "col": 12
+        },
+        {
+          "row": 7,
+          "col": 13
+        }
+      ],
+      "configKeys": [
+        "v2grunt2",
+        "v2grunt4",
+        "v2aggressor4",
+        "v2aggressor",
+        "v2grunt"
+      ]
     }
   ],
   "edges": [
@@ -14704,10 +15388,6 @@
       "to": "f01"
     },
     {
-      "from": "d01",
-      "to": "d02"
-    },
-    {
       "from": "d02",
       "to": "d03"
     },
@@ -14774,6 +15454,10 @@
     {
       "from": "m05",
       "to": "d01"
+    },
+    {
+      "from": "d01",
+      "to": "m06"
     }
   ]
 }

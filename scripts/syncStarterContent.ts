@@ -14,7 +14,8 @@
 //   - AI placements (singlePlayer + roguelike mapPlacements): replaces a
 //     map's fleet when it differs.
 //   - Roguelike campaign 1: campaign settings and root, nodes (update in
-//     place; new nodes appended), edges (adds missing ones) and win effects.
+//     place; new nodes appended), edges (adds missing ones), win effects and
+//     reward ships (ShipGrantWinEffect grants).
 // What it does NOT sync (prints a warning if the seed has new entries):
 //   single-player NodeMap campaigns/nodes and AI ship configs. Edges on chain
 //   that the seed no longer lists are reported, not removed (removing one
@@ -54,98 +55,23 @@ import {
   type Address,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import {
+  MAP_MODE,
+  NODE_KIND,
+  ROGUELIKE_CAMPAIGN_ID,
+  WIN_EFFECT_CONTRACTS,
+  cap,
+  loadDeployment,
+  posKey,
+  posSet,
+  scoringSet,
+  toPositions,
+  toScoring,
+  toShipGrant,
+  type Pos,
+} from "./lib/starterContent";
 
 const APPLY = process.env.APPLY === "true";
-const DATA_DIR = path.join(__dirname, "..", "ignition", "data");
-const MAP_MODE: Record<string, number> = { PvP: 0, PvE: 1, Both: 2 };
-const NODE_KIND: Record<string, number> = { Combat: 0, Resupply: 1 };
-// Must match DeployAndConfig.ts (it creates exactly one roguelike campaign).
-const ROGUELIKE_CAMPAIGN_ID = 1n;
-const WIN_EFFECT_CONTRACTS: Record<string, string> = {
-  DEC_BONUS_WIN_EFFECT: "DECBonusWinEffect",
-  HEAL_ABOVE_FLOOR_WIN_EFFECT: "HealAboveFloorWinEffect",
-  SHIP_GRANT_WIN_EFFECT: "ShipGrantWinEffect",
-};
-
-type Pos = { row: number; col: number };
-type ScoringPos = Pos & { points: number; onlyOnce: boolean };
-
-const cap = (k: string) => `${k[0].toUpperCase()}${k.slice(1)}`;
-const posKey = (p: Pos) => `${Number(p.row)},${Number(p.col)}`;
-const posSet = (ps: readonly Pos[] | undefined) =>
-  [...(ps ?? [])].map(posKey).sort().join(" ");
-const scoringSet = (ps: readonly ScoringPos[] | undefined) =>
-  [...(ps ?? [])]
-    .map((p) => `${posKey(p)}:${Number(p.points)}:${p.onlyOnce}`)
-    .sort()
-    .join(" ");
-const toPositions = (ps: readonly Pos[] | undefined) =>
-  (ps ?? []).map((p) => ({ row: p.row, col: p.col }));
-const toScoring = (ps: readonly ScoringPos[] | undefined) =>
-  (ps ?? []).map((p) => ({
-    row: p.row,
-    col: p.col,
-    points: p.points,
-    onlyOnce: p.onlyOnce,
-  }));
-
-function readJson(file: string) {
-  return JSON.parse(fs.readFileSync(file, "utf8"));
-}
-
-// Confirmed nonce per completed call future, and readEventArgument results.
-function readJournal(file: string) {
-  const nonceByHash = new Map<string, number>();
-  const confirmedNonce = new Map<string, number>();
-  const completed = new Set<string>();
-  const readResults = new Map<string, bigint>();
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    const msg = JSON.parse(line);
-    const id: string | undefined = msg.futureId;
-    switch (msg.type) {
-      case "TRANSACTION_SEND":
-        nonceByHash.set(msg.transaction.hash, msg.nonce);
-        break;
-      case "TRANSACTION_CONFIRM":
-        if (nonceByHash.has(msg.hash))
-          confirmedNonce.set(id!, nonceByHash.get(msg.hash)!);
-        break;
-      case "CALL_EXECUTION_STATE_COMPLETE":
-        if (msg.result?.type === "SUCCESS") completed.add(id!);
-        break;
-      case "READ_EVENT_ARGUMENT_EXECUTION_STATE_INITIALIZE":
-        if (msg.result?._kind === "bigint")
-          readResults.set(id!, BigInt(msg.result.value));
-        break;
-      case "WIPE_APPLY":
-        completed.delete(id!);
-        confirmedNonce.delete(id!);
-        readResults.delete(id!);
-        break;
-    }
-  }
-  return { confirmedNonce, completed, readResults };
-}
-
-// Ids for keys whose creation futures ran, numbered 1..n by nonce order.
-function idsFromJournal(
-  journal: ReturnType<typeof readJournal>,
-  keys: string[],
-  futureIdFor: (key: string) => string,
-): Map<string, bigint> {
-  const found = keys
-    .map((key) => ({ key, futureId: futureIdFor(key) }))
-    .filter(({ futureId }) => journal.completed.has(futureId))
-    .map(({ key, futureId }) => {
-      const nonce = journal.confirmedNonce.get(futureId);
-      if (nonce === undefined)
-        throw new Error(`No confirmed transaction in the journal for ${futureId}`);
-      return { key, nonce };
-    })
-    .sort((a, b) => a.nonce - b.nonce);
-  return new Map(found.map(({ key }, i) => [key, BigInt(i + 1)]));
-}
 
 async function main() {
   const publicClient = await hre.viem.getPublicClient();
@@ -154,19 +80,21 @@ async function main() {
   const deployDir =
     process.env.DEPLOYMENT_DIR ||
     path.join(__dirname, "..", "ignition", "deployments", deploymentId);
-  const journalPath = path.join(deployDir, "journal.jsonl");
-  const syncStatePath = path.join(deployDir, "content-sync.json");
-  if (!fs.existsSync(journalPath))
-    throw new Error(`No deployment journal at ${journalPath}`);
-
-  const deployed: Record<string, string> = readJson(
-    path.join(deployDir, "deployed_addresses.json"),
-  );
-  const addressOf = (name: string): Address => {
-    const a = deployed[`DeployModule#${name}`];
-    if (!a) throw new Error(`DeployModule#${name} missing from deployed_addresses.json`);
-    return getAddress(a);
-  };
+  const {
+    journal,
+    syncState,
+    syncStatePath,
+    addressOf,
+    sp,
+    rl,
+    allMaps,
+    allPlacements,
+    mapIds,
+    nodeIds,
+    configIds,
+  } = loadDeployment(deployDir);
+  const saveSyncState = () =>
+    fs.writeFileSync(syncStatePath, JSON.stringify(syncState, null, 2) + "\n");
   const contract = async (name: string) => ({
     address: addressOf(name),
     abi: (await hre.artifacts.readArtifact(name)).abi as Abi,
@@ -177,47 +105,9 @@ async function main() {
   const read = (c: { address: Address; abi: Abi }, functionName: string, args: unknown[] = []) =>
     publicClient.readContract({ ...c, functionName, args }) as Promise<any>;
 
-  const sp = readJson(path.join(DATA_DIR, "singlePlayerStarterContent.json"));
-  const rl = readJson(path.join(DATA_DIR, "roguelikeStarterContent.json"));
-  const pvp = readJson(path.join(DATA_DIR, "pvpStarterContent.json"));
-  // Same order as DeployAndConfig.ts.
-  const allMaps: any[] = [...sp.maps, ...rl.maps, ...pvp.maps];
-  const allPlacements: any[] = [...sp.mapPlacements, ...rl.mapPlacements];
-
-  const journal = readJournal(journalPath);
-  // "ignored": on-chain ids that belong to no seed entry (e.g. a duplicate
-  // left by a failed run), so they don't count as unknown.
-  const syncState: {
-    maps: Record<string, string>;
-    roguelikeNodes: Record<string, string>;
-    ignored?: { maps?: string[]; roguelikeNodes?: string[] };
-  } = fs.existsSync(syncStatePath)
-    ? readJson(syncStatePath)
-    : { maps: {}, roguelikeNodes: {} };
-  const saveSyncState = () =>
-    fs.writeFileSync(syncStatePath, JSON.stringify(syncState, null, 2) + "\n");
-
-  const mapIds = idsFromJournal(
-    journal,
-    allMaps.map((m) => m.key),
-    (k) => `DeployModule#Create${cap(k)}Map`,
-  );
-  for (const [k, id] of Object.entries(syncState.maps)) mapIds.set(k, BigInt(id));
-  const nodeIds = idsFromJournal(
-    journal,
-    rl.nodes.map((n: any) => n.key),
-    (k) => `DeployModule#CreateRoguelike${cap(k)}Node`,
-  );
-  for (const [k, id] of Object.entries(syncState.roguelikeNodes))
-    nodeIds.set(k, BigInt(id));
-
-  const configIds = new Map<string, bigint>();
-  for (const c of sp.aiShipConfigs) {
-    const id = journal.readResults.get(`DeployModule#Read${cap(c.key)}ConfigId`);
-    if (id === undefined)
+  for (const c of sp.aiShipConfigs)
+    if (!configIds.has(c.key))
       console.warn(`WARN: AI config "${c.key}" was never created on chain (not synced by this script).`);
-    else configIds.set(c.key, id);
-  }
   for (const c of sp.campaigns)
     if (!journal.completed.has(`DeployModule#Create${cap(c.key)}Campaign`))
       console.warn(`WARN: campaign "${c.key}" is new in the seed (not synced by this script).`);
@@ -508,6 +398,21 @@ async function main() {
     const have: Address[] = id <= chainNodeCount ? await read(nodeMap, "getNodeWinEffects", [id]) : [];
     if (have.map((a) => getAddress(a)).join() !== want.join())
       await send(`node "${node.key}" (#${id}) win effects -> [${(node.winEffects ?? []).join(", ")}]`, nodeMap, "setNodeWinEffects", [id, want]);
+  }
+
+  // Reward ships (ShipGrantWinEffect; seed field `shipGrant`). Grants are
+  // keyed by node id, so a node created above in plan mode has none yet.
+  const shipGrant = await contract("ShipGrantWinEffect");
+  for (const node of rl.nodes) {
+    const id = nodeIds.get(node.key)!;
+    const want = node.shipGrant ? toShipGrant(node.shipGrant) : undefined;
+    const has = id <= chainNodeCount && (await read(shipGrant, "hasGrant", [id]));
+    const have = has ? toShipGrant(await read(shipGrant, "getGrant", [id])) : undefined;
+    if (JSON.stringify(have) === JSON.stringify(want)) continue;
+    if (want)
+      await send(`node "${node.key}" (#${id}) reward ship -> "${want.name}"`, shipGrant, "setGrant", [id, want]);
+    else
+      await send(`node "${node.key}" (#${id}) reward ship cleared`, shipGrant, "clearGrant", [id]);
   }
 
   console.log(

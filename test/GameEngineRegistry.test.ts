@@ -295,7 +295,7 @@ describe("GameEngineRegistry — in-flight engine upgrades", function () {
   describe("HA4-01: two SinglePlayerMatch instances never collide", function () {
     const defaultTraits = {
       serialNumber: 0n,
-      colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 },
+      colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0 },
       variant: 1,
       accuracy: 0,
       hull: 0,

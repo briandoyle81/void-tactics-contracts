@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./Types.sol";
 import "./IEffectResolver.sol";
 import "./IShipAttributes.sol";
-import "./IShips.sol";
 
 // Split out of Game.sol — already the tightest-margin contract in the repo —
 // and deployed as a standalone library (an external function taking
@@ -29,6 +28,11 @@ library SpecialEffectsLib {
     error ShipNotFound();
     error ShipDestroyed();
     error RelocationDestinationOccupied();
+    error RelocationOutOfBounds();
+
+    // Must match Game.sol's GRID_WIDTH / GRID_HEIGHT.
+    int16 constant GRID_WIDTH = 17;
+    int16 constant GRID_HEIGHT = 11;
 
     // Bundled to keep resolveAndApply's own parameter/local count low
     // (Solidity's legacy codegen runs out of stack slots quickly across a
@@ -71,7 +75,6 @@ library SpecialEffectsLib {
     function resolveAndApply(
         GameData storage game,
         address resolver,
-        IShips ships,
         ResolveContext memory ctx
     ) external returns (EffectResults memory results) {
         // Defense in depth: guarantee a non-zero target actually exists and
@@ -80,10 +83,13 @@ library SpecialEffectsLib {
         // relying on every resolver to reimplement this check itself. 0
         // means "no target" (e.g. a self-centered ability), same convention
         // FlakArray already uses.
+        // Read from this game's board (2026-10-31; was a Ships.getShip
+        // call): a target must have been placed in this game, and not
+        // destroyed since.
         if (ctx.targetShipId != 0) {
-            Ship memory targetShip = ships.getShip(ctx.targetShipId);
-            if (targetShip.id == 0) revert ShipNotFound();
-            if (targetShip.shipData.timestampDestroyed != 0) revert ShipDestroyed();
+            ShipBoardState storage target = game.shipBoard[ctx.targetShipId];
+            if (!target.placed) revert ShipNotFound();
+            if (target.status == 1) revert ShipDestroyed();
         }
 
         SpecialEffect[] memory effects = IEffectResolver(resolver).resolveEffect(
@@ -154,7 +160,7 @@ library SpecialEffectsLib {
             return (true, _effect.removalKind);
         }
 
-        Attributes storage attrs = game.shipAttributes[_effect.shipId];
+        ShipBoardState storage attrs = game.shipBoard[_effect.shipId];
 
         if (_effect.reactorTimerDelta != 0) {
             // Matches the old native EMP's unconditional lastDamage write on
@@ -164,7 +170,7 @@ library SpecialEffectsLib {
             // writing it here on every delta is the minimal-diff match for
             // prior behavior and self-attributes a rammer that destroys
             // itself on its own 3rd ram.
-            game.lastDamage[_effect.shipId] = _actingShipId;
+            attrs.lastDamager = uint48(_actingShipId);
             int16 newTimer = int16(uint16(attrs.reactorCriticalTimer)) +
                 int16(_effect.reactorTimerDelta);
             if (newTimer < 0) newTimer = 0;
@@ -199,7 +205,7 @@ library SpecialEffectsLib {
     // as RoguelikeMatch.sol's campaignAutoHealPercent floor.
     function _applyHullDelta(
         GameData storage game,
-        Attributes storage attrs,
+        ShipBoardState storage attrs,
         uint _shipId,
         int16 _hullDelta,
         uint _actingShipId,
@@ -209,15 +215,17 @@ library SpecialEffectsLib {
             uint16 damage = uint16(uint32(-int32(_hullDelta)));
             if (damage >= attrs.hullPoints) {
                 attrs.hullPoints = 0;
+                _setLive(game, attrs, false);
                 // HA6-24: remember it had already moved this round (see
-                // GameData.zeroedAfterMovingInRound).
-                if (EnumerableSet.remove(game.shipMovedThisRound, _shipId)) {
-                    game.zeroedAfterMovingInRound[_shipId] = game
-                        .turnState
-                        .currentRound;
+                // ShipBoardState.zeroedAfterMovingRound).
+                uint24 round = uint24(game.turnState.currentRound);
+                if (attrs.movedInRound == round) {
+                    attrs.movedInRound = 0;
+                    game.movedTotal--;
+                    attrs.zeroedAfterMovingRound = round;
                 }
                 EnumerableSet.add(game.shipsWithZeroHP, _shipId);
-                game.lastDamage[_shipId] = _actingShipId;
+                attrs.lastDamager = uint48(_actingShipId);
             } else {
                 attrs.hullPoints -= uint8(damage);
             }
@@ -242,14 +250,17 @@ library SpecialEffectsLib {
             // and stalled the round (docs/audit-3.md HA6-25).
             if (currentHullPoints == 0 && attrs.hullPoints > 0) {
                 EnumerableSet.remove(game.shipsWithZeroHP, _shipId);
+                _setLive(game, attrs, true);
                 // HA6-24: going to 0 HP cleared its moved flag. If it had
                 // already acted this round, it counts as moved again so it
                 // can't act twice; a ship downed before moving keeps its move.
+                uint24 round = uint24(game.turnState.currentRound);
                 if (
-                    game.zeroedAfterMovingInRound[_shipId] ==
-                    game.turnState.currentRound
+                    attrs.zeroedAfterMovingRound == round &&
+                    attrs.movedInRound != round
                 ) {
-                    EnumerableSet.add(game.shipMovedThisRound, _shipId);
+                    attrs.movedInRound = round;
+                    game.movedTotal++;
                 }
             }
         }
@@ -266,8 +277,17 @@ library SpecialEffectsLib {
         for (uint i = 0; i < _shipIds.length; i++) {
             int16 newRow = int16(_positions[i] / 1000);
             int16 newCol = int16(_positions[i] % 1000);
-            Position storage p = game.shipPositions[_shipIds[i]].position;
-            game.grid[p.row][p.col] = 0;
+            // Out-of-range cells used to land on unused mapping keys; in the
+            // occupancy bitmap (2026-10-31) they would alias another cell.
+            if (
+                newRow < 0 ||
+                newCol < 0 ||
+                newRow >= GRID_HEIGHT ||
+                newCol >= GRID_WIDTH
+            ) revert RelocationOutOfBounds();
+            ShipBoardState storage p = game.shipBoard[_shipIds[i]];
+            uint256 oldBit = _cellBit(p.row, p.col);
+            uint256 occupied = game.occupied & ~oldBit;
             // HA3-05: every other grid-write path in this codebase (moveShip,
             // _placeShipOnGrid) rejects an occupied destination — this one
             // didn't. Checked after clearing the source cell above (so a
@@ -276,12 +296,37 @@ library SpecialEffectsLib {
             // before writing, so a genuine collision reverts instead of
             // silently desyncing grid from shipPositions with no way to
             // detect or repair it later.
-            if (game.grid[newRow][newCol] != 0) {
+            uint256 newBit = _cellBit(newRow, newCol);
+            if (occupied & newBit != 0) {
                 revert RelocationDestinationOccupied();
             }
-            game.grid[newRow][newCol] = _shipIds[i];
+            game.occupied = occupied | newBit;
+            if (p.status == 0 && p.hullPoints > 0) {
+                game.live[p.isCreator ? 0 : 1] ^= oldBit | newBit;
+            }
             p.row = newRow;
             p.col = newCol;
         }
+    }
+
+    // Sets or clears a ship's bit in its side's live bitmap (GameData.live).
+    // Skipped for a ship no longer on the board: its old cell may now hold
+    // another ship of the same side.
+    function _setLive(
+        GameData storage game,
+        ShipBoardState storage attrs,
+        bool _isLive
+    ) private {
+        if (attrs.status != 0) return;
+        uint side = attrs.isCreator ? 0 : 1;
+        uint256 bit = _cellBit(attrs.row, attrs.col);
+        if (_isLive) game.live[side] |= bit;
+        else game.live[side] &= ~bit;
+    }
+
+    function _cellBit(int16 _row, int16 _col) private pure returns (uint256) {
+        return
+            uint256(1) <<
+            (uint(uint16(_row)) * uint(uint16(GRID_WIDTH)) + uint(uint16(_col)));
     }
 }

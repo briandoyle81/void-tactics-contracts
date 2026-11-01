@@ -53,7 +53,6 @@ describe("Effect resolver target-status validation (SP-02)", function () {
     movement: 0,
     damageReduction: 0,
     reactorCriticalTimer: 0,
-    statusEffects: [],
   };
 
   async function deployGameView() {

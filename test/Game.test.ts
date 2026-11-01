@@ -19,7 +19,9 @@ import {
   setShipHullPointsToZero,
   setShipHullPoints,
   primeShipForRealDestruction,
+  isCellOccupied,
 } from "./helpers/gameStorage";
+import { expectLiveBitmapsConsistent } from "./helpers/liveBitmaps";
 
 // Replaces debugDestroyShip: primes the ship (hullPoints=0,
 // reactorCriticalTimer=2, added to shipsWithZeroHP) then drives exactly one
@@ -903,7 +905,6 @@ describe("Game", function () {
       expect(creatorAttrs.movement).to.be.greaterThanOrEqual(0);
       expect(creatorAttrs.range).to.be.greaterThan(0);
       expect(creatorAttrs.gunDamage).to.be.greaterThan(0);
-      expect(creatorAttrs.statusEffects.length).to.equal(0);
 
       // Verify joiner ship attributes (second in the array)
       const joinerAttrs = gameData.shipAttributes[1];
@@ -912,7 +913,6 @@ describe("Game", function () {
       expect(joinerAttrs.movement).to.be.greaterThanOrEqual(0);
       expect(joinerAttrs.range).to.be.greaterThan(0);
       expect(joinerAttrs.gunDamage).to.be.greaterThan(0);
-      expect(joinerAttrs.statusEffects.length).to.equal(0);
     });
 
     it("pins each ship's attributes version at game start, unaffected by a later publish", async function () {
@@ -3506,6 +3506,8 @@ describe("Game", function () {
       );
       expect(destroyedShip1).to.not.equal(undefined);
       expect(destroyedShip1.status).to.equal(1); // 1 = destroyed
+      // A gone ship keeps its side (reported false before 2026-10-30).
+      expect(destroyedShip1.isCreator).to.equal(true);
 
       // Creator's round-2 move (the ShipDestroyed revert attempt above
       // didn't consume creator's turn).
@@ -3599,7 +3601,7 @@ describe("Game", function () {
       // via the debug backdoor) is no longer independently reachable
       // without that backdoor. What's still verifiable: re-priming the
       // same, already-gone ship and completing another round doesn't
-      // silently re-process it — `ships.isShipDestroyed` gates the
+      // silently re-process it — the ship's board status gates the
       // reactor-timer removal path (see Game.sol's
       // _incrementReactorCriticalTimerForZeroHPShips), so
       // timestampDestroyed must stay exactly what it was set to the first
@@ -4171,6 +4173,178 @@ describe("Game", function () {
       ).to.be.rejectedWith("InvalidMove");
     });
 
+    // Game stores each ship's board state packed into one slot since
+    // 2026-10-30; getShipPosition rebuilds the ShipPosition the resolvers
+    // read, including shipId 0 for a ship never placed in the game.
+    it("getShipPosition reads back placed ships (including at 0,0) and returns shipId 0 for an unplaced one", async function () {
+      const { creatorLobbies, joinerLobbies, creator, joiner, ships, game, randomManager } =
+        await loadFixture(deployGameFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      const totalShipCount = Number(await ships.read.shipCount());
+      for (let i = 1; i <= totalShipCount; i++) {
+        const ship = tupleToShip((await ships.read.ships([BigInt(i)])) as ShipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
+      await joinerLobbies.write.joinLobby([1n]);
+      // Creator ship 1 at (0,0): row, col and flags all zero apart from
+      // isCreator, the case `placed` exists to tell apart from "unset".
+      await creatorLobbies.write.createFleet([1n, [1n], [{ row: 0, col: 0 }]]);
+      await joinerLobbies.write.createFleet([1n, [6n], [{ row: 0, col: 16 }]]);
+
+      const creatorPos = await game.read.getShipPosition([1n, 1n]);
+      expect(creatorPos.shipId).to.equal(1n);
+      expect(creatorPos.position).to.deep.equal({ row: 0, col: 0 });
+      expect(creatorPos.isCreator).to.equal(true);
+      expect(creatorPos.status).to.equal(0);
+
+      const joinerPos = await game.read.getShipPosition([1n, 6n]);
+      expect(joinerPos.shipId).to.equal(6n);
+      expect(joinerPos.position).to.deep.equal({ row: 0, col: 16 });
+      expect(joinerPos.isCreator).to.equal(false);
+
+      // Ship 7 is real but was never placed in game 1.
+      const unplaced = await game.read.getShipPosition([1n, 7n]);
+      expect(unplaced.shipId).to.equal(0n);
+      expect(unplaced.status).to.equal(0);
+
+      const all = (await game.read.getGame([1n])) as unknown as GameDataView;
+      expect(findShipPosition(all, 1n)).to.deep.equal({ row: 0, col: 0 });
+      expect(findShipPosition(all, 6n)).to.deep.equal({ row: 0, col: 16 });
+
+      // lastMove is stored packed (2026-10-31); getGame must return every
+      // field as written. Pass ignores its target, so any id round-trips.
+      const mover = all.turnState.currentTurn.toLowerCase() === creator.account.address.toLowerCase()
+        ? { client: creator, shipId: 1n, row: 0, col: 0, target: 6n }
+        : { client: joiner, shipId: 6n, row: 0, col: 16, target: 1n };
+      const hash = await game.write.moveShip(
+        [1n, mover.shipId, mover.row, mover.col, ActionType.Pass, mover.target],
+        { account: mover.client.account },
+      );
+      const publicClient = await hre.viem.getPublicClient();
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      const block = await publicClient.getBlock({ blockNumber: receipt.blockNumber });
+      const after = (await game.read.getGame([1n])) as unknown as GameDataView;
+      expect(after.lastMove).to.deep.equal({
+        shipId: mover.shipId,
+        oldRow: mover.row,
+        oldCol: mover.col,
+        newRow: mover.row,
+        newCol: mover.col,
+        actionType: ActionType.Pass,
+        targetShipId: mover.target,
+        timestamp: block.timestamp,
+      });
+    });
+
+    it("keeps the occupancy bitmap in step with relocations and retreats, and rejects off-board relocations", async function () {
+      const { creatorLobbies, joinerLobbies, creator, joiner, ships, game, randomManager, owner } =
+        await loadFixture(deployGameFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      const totalShipCount = Number(await ships.read.shipCount());
+      for (let i = 1; i <= totalShipCount; i++) {
+        const ship = tupleToShip((await ships.read.ships([BigInt(i)])) as ShipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      // Every faction ability relocates its user to the resolver's target.
+      // Resolvers can only be set before this engine's first game.
+      const resolver = await hre.viem.deployContract("MockRelocateResolver");
+      for (const id of [1n, 6n]) {
+        const ship = tupleToShip((await ships.read.ships([id])) as ShipTuple);
+        await game.write.setFactionAbilityResolver(
+          [ship.traits.variant, resolver.address],
+          { account: owner.account },
+        );
+      }
+
+      await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([1n, [1n], [{ row: 0, col: 0 }]]);
+      await joinerLobbies.write.createFleet([1n, [6n], [{ row: 0, col: 16 }]]);
+
+      expect(await isCellOccupied(game.address, 1n, 0, 0)).to.equal(true);
+      expect(await isCellOccupied(game.address, 1n, 0, 16)).to.equal(true);
+      expect(await isCellOccupied(game.address, 1n, 1, 0)).to.equal(false);
+
+      const gameData = (await game.read.getGame([1n])) as unknown as GameDataView;
+      const creatorFirst =
+        gameData.turnState.currentTurn.toLowerCase() === creator.account.address.toLowerCase();
+      const first = creatorFirst
+        ? { client: creator, shipId: 1n, col: 0 }
+        : { client: joiner, shipId: 6n, col: 16 };
+      const second = creatorFirst
+        ? { client: joiner, shipId: 6n, col: 16 }
+        : { client: creator, shipId: 1n, col: 0 };
+
+      // Column 17 is off the board; as a bit index it would alias (1, 0).
+      await resolver.write.setTarget([0, 17]);
+      await expect(
+        game.write.moveShip(
+          [1n, first.shipId, 0, first.col, ActionType.FactionAbility, 0n],
+          { account: first.client.account },
+        ),
+      ).to.be.rejectedWith("RelocationOutOfBounds");
+      await resolver.write.setTarget([-1, 0]);
+      await expect(
+        game.write.moveShip(
+          [1n, first.shipId, 0, first.col, ActionType.FactionAbility, 0n],
+          { account: first.client.account },
+        ),
+      ).to.be.rejectedWith("RelocationOutOfBounds");
+
+      // A relocation onto the other ship's cell is still rejected.
+      await resolver.write.setTarget([0, second.col]);
+      await expect(
+        game.write.moveShip(
+          [1n, first.shipId, 0, first.col, ActionType.FactionAbility, 0n],
+          { account: first.client.account },
+        ),
+      ).to.be.rejectedWith("RelocationDestinationOccupied");
+
+      await resolver.write.setTarget([5, 8]);
+      await game.write.moveShip(
+        [1n, first.shipId, 0, first.col, ActionType.FactionAbility, 0n],
+        { account: first.client.account },
+      );
+      expect(await isCellOccupied(game.address, 1n, 0, first.col)).to.equal(false);
+      expect(await isCellOccupied(game.address, 1n, 5, 8)).to.equal(true);
+      expect(await isCellOccupied(game.address, 1n, 0, second.col)).to.equal(true);
+      const moved = await game.read.getShipPosition([1n, first.shipId]);
+      expect(moved.position).to.deep.equal({ row: 5, col: 8 });
+      await expectLiveBitmapsConsistent(game, 1n);
+
+      // Retreating frees the cell.
+      await game.write.moveShip(
+        [1n, second.shipId, 0, second.col, ActionType.Retreat, 0n],
+        { account: second.client.account },
+      );
+      expect(await isCellOccupied(game.address, 1n, 0, second.col)).to.equal(false);
+      expect(await isCellOccupied(game.address, 1n, 5, 8)).to.equal(true);
+      await expectLiveBitmapsConsistent(game, 1n);
+    });
+
     it("should block shooting when line of sight is obstructed", async function () {
       const {
         creatorLobbies,
@@ -4544,9 +4718,6 @@ describe("Game", function () {
             h2: 0,
             s2: 0,
             l2: 0,
-            h3: 0,
-            s3: 0,
-            l3: 0,
           },
           variant: 1,
           accuracy: 0,
@@ -5141,6 +5312,7 @@ describe("Game", function () {
       expect(pos1.row).to.equal(5);
       expect(pos1.col).to.equal(6);
       expect(gameAfter.joinerActiveShipIds).to.not.include(6n);
+      await expectLiveBitmapsConsistent(game, 1n);
     });
 
     it("reverts when a non-faction-1 ship attempts a faction ability", async function () {
@@ -5715,6 +5887,7 @@ describe("Game", function () {
 
       const ship1AttrsAfter = await game.read.getShipAttributes([1n, 1]);
       expect(ship1AttrsAfter.reactorCriticalTimer).to.equal(1);
+      await expectLiveBitmapsConsistent(game, 1n);
     });
 
     it("should destroy ships with reactor critical timer >= 3 at the end of a round", async function () {
@@ -5840,7 +6013,7 @@ describe("Game", function () {
       expect(destroyedShip1).to.not.equal(undefined);
       expect(destroyedShip1.status).to.equal(1);
 
-      // Round 4: totalActiveShipsAtRoundStart=4, shipsRemovedThisRound=1 (ship 1 destroyed at round start). Need 3 moves.
+      // Round 4: totalActiveShipsAtRoundStart=4, 1 ship removed this round (ship 1 destroyed at round start). Need 3 moves.
       // Round 4 is even -> joiner first. Order: joiner 6, creator 2, joiner 7 -> round completes; round 5 starts with creator.
       const gameDataAfterDestroy = (await game.read.getGame([
         1n,
@@ -5971,6 +6144,7 @@ describe("Game", function () {
       const fledShip1 = allShipPositions.find((pos) => pos.shipId === 1n);
       expect(fledShip1).to.not.equal(undefined);
       expect(fledShip1!.status).to.equal(2); // 2 = fled
+      expect(fledShip1!.isCreator).to.equal(true);
       expect(fledShip1!.position.row).to.equal(creatorPos1.row);
       expect(fledShip1!.position.col).to.equal(creatorPos1.col);
 
@@ -5986,6 +6160,10 @@ describe("Game", function () {
       // Verify that the game can continue with remaining ships
       // After retreat, it should be joiner's turn
       gameData = (await game.read.getGame([1n])) as unknown as GameDataView;
+      // Ship 1 was first in the creator's active list, so removing it
+      // swapped ship 2 into its place (2026-10-30 packed lists); ship 2
+      // moving below confirms its stored list position was updated.
+      expect(gameData.creatorActiveShipIds).to.deep.equal([2n]);
       const joinerPos1After = findShipPosition(gameData, 6n);
       await game.write.moveShip(
         [
@@ -6141,9 +6319,6 @@ describe("Game", function () {
             h2: 0,
             s2: 0,
             l2: 0,
-            h3: 0,
-            s3: 0,
-            l3: 0,
           },
           variant: 1,
           accuracy: 0,
@@ -6275,9 +6450,6 @@ describe("Game", function () {
             h2: 0,
             s2: 0,
             l2: 0,
-            h3: 0,
-            s3: 0,
-            l3: 0,
           },
           variant: 1,
           accuracy: 0,
@@ -6373,7 +6545,7 @@ describe("Game", function () {
         const ship = tupleToShip((await ships.read.ships([BigInt(i)])) as ShipTuple);
         await randomManager.write.revealRandomness([ship.traits.serialNumber]);
       }
-      const colors = { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 };
+      const colors = { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0 };
       await ships.write.setIsAllowedToCreateShips([owner.account.address, true], {
         account: owner.account,
       });
@@ -6420,9 +6592,11 @@ describe("Game", function () {
       // The enemy knocks it to 0 HP (this clears its moved flag).
       await game.write.moveShip([1n, 6n, 5, 6, ActionType.Shoot, 2n], { account: joiner.account });
       expect((await game.read.getShipAttributes([1n, 2n])).hullPoints).to.equal(0);
+      await expectLiveBitmapsConsistent(game, 1n);
       // Ship 1 revives it.
       await game.write.moveShip([1n, 1n, 5, 3, ActionType.Special, 2n], { account: creator.account });
       expect((await game.read.getShipAttributes([1n, 2n])).hullPoints).to.be.greaterThan(0);
+      await expectLiveBitmapsConsistent(game, 1n);
 
       // Ship 2 already acted, so every ship has moved and the round ends.
       // Before the fix ship 2 counted as unmoved and got a second turn.
@@ -6449,6 +6623,7 @@ describe("Game", function () {
       const after = (await game.read.getGame([1n])) as unknown as GameDataView;
       expect(after.turnState.currentRound).to.equal(gd.turnState.currentRound + 1n);
       expect((await game.read.getShipAttributes([1n, 2n])).reactorCriticalTimer).to.equal(1);
+      await expectLiveBitmapsConsistent(game, 1n);
     });
 
     it("ends a game where both sides are fully disabled at once by score, as a draw on a tie (HA6-26)", async function () {
@@ -6553,9 +6728,6 @@ describe("Game", function () {
             h2: 0,
             s2: 0,
             l2: 0,
-            h3: 0,
-            s3: 0,
-            l3: 0,
           },
           variant: 1,
           accuracy: 0,
@@ -6673,9 +6845,6 @@ describe("Game", function () {
             h2: 0,
             s2: 0,
             l2: 0,
-            h3: 0,
-            s3: 0,
-            l3: 0,
           },
           variant: 1,
           accuracy: 0,
@@ -6818,9 +6987,6 @@ describe("Game", function () {
             h2: 0,
             s2: 0,
             l2: 0,
-            h3: 0,
-            s3: 0,
-            l3: 0,
           },
           variant: 1,
           accuracy: 0,
@@ -6964,9 +7130,6 @@ describe("Game", function () {
             h2: 0,
             s2: 0,
             l2: 0,
-            h3: 0,
-            s3: 0,
-            l3: 0,
           },
           variant: 1,
           accuracy: 0,
@@ -7115,9 +7278,6 @@ describe("Game", function () {
       h2: 0,
       s2: 0,
       l2: 0,
-      h3: 0,
-      s3: 0,
-      l3: 0,
     };
 
     function buildCustomShip(overrides: {
@@ -8168,6 +8328,139 @@ describe("Game", function () {
       expect(result.loser.toLowerCase()).to.equal(
         joiner.account.address.toLowerCase(),
       );
+    });
+
+    it("credits the kill to the ship whose shot downed the victim (lastDamager)", async function () {
+      const { creatorLobbies, joinerLobbies, creator, joiner, ships, game, randomManager } =
+        await loadFixture(deployGameFixture);
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const ship = tupleToShip((await ships.read.ships([BigInt(i)])) as ShipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+      await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await creatorLobbies.write.createFleet([1n, [1n, 2n], generateStartingPositions([1n, 2n], true)]);
+      await joinerLobbies.write.createFleet([1n, [6n, 7n], generateStartingPositions([6n, 7n], false)]);
+
+      // Shooter 1 next to victim 6, which has 1 HP left.
+      await setShipPosition(game.address, 1n, 1n, 5, 5);
+      await setShipPosition(game.address, 1n, 6n, 5, 6);
+      await setShipHullPoints(game.address, 1n, 6n, 1);
+
+      const movers: Record<string, { account: any; shipId: bigint }[]> = {
+        [creator.account.address.toLowerCase()]: [
+          { account: creator.account, shipId: 2n },
+        ],
+        [joiner.account.address.toLowerCase()]: [
+          { account: joiner.account, shipId: 7n },
+        ],
+      };
+      // Let the joiner go first if it's their turn, then the creator shoots.
+      let gd = (await game.read.getGame([1n])) as unknown as GameDataView;
+      if (gd.turnState.currentTurn.toLowerCase() === joiner.account.address.toLowerCase()) {
+        const pos = findShipPosition(gd, 7n);
+        await game.write.moveShip([1n, 7n, pos.row, pos.col, ActionType.Pass, 0n], { account: joiner.account });
+      }
+      await game.write.moveShip([1n, 1n, 5, 5, ActionType.Shoot, 6n], { account: creator.account });
+      expect((await game.read.getShipAttributes([1n, 6n])).hullPoints).to.equal(0);
+      const killsBefore = tupleToShip((await ships.read.ships([1n])) as ShipTuple).shipData.shipsDestroyed;
+
+      // One tick from critical; finishing the round destroys it.
+      await primeShipForRealDestruction(game.address, 1n, 6n);
+      for (let i = 0; i < 4; i++) {
+        gd = (await game.read.getGame([1n])) as unknown as GameDataView;
+        if (gd.metadata.ended || !gd.joinerActiveShipIds.includes(6n)) break;
+        const turn = gd.turnState.currentTurn.toLowerCase();
+        const moved = new Set(
+          [...gd.creatorMovedShipIds, ...gd.joinerMovedShipIds].map(String),
+        );
+        const m = movers[turn].find((x) => !moved.has(String(x.shipId))) ?? movers[turn][0];
+        const pos = findShipPosition(gd, m.shipId);
+        await game.write.moveShip([1n, m.shipId, pos.row, pos.col, ActionType.Pass, 0n], { account: m.account });
+      }
+
+      const victim = tupleToShip((await ships.read.ships([6n])) as ShipTuple);
+      expect(victim.shipData.timestampDestroyed).to.not.equal(0n);
+      const shooter = tupleToShip((await ships.read.ships([1n])) as ShipTuple);
+      expect(shooter.shipData.shipsDestroyed).to.be.greaterThan(killsBefore);
+    });
+
+    it("does not score a tile held by a 0 HP ship", async function () {
+      const { creatorLobbies, joinerLobbies, creator, joiner, ships, game, maps, randomManager, owner } =
+        await loadFixture(deployGameFixture);
+
+      await ships.write.purchaseWithFlow(
+        [creator.account.address, 0n, joiner.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      await ships.write.purchaseWithFlow(
+        [joiner.account.address, 0n, creator.account.address, 1],
+        { value: parseEther("4.99") },
+      );
+      for (let i = 1; i <= 10; i++) {
+        const ship = tupleToShip((await ships.read.ships([BigInt(i)])) as ShipTuple);
+        await randomManager.write.revealRandomness([ship.traits.serialNumber]);
+      }
+      await ships.write.constructAllMyShips({ account: creator.account });
+      await ships.write.constructAllMyShips({ account: joiner.account });
+
+      await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
+      await joinerLobbies.write.joinLobby([1n]);
+      // Two creator ships so the creator still has a mover after one is downed.
+      await creatorLobbies.write.createFleet([
+        1n,
+        [1n, 2n],
+        generateStartingPositions([1n, 2n], true),
+      ]);
+      await joinerLobbies.write.createFleet([
+        1n,
+        [6n],
+        generateStartingPositions([6n], false),
+      ]);
+
+      const gameId = 1n;
+      const gameData = (await game.read.getGame([gameId])) as GameDataView;
+      const downedPos = findShipPosition(gameData, 2n);
+      const joinerPos = findShipPosition(gameData, 6n);
+      await maps.write.setScoringTile(
+        [gameId, downedPos.row, downedPos.col, 5],
+        { account: owner.account },
+      );
+      await maps.write.setScoringTile(
+        [gameId, joinerPos.row, joinerPos.col, 3],
+        { account: owner.account },
+      );
+      await setShipHullPointsToZero(game.address, gameId, 2n);
+
+      // Each live ship passes once, in turn order, to complete round 1.
+      const creatorPos = findShipPosition(gameData, 1n);
+      const movers = {
+        [creator.account.address.toLowerCase()]: { client: creator, shipId: 1n, pos: creatorPos },
+        [joiner.account.address.toLowerCase()]: { client: joiner, shipId: 6n, pos: joinerPos },
+      };
+      for (let i = 0; i < 2; i++) {
+        const current = (await game.read.getGame([gameId])) as GameDataView;
+        if (current.turnState.currentRound !== 1n) break;
+        const m = movers[current.turnState.currentTurn.toLowerCase()];
+        await game.write.moveShip(
+          [gameId, m.shipId, m.pos.row, m.pos.col, ActionType.Pass, 0n],
+          { account: m.client.account },
+        );
+      }
+
+      const after = (await game.read.getGame([gameId])) as GameDataView;
+      expect(after.creatorScore).to.equal(0n);
+      expect(after.joinerScore).to.equal(3n);
     });
 
     it("should award win to joiner when their score exceeds maxScore and is higher than creator after simultaneous scoring", async function () {

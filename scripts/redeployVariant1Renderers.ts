@@ -331,7 +331,7 @@ async function main() {
     equipment: { mainWeapon: 0, armor: 1, shields: 0, special: 0 },
     traits: {
       serialNumber: 1n,
-      colors: { h1: 0, s1: 85, l1: 50, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 },
+      colors: { h1: 0, s1: 85, l1: 50, h2: 0, s2: 0, l2: 0 },
       variant: 1,
       accuracy: 1,
       hull: 1,

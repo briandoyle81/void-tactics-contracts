@@ -5,10 +5,7 @@
     "l1": 0,
     "h2": 0,
     "s2": 0,
-    "l2": 0,
-    "h3": 0,
-    "s3": 0,
-    "l3": 0
+    "l2": 0
   },
   "aiShipConfigs": [
     {
@@ -10678,12 +10675,24 @@
           "col": 14
         },
         {
+          "row": 0,
+          "col": 15
+        },
+        {
           "row": 1,
           "col": 14
         },
         {
+          "row": 1,
+          "col": 15
+        },
+        {
           "row": 2,
           "col": 14
+        },
+        {
+          "row": 2,
+          "col": 15
         },
         {
           "row": 3,
@@ -10700,8 +10709,11 @@
       ],
       "configKeys": [
         "v2grunt4",
+        "v2support4",
         "v2grunt",
+        "v2sniper3",
         "v2aggressor3",
+        "v2sniper",
         "v2support3",
         "v2sniper3",
         "v2turtle3"

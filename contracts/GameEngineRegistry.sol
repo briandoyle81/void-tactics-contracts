@@ -24,8 +24,6 @@ contract GameEngineRegistry is Ownable {
     struct EngineInfo {
         bool registered;
         string label;
-        uint deployedAt;
-        bool retired;
     }
 
     // Which engine's orchestrators (Lobbies/PvPMatch/SinglePlayerMatch/
@@ -42,9 +40,8 @@ contract GameEngineRegistry is Ownable {
     // call in (see RoguelikeMatch's own note on this, if it applies).
     mapping(uint => address) public engineOfGame;
 
-    // Every engine ever registered, in registration order, plus per-engine
-    // metadata for FE display (a version label, when it was added, and
-    // whether it's retired — informational only, never enforced here).
+    // Every engine ever registered, in registration order, plus its version
+    // label. When it was added is the EngineRegistered event's block.
     address[] public engines;
     mapping(address => EngineInfo) public engineInfo;
 
@@ -60,7 +57,6 @@ contract GameEngineRegistry is Ownable {
     error GameAlreadyRecorded();
 
     event EngineRegistered(address indexed engine, string label);
-    event EngineRetired(address indexed engine, bool retired);
     event CurrentEngineSet(address indexed engine);
     event RecorderSet(address indexed recorder, bool allowed);
     event GameEngineRecorded(uint indexed gameId, address indexed engine);
@@ -77,9 +73,7 @@ contract GameEngineRegistry is Ownable {
         if (engineInfo[_game].registered) revert EngineAlreadyRegistered();
         engineInfo[_game] = EngineInfo({
             registered: true,
-            label: _label,
-            deployedAt: block.timestamp,
-            retired: false
+            label: _label
         });
         engines.push(_game);
         emit EngineRegistered(_game, _label);
@@ -96,15 +90,6 @@ contract GameEngineRegistry is Ownable {
         if (!engineInfo[_game].registered) revert EngineNotRegistered();
         currentEngine = _game;
         emit CurrentEngineSet(_game);
-    }
-
-    /// @dev Marks an engine retired for FE display purposes only — never
-    ///      enforced here (an old engine's own contracts are what actually
-    ///      stop taking new games, if anything does).
-    function setRetired(address _game, bool _retired) external onlyOwner {
-        if (!engineInfo[_game].registered) revert EngineNotRegistered();
-        engineInfo[_game].retired = _retired;
-        emit EngineRetired(_game, _retired);
     }
 
     function setIsAllowedToRecord(
@@ -126,13 +111,5 @@ contract GameEngineRegistry is Ownable {
         if (engineOfGame[_gameId] != address(0)) revert GameAlreadyRecorded();
         engineOfGame[_gameId] = _engine;
         emit GameEngineRecorded(_gameId, _engine);
-    }
-
-    function engineCount() external view returns (uint) {
-        return engines.length;
-    }
-
-    function getEngines() external view returns (address[] memory) {
-        return engines;
     }
 }

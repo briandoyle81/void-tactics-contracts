@@ -63,7 +63,6 @@ describe("Special resolvers read the game-pinned attributes version", function (
       movement: 0,
       damageReduction: 0,
       reactorCriticalTimer: 0,
-      statusEffects: [],
     };
   }
 

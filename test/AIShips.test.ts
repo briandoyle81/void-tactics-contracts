@@ -22,7 +22,6 @@ describe("AIShips", function () {
     await seedVariant1Attributes(shipAttributes, owner.account);
     const aiShips = await hre.viem.deployContract("AIShips", []);
 
-    await aiShips.write.setShipAttributesAddress([shipAttributes.address]);
     await aiShips.write.setRouter([router.account.address]);
     await aiShips.write.setIsAllowedToCreateShips([
       allowedMinter.account.address,
@@ -64,7 +63,7 @@ describe("AIShips", function () {
     equipment: { mainWeapon: 0, armor: 0, shields: 0, special: 0 },
     traits: {
       serialNumber: 0n,
-      colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0, h3: 0, s3: 0, l3: 0 },
+      colors: { h1: 0, s1: 0, l1: 0, h2: 0, s2: 0, l2: 0 },
       variant: 1,
       accuracy: 0,
       hull: 0,
@@ -109,7 +108,10 @@ describe("AIShips", function () {
         other.account.address.toLowerCase(),
       );
       expect(ship.shipData.constructed).to.equal(true);
-      expect(ship.shipData.cost).to.be.greaterThan(0);
+      // AI ships aren't priced (2026-10-30); the frontend computes the
+      // cost to show from the ship's equipment and traits.
+      expect(ship.shipData.cost).to.equal(0);
+      expect(ship.shipData.costsVersion).to.equal(0);
     });
 
     it("allocates sequential ids for successive ships with no free slots available", async function () {
@@ -240,6 +242,50 @@ describe("AIShips", function () {
       const shipC = await aiShips.read.getShip([AI_SHIP_ID_OFFSET + 2n]);
       expect(shipB.name).to.equal("B");
       expect(shipC.name).to.equal("C");
+    });
+
+    // The free list's array never shrinks (2026-10-31): allocation only
+    // moves freeSlotCount, and the next release overwrites the stale
+    // entries instead of pushing new ones.
+    it("reuses the free list's stale entries without growing it or handing an id out twice", async function () {
+      const { minterAiShips, aiShips, other } = await loadFixture(
+        deployFixture,
+      );
+      const allocate = async (name: string) => {
+        await minterAiShips.write.allocateShip([
+          other.account.address,
+          shipTemplate({ name }),
+        ]);
+      };
+      const ids = [1n, 2n, 3n].map((n) => AI_SHIP_ID_OFFSET + n);
+
+      for (const name of ["A", "B", "C"]) await allocate(name);
+      await minterAiShips.write.releaseShips([ids]);
+      expect(await aiShips.read.freeSlotCount()).to.equal(3n);
+
+      // Two allocations take slots 3 and 2, leaving slot 1 free.
+      await allocate("D");
+      await allocate("E");
+      expect(await aiShips.read.freeSlotCount()).to.equal(1n);
+      expect((await aiShips.read.getShip([ids[2]])).name).to.equal("D");
+      expect((await aiShips.read.getShip([ids[1]])).name).to.equal("E");
+
+      // Releasing slot 1 again is skipped; slots 2 and 3 go back.
+      await minterAiShips.write.releaseShips([[ids[0], ids[1], ids[2]]]);
+      expect(await aiShips.read.freeSlotCount()).to.equal(3n);
+      await expect(aiShips.read.freeSlots([3n])).to.be.rejected;
+
+      for (const name of ["F", "G", "H"]) await allocate(name);
+      expect(await aiShips.read.freeSlotCount()).to.equal(0n);
+      expect(await aiShips.read.slotCount()).to.equal(3n);
+      const names = await Promise.all(
+        ids.map(async (id) => (await aiShips.read.getShip([id])).name),
+      );
+      expect([...names].sort()).to.deep.equal(["F", "G", "H"]);
+
+      // Empty pool: the next allocation grows.
+      await allocate("I");
+      expect(await aiShips.read.slotCount()).to.equal(4n);
     });
   });
 

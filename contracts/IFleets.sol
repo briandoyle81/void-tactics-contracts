@@ -24,6 +24,25 @@ interface IFleets {
         uint _mapId
     ) external returns (uint);
 
+    function transferFleet(
+        uint _fromFleetId,
+        uint _lobbyId,
+        address _owner,
+        uint[] calldata _shipIds,
+        Position[] calldata _startingPositions,
+        uint _costLimit,
+        bool _isCreator,
+        uint _mapId
+    ) external returns (uint fleetId);
+
+    function reserveFleet(
+        uint _fromFleetId,
+        address _owner,
+        uint[] calldata _shipIds,
+        Position[] calldata _startingPositions,
+        uint _costLimit
+    ) external returns (uint fleetId);
+
     function clearFleet(uint _fleetId) external;
 
     function removeShipFromFleet(uint _fleetId, uint _shipId) external;

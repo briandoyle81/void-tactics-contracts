@@ -40,24 +40,39 @@ import {
 const GAMES_SLOT = 10n;
 
 // GameData (Types.sol) field offsets, relative to a given game's base slot.
-const GD_SHIP_ATTRIBUTES = 22n;
-const GD_GRID = 23n;
-const GD_SHIP_POSITIONS = 24n;
-const GD_SHIP_MOVED_THIS_ROUND = 26n;
-const GD_SHIPS_WITH_ZERO_HP = 28n;
+// Re-derived 2026-10-30 after the shipAttributes mapping was folded into
+// shipBoard and the moved-ships set became a count plus per-ship rounds,
+// and again 2026-10-31 after lastMove shrank from four slots to one and
+// the moved count became movedTotal - movedAtRoundStart, and the grid
+// mapping became the one-word `occupied` bitmap (same slot), and
+// `live[2]` (per-side live-ship bitmaps) was appended, and the lastDamage
+// mapping moved into ShipBoardState (every later field shifts down one).
+const GD_CURRENT_ROUND = 13n; // turnState (10) + GameTurnState.currentRound (3)
+const GD_OCCUPIED = 19n;
+// Must match Game.sol's GRID_WIDTH / GRID_HEIGHT.
+const GRID_WIDTH = 17;
+const GRID_HEIGHT = 11;
+const GD_SHIP_BOARD = 20n;
+const GD_MOVED_TOTAL = 21n;
+const GD_LIVE = 32n; // live[0] = creator, live[1] = joiner
+const GD_SHIPS_WITH_ZERO_HP = 23n;
 
-// Attributes (Types.sol) packs into slot 0: version(u16,0) range(u8,2)
-// gunDamage(u8,3) hullPoints(u8,4) maxHullPoints(u8,5) movement(u8,6)
-// damageReduction(u8,7) reactorCriticalTimer(u8,8). Byte offsets are
-// measured from the word's least-significant byte (Solidity convention).
-const ATTR_HULL_POINTS_BYTE_OFFSET = 4;
-const ATTR_REACTOR_TIMER_BYTE_OFFSET = 8;
-
-// ShipPosition (Types.sol): slot+0 shipId, slot+1 position (Position:
-// row int16 @0, col int16 @2), slot+2 isCreator(bool,@0)/status(uint8,@1).
-const SP_POSITION_SLOT_OFFSET = 1n;
-const SP_FLAGS_SLOT_OFFSET = 2n;
-const SP_STATUS_BYTE_OFFSET = 1;
+// ShipBoardState (Types.sol, 2026-10-30) packs a ship's board state and
+// stats into one slot: row(i16,@0) col(i16,@2) isCreator(bool,@4)
+// status(u8,@5) placed(bool,@6) version(u16,@7) range(u8,@9)
+// gunDamage(u8,@10) hullPoints(u8,@11) maxHullPoints(u8,@12)
+// movement(u8,@13) damageReduction(u8,@14) reactorCriticalTimer(u8,@15)
+// movedInRound(u24,@16) zeroedAfterMovingRound(u24,@19) activeIndex(u8,@22)
+// variant(u16,@23) special(u8,@25) lastDamager(u48,@26) (2026-10-31).
+// Byte offsets are measured from the word's least-significant byte
+// (Solidity convention). Checked against the compiler's storageLayout.
+const SB_ROW_BYTE_OFFSET = 0;
+const SB_COL_BYTE_OFFSET = 2;
+const SB_IS_CREATOR_BYTE_OFFSET = 4;
+const SB_STATUS_BYTE_OFFSET = 5;
+const SB_HULL_POINTS_BYTE_OFFSET = 11;
+const SB_REACTOR_TIMER_BYTE_OFFSET = 15;
+const SB_MOVED_IN_ROUND_BYTE_OFFSET = 16;
 
 // EnumerableSet.UintSet (OZ 5.3.0): _inner.slot+0 = _values (bytes32[]
 // length; data at keccak256(slot)), _inner.slot+1 = _positions (mapping
@@ -73,7 +88,7 @@ function pad32(value: bigint): Hex {
 }
 
 // Solidity mapping slot formula: keccak256(pad32(key) . pad32(baseSlot)).
-// Works identically for a uint256 key (games[gameId], shipPositions[shipId])
+// Works identically for a uint256 key (games[gameId], shipBoard[shipId])
 // and a bytes32 key (EnumerableSet's _positions[bytes32(value)]) — a
 // uint256 value and its bytes32 cast share the same 32-byte encoding.
 function mappingSlot(key: bigint, baseSlot: bigint): bigint {
@@ -123,24 +138,56 @@ function gameBaseSlot(gameId: bigint): bigint {
   return mappingSlot(gameId, GAMES_SLOT);
 }
 
-// Read-only: which shipId (0 = none) currently occupies a grid cell.
-// Exported for equivalence-test verification only, independent of
-// setShipPosition's write path (both derive the same slot via the same
-// mappingSlot/gameBaseSlot primitives, but this reads rather than writes,
-// so it isn't circular — getShipPosition already independently confirms
-// those primitives are correct before this is used to double-check grid
-// occupancy specifically).
-export async function getGridShipId(
+// A cell's bit in GameData.occupied (row * GRID_WIDTH + col, as in Game.sol).
+function cellBit(row: number, col: number): bigint {
+  if (row < 0 || col < 0 || row >= GRID_HEIGHT || col >= GRID_WIDTH) {
+    throw new Error(`cell (${row}, ${col}) is off the board`);
+  }
+  return 1n << BigInt(row * GRID_WIDTH + col);
+}
+
+// Sets or clears the cell's bit in its side's GameData.live word, given the
+// ship's board word (for its side).
+async function setLiveBit(
+  gameAddress: string,
+  gameId: bigint,
+  boardWord: bigint,
+  row: number,
+  col: number,
+  isLive: boolean
+): Promise<void> {
+  const isCreator = readByteRange(boardWord, SB_IS_CREATOR_BYTE_OFFSET, 1) !== 0n;
+  const slot = gameBaseSlot(gameId) + GD_LIVE + (isCreator ? 0n : 1n);
+  const word = await readWord(gameAddress, slot);
+  const bit = cellBit(row, col);
+  await setStorageAt(gameAddress, slot, isLive ? word | bit : word & ~bit);
+}
+
+function isLiveBoardWord(boardWord: bigint): boolean {
+  return (
+    readByteRange(boardWord, SB_STATUS_BYTE_OFFSET, 1) === 0n &&
+    readByteRange(boardWord, SB_HULL_POINTS_BYTE_OFFSET, 1) !== 0n
+  );
+}
+
+// Read-only: one side's GameData.live word, straight from storage.
+export async function getLiveBitmap(
+  gameAddress: string,
+  gameId: bigint,
+  isCreator: boolean
+): Promise<bigint> {
+  return readWord(gameAddress, gameBaseSlot(gameId) + GD_LIVE + (isCreator ? 0n : 1n));
+}
+
+// Read-only: whether a grid cell is occupied, straight from storage.
+export async function isCellOccupied(
   gameAddress: string,
   gameId: bigint,
   row: number,
   col: number
-): Promise<bigint> {
-  const gameSlot = gameBaseSlot(gameId);
-  const gridBase = gameSlot + GD_GRID;
-  const rowSlot = mappingSlot(fromInt16(row), gridBase);
-  const cellSlot = mappingSlot(fromInt16(col), rowSlot);
-  return readWord(gameAddress, cellSlot);
+): Promise<boolean> {
+  const occupied = await readWord(gameAddress, gameBaseSlot(gameId) + GD_OCCUPIED);
+  return (occupied & cellBit(row, col)) !== 0n;
 }
 
 // ---- EnumerableSet.UintSet add/remove (faithful OZ 5.3.0 replica) ----
@@ -196,9 +243,9 @@ async function enumerableSetRemove(
 // Replaces debugSetShipPosition. Reads the ship's current position first
 // (directly from storage, so this helper has no dependency on a contract
 // instance/ABI — just the deployed address) to know which grid cell to
-// clear, matching the real function's exact 4-write behavior: clear old
-// grid cell, set position, clear status (revive from destroyed/fled if it
-// was), set new grid cell.
+// clear, matching the real function's behavior: clear old grid cell, set
+// position and clear status (revive from destroyed/fled if it was) in the
+// ship's packed board slot, set new grid cell (bits in `occupied`).
 export async function setShipPosition(
   gameAddress: string,
   gameId: bigint,
@@ -207,66 +254,67 @@ export async function setShipPosition(
   col: number
 ): Promise<void> {
   const gameSlot = gameBaseSlot(gameId);
-  const shipPositionsBase = gameSlot + GD_SHIP_POSITIONS;
-  const spSlot0 = mappingSlot(shipId, shipPositionsBase);
-  const positionSlot = spSlot0 + SP_POSITION_SLOT_OFFSET;
-  const flagsSlot = spSlot0 + SP_FLAGS_SLOT_OFFSET;
+  const boardSlot = mappingSlot(shipId, gameSlot + GD_SHIP_BOARD);
 
-  const oldPositionWord = await readWord(gameAddress, positionSlot);
-  const oldRow = toInt16(readByteRange(oldPositionWord, 0, 2));
-  const oldCol = toInt16(readByteRange(oldPositionWord, 2, 2));
+  const oldWord = await readWord(gameAddress, boardSlot);
+  const oldRow = toInt16(readByteRange(oldWord, SB_ROW_BYTE_OFFSET, 2));
+  const oldCol = toInt16(readByteRange(oldWord, SB_COL_BYTE_OFFSET, 2));
 
-  const gridBase = gameSlot + GD_GRID;
-  const oldRowSlot = mappingSlot(fromInt16(oldRow), gridBase);
-  const oldCellSlot = mappingSlot(fromInt16(oldCol), oldRowSlot);
-  await setStorageAt(gameAddress, oldCellSlot, 0n);
 
-  let newPositionWord = 0n;
-  newPositionWord = writeByteRange(newPositionWord, 0, 2, fromInt16(row));
-  newPositionWord = writeByteRange(newPositionWord, 2, 2, fromInt16(col));
-  await setStorageAt(gameAddress, positionSlot, newPositionWord);
+  // Keeps isCreator and placed; writes row, col and status 0.
+  let newWord = writeByteRange(oldWord, SB_ROW_BYTE_OFFSET, 2, fromInt16(row));
+  newWord = writeByteRange(newWord, SB_COL_BYTE_OFFSET, 2, fromInt16(col));
+  newWord = writeByteRange(newWord, SB_STATUS_BYTE_OFFSET, 1, 0n);
+  await setStorageAt(gameAddress, boardSlot, newWord);
 
-  const flagsWord = await readWord(gameAddress, flagsSlot);
-  const newFlagsWord = writeByteRange(
-    flagsWord,
-    SP_STATUS_BYTE_OFFSET,
-    1,
-    0n
+  if (isLiveBoardWord(oldWord)) {
+    await setLiveBit(gameAddress, gameId, oldWord, oldRow, oldCol, false);
+  }
+  if (isLiveBoardWord(newWord)) {
+    await setLiveBit(gameAddress, gameId, newWord, row, col, true);
+  }
+
+  const occupiedSlot = gameSlot + GD_OCCUPIED;
+  const occupied = await readWord(gameAddress, occupiedSlot);
+  await setStorageAt(
+    gameAddress,
+    occupiedSlot,
+    (occupied & ~cellBit(oldRow, oldCol)) | cellBit(row, col)
   );
-  await setStorageAt(gameAddress, flagsSlot, newFlagsWord);
-
-  const newRowSlot = mappingSlot(fromInt16(row), gridBase);
-  const newCellSlot = mappingSlot(fromInt16(col), newRowSlot);
-  await setStorageAt(gameAddress, newCellSlot, shipId);
 }
 
-// Replaces debugSetHullPointsToZero: hullPoints=0, remove from
-// shipMovedThisRound, add to shipsWithZeroHP — same three effects as
+// Replaces debugSetHullPointsToZero: hullPoints=0, un-mark as moved this
+// round, add to shipsWithZeroHP — same three effects as
 // _setShipHPToZero plus the debug function's own extra explicit
-// shipMovedThisRound removal.
+// moved-flag removal.
 export async function setShipHullPointsToZero(
   gameAddress: string,
   gameId: bigint,
   shipId: bigint
 ): Promise<void> {
   const gameSlot = gameBaseSlot(gameId);
-  const shipAttributesBase = gameSlot + GD_SHIP_ATTRIBUTES;
-  const attrSlot0 = mappingSlot(shipId, shipAttributesBase);
+  const shipBoardBase = gameSlot + GD_SHIP_BOARD;
+  const boardSlot = mappingSlot(shipId, shipBoardBase);
 
-  const attrWord = await readWord(gameAddress, attrSlot0);
-  const newAttrWord = writeByteRange(
-    attrWord,
-    ATTR_HULL_POINTS_BYTE_OFFSET,
+  const boardWord = await readWord(gameAddress, boardSlot);
+  let newBoardWord = writeByteRange(
+    boardWord,
+    SB_HULL_POINTS_BYTE_OFFSET,
     1,
     0n
   );
-  await setStorageAt(gameAddress, attrSlot0, newAttrWord);
 
-  await enumerableSetRemove(
-    gameAddress,
-    gameSlot + GD_SHIP_MOVED_THIS_ROUND,
-    shipId
-  );
+  // Un-mark it as moved this round (movedInRound == currentRound), as the
+  // debug function's removal from the old moved-ships set did.
+  const currentRound = await readWord(gameAddress, gameSlot + GD_CURRENT_ROUND);
+  if (readByteRange(boardWord, SB_MOVED_IN_ROUND_BYTE_OFFSET, 3) === currentRound) {
+    newBoardWord = writeByteRange(newBoardWord, SB_MOVED_IN_ROUND_BYTE_OFFSET, 3, 0n);
+    const countSlot = gameSlot + GD_MOVED_TOTAL;
+    await setStorageAt(gameAddress, countSlot, (await readWord(gameAddress, countSlot)) - 1n);
+  }
+  await setStorageAt(gameAddress, boardSlot, newBoardWord);
+  await clearLiveBitOf(gameAddress, gameId, boardWord);
+
   await enumerableSetAdd(
     gameAddress,
     gameSlot + GD_SHIPS_WITH_ZERO_HP,
@@ -283,15 +331,39 @@ export async function setShipHullPoints(
   shipId: bigint,
   hp: number
 ): Promise<void> {
-  const attrSlot0 = mappingSlot(
+  const boardSlot = mappingSlot(
     shipId,
-    gameBaseSlot(gameId) + GD_SHIP_ATTRIBUTES
+    gameBaseSlot(gameId) + GD_SHIP_BOARD
   );
-  const attrWord = await readWord(gameAddress, attrSlot0);
-  await setStorageAt(
+  const boardWord = await readWord(gameAddress, boardSlot);
+  const newWord = writeByteRange(boardWord, SB_HULL_POINTS_BYTE_OFFSET, 1, BigInt(hp));
+  await setStorageAt(gameAddress, boardSlot, newWord);
+  if (readByteRange(boardWord, SB_STATUS_BYTE_OFFSET, 1) === 0n) {
+    await setLiveBit(
+      gameAddress,
+      gameId,
+      boardWord,
+      toInt16(readByteRange(boardWord, SB_ROW_BYTE_OFFSET, 2)),
+      toInt16(readByteRange(boardWord, SB_COL_BYTE_OFFSET, 2)),
+      hp > 0
+    );
+  }
+}
+
+// Clears a ship's live bit (it just went to 0 HP), if it is on the board.
+async function clearLiveBitOf(
+  gameAddress: string,
+  gameId: bigint,
+  boardWord: bigint
+): Promise<void> {
+  if (readByteRange(boardWord, SB_STATUS_BYTE_OFFSET, 1) !== 0n) return;
+  await setLiveBit(
     gameAddress,
-    attrSlot0,
-    writeByteRange(attrWord, ATTR_HULL_POINTS_BYTE_OFFSET, 1, BigInt(hp))
+    gameId,
+    boardWord,
+    toInt16(readByteRange(boardWord, SB_ROW_BYTE_OFFSET, 2)),
+    toInt16(readByteRange(boardWord, SB_COL_BYTE_OFFSET, 2)),
+    false
   );
 }
 
@@ -305,27 +377,29 @@ export async function setShipHullPoints(
 // _incrementReactorCriticalTimerForZeroHPShips then increments the timer to
 // 3 and calls the real _removeShipFromGame itself — fully correct
 // cross-contract cleanup through the actual production code path, not a
-// hand-rolled replica. Does not touch shipMovedThisRound: round completion
-// only needs a ship counted in EITHER that set or shipsWithZeroHP (see
-// Game.sol's _checkRoundComplete), so leaving it as-is is harmless.
+// hand-rolled replica. Does not touch the ship's moved flag: round
+// completion only needs a ship counted as EITHER moved or in
+// shipsWithZeroHP (see Game.sol's _checkRoundComplete), so leaving it
+// as-is is harmless.
 export async function primeShipForRealDestruction(
   gameAddress: string,
   gameId: bigint,
   shipId: bigint
 ): Promise<void> {
   const gameSlot = gameBaseSlot(gameId);
-  const shipAttributesBase = gameSlot + GD_SHIP_ATTRIBUTES;
-  const attrSlot0 = mappingSlot(shipId, shipAttributesBase);
+  const shipBoardBase = gameSlot + GD_SHIP_BOARD;
+  const boardSlot = mappingSlot(shipId, shipBoardBase);
 
-  let attrWord = await readWord(gameAddress, attrSlot0);
-  attrWord = writeByteRange(attrWord, ATTR_HULL_POINTS_BYTE_OFFSET, 1, 0n);
-  attrWord = writeByteRange(
-    attrWord,
-    ATTR_REACTOR_TIMER_BYTE_OFFSET,
+  let boardWord = await readWord(gameAddress, boardSlot);
+  await clearLiveBitOf(gameAddress, gameId, boardWord);
+  boardWord = writeByteRange(boardWord, SB_HULL_POINTS_BYTE_OFFSET, 1, 0n);
+  boardWord = writeByteRange(
+    boardWord,
+    SB_REACTOR_TIMER_BYTE_OFFSET,
     1,
     2n
   );
-  await setStorageAt(gameAddress, attrSlot0, attrWord);
+  await setStorageAt(gameAddress, boardSlot, boardWord);
 
   await enumerableSetAdd(
     gameAddress,

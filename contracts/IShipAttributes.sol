@@ -12,6 +12,17 @@ interface IShipAttributes {
         uint _shipId
     ) external view returns (Attributes memory);
 
+    function calculateBoardStatsByIds(
+        uint[] calldata _shipIds
+    )
+        external
+        view
+        returns (
+            Attributes[] memory attributes,
+            uint16[] memory variants,
+            Special[] memory specials
+        );
+
     function calculateShipAttributesByIds(
         uint[] memory _shipIds
     ) external view returns (Attributes[] memory);
