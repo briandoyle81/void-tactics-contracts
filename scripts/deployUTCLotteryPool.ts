@@ -318,10 +318,16 @@ function buildClientFromKey(rawKey: string) {
     rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`
   ) as `0x${string}`;
   const account = privateKeyToAccount(pk);
+  // Same URL and headers as the network config: the RPC key is
+  // origin-allowlisted, so a request without the configured Origin header is
+  // rejected ("Origin not allowed", seen 2026-11-01 on pool initialize).
+  const netConfig: any = hre.network.config;
   return createWalletClient({
     account,
     chain: baseSepolia,
-    transport: http(process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org"),
+    transport: http(netConfig.url || process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org", {
+      fetchOptions: { headers: netConfig.httpHeaders ?? {} },
+    }),
   });
 }
 
@@ -982,6 +988,7 @@ async function main() {
       address: hookAddress,
       abi: hookAbi,
       functionName: "randomManager",
+      args: [],
     })) as `0x${string}`,
   );
   if (currentRandomManager === randomManagerAddress) {

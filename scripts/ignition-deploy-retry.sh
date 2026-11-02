@@ -39,6 +39,13 @@ Environment variables:
   LOG_FILE            Log file to write (default: ignition_deploy_retry.log)
   SLEEP_SECONDS      Sleep seconds between retries (default: 5)
 
+"already known" (2026-11-01): the RPC already had the exact signed
+transaction, so it went out, but Ignition didn't journal its hash. The
+script waits for that nonce to be mined, finds the transaction on the block
+explorer (scripts/findAlreadyKnownTx.ts, read-only, needs ETHERSCAN_API_KEY),
+checks it matches the journaled request, adds it with `ignition track-tx`
+and resumes.
+
 RPC-provider-outage retries ("no backend is currently healthy to serve
 traffic", seen against base-sepolia's public RPC endpoint under load) use
 their own exponential backoff instead of --sleep-seconds: 5s, 10s, 20s,
@@ -224,6 +231,8 @@ run_with_retry() {
   local last_wiped_future=""
   local wipe_count=0
   local MAX_WIPES_PER_FUTURE=5
+  # "already known" recovery (see below): never track the same tx twice.
+  local last_tracked_hash=""
   local BACKEND_WAIT_CAP_SECONDS=180
 
   while true; do
@@ -260,6 +269,8 @@ run_with_retry() {
       backend_wait=$((backend_wait * 2))
       continue
     fi
+
+    local tx_went_out=0
 
     # Retry on transient errors: nonce mismatch, Ignition rerun hint, underpriced gas, or IGN411
     # without the "use a block explorer" hint (that case needs track-tx or ignition wipe, not a blind retry).
@@ -337,8 +348,50 @@ sys.exit(0 if retry else 1)
           backend_wait=5
           continue
         fi
-        echo "Nonce $stuck_nonce was used (or the check failed). Find that tx and run:"
-        echo "  npx hardhat ignition track-tx <txHash> <deploymentId> --network $NETWORK"
+        # Used: the same situation as "already known" below.
+        if [[ "$nonce_check" -eq 1 ]]; then
+          echo "Nonce $stuck_nonce was used; looking for its tx..."
+          tx_went_out=1
+        else
+          echo "Nonce check failed. Find the tx for nonce $stuck_nonce and run:"
+          echo "  npx hardhat ignition track-tx <txHash> <deploymentId> --network $NETWORK"
+        fi
+      fi
+    fi
+
+    # "already known" (2026-11-01, base-sepolia's public RPC): the node
+    # already had this exact signed tx, so it went out, but Ignition threw
+    # before journaling its hash. Find the mined tx for that nonce, check it
+    # against the journaled request (scripts/findAlreadyKnownTx.ts), add it
+    # with track-tx and resume. If the nonce turns out unused, a plain resume
+    # hits the IGN411 handling above, which wipes and resends it.
+    if [[ "$tx_went_out" -eq 1 ]] || grep -qF "already known" "$LOG_FILE"; then
+      set +e
+      local find_out
+      find_out="$(npx hardhat run scripts/findAlreadyKnownTx.ts --network "$NETWORK" 2>&1)"
+      local find_ec=$?
+      set -e
+      echo "$find_out" | grep -E "^(findAlreadyKnownTx|TRACK_TX=|DEPLOYMENT_ID=)" || true
+      if [[ "$find_ec" -eq 0 ]]; then
+        local track_hash track_dep
+        track_hash="$(echo "$find_out" | grep -oE "^TRACK_TX=0x[0-9a-fA-F]{64}" | cut -d= -f2)"
+        track_dep="$(echo "$find_out" | grep -oE "^DEPLOYMENT_ID=[A-Za-z0-9_-]+" | cut -d= -f2)"
+        if [[ "$track_hash" == "$last_tracked_hash" ]]; then
+          echo "Stopping: already tracked $track_hash once and the deploy still fails."
+          return "$ec"
+        fi
+        last_tracked_hash="$track_hash"
+        echo "\"already known\": tracking $track_hash in $track_dep and resuming..."
+        if ! npx hardhat ignition track-tx "$track_hash" "$track_dep" --network "$NETWORK"; then
+          echo "Stopping: ignition track-tx failed for $track_hash"
+          return "$ec"
+        fi
+        backend_wait=5
+        continue
+      elif [[ "$find_ec" -eq 1 ]]; then
+        echo "\"already known\" but the nonce was never used; resuming (IGN411 handling takes it from there)..."
+        sleep "$SLEEP_SECONDS"
+        continue
       fi
     fi
 

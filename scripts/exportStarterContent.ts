@@ -36,6 +36,15 @@
 //                    (scripts/ignition-deploy-retry.sh uses this).
 // If the deployment folder isn't on disk (a fresh deploy removes it first),
 // the copy committed at git HEAD is read instead.
+//
+// ABIs (2026-11-01): the chain is read with the ABIs Ignition saved when the
+// old contracts were deployed (artifacts/DeployModule#<Name>.json in the
+// deployment folder), not the ones compiled from today's sources. A full
+// redeploy usually follows a struct change, and decoding the old contracts
+// with the new layout fails or misreads fields (e.g. 653a918 dropped
+// h3/s3/l3 from Colors, so the new ABI couldn't decode the old getGrant or
+// getAIShipConfig). The values are then converted to today's seed shape as
+// usual. The compiled ABI is only a fallback for a contract with no saved one.
 import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
@@ -57,6 +66,8 @@ import {
 } from "./lib/starterContent";
 
 const WRITE = process.env.WRITE === "true";
+// Every contract this script reads (see `contract` below).
+const READ_CONTRACTS = ["Maps", "AIEncounters", "RoguelikeNodeMap", "ShipGrantWinEffect"];
 const MODE_NAME = Object.fromEntries(Object.entries(MAP_MODE).map(([k, v]) => [v, k]));
 const KIND_NAME = Object.fromEntries(Object.entries(NODE_KIND).map(([k, v]) => [v, k]));
 
@@ -77,7 +88,13 @@ async function main() {
   // removed, so read the last committed copy of it instead.
   if (!process.env.DEPLOYMENT_DIR && !fs.existsSync(path.join(deployDir, "journal.jsonl"))) {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "starter-content-export-"));
-    const files = ["journal.jsonl", "deployed_addresses.json", "content-sync.json"];
+    const files = [
+      "journal.jsonl",
+      "deployed_addresses.json",
+      "content-sync.json",
+      ...READ_CONTRACTS.map((n) => `artifacts/DeployModule#${n}.json`),
+    ];
+    fs.mkdirSync(path.join(tmp, "artifacts"));
     for (const f of files) {
       try {
         const data = execFileSync("git", ["show", `HEAD:ignition/deployments/${deploymentId}/${f}`], {
@@ -86,7 +103,7 @@ async function main() {
         });
         fs.writeFileSync(path.join(tmp, f), data);
       } catch {
-        if (f !== "content-sync.json")
+        if (f !== "content-sync.json" && !f.startsWith("artifacts/"))
           throw new Error(`No ${deploymentId} deployment in ignition/deployments/ or in git HEAD: nothing to export.`);
       }
     }
@@ -96,10 +113,16 @@ async function main() {
   const d = loadDeployment(deployDir);
   const { sp, rl, pvp, mapIds, nodeIds, configIds, syncState } = d;
 
-  const contract = async (name: string) => ({
-    address: d.addressOf(name),
-    abi: (await hre.artifacts.readArtifact(name)).abi as Abi,
-  });
+  const contract = async (name: string) => {
+    const saved = path.join(deployDir, "artifacts", `DeployModule#${name}.json`);
+    if (!fs.existsSync(saved)) console.warn(`  (no saved ABI for ${name}; using the compiled one)`);
+    return {
+      address: d.addressOf(name),
+      abi: (fs.existsSync(saved)
+        ? JSON.parse(fs.readFileSync(saved, "utf8")).abi
+        : (await hre.artifacts.readArtifact(name)).abi) as Abi,
+    };
+  };
   const maps = await contract("Maps");
   const aiEncounters = await contract("AIEncounters");
   const nodeMap = await contract("RoguelikeNodeMap");

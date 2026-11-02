@@ -1,5 +1,5 @@
 {
-  "address": "0x31cB582846700DF93cD7FC9158716dea002da040",
+  "address": "0x48f56B0014A4D025D37AEAdDD4ed926B3eF6a040",
   "abi": [
     {
       "inputs": [
@@ -1215,6 +1215,25 @@
       "inputs": [
         {
           "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "drawSeed",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
           "name": "_drawId",
           "type": "uint256"
         }
@@ -1570,21 +1589,6 @@
               "internalType": "uint8",
               "name": "l2",
               "type": "uint8"
-            },
-            {
-              "internalType": "uint16",
-              "name": "h3",
-              "type": "uint16"
-            },
-            {
-              "internalType": "uint8",
-              "name": "s3",
-              "type": "uint8"
-            },
-            {
-              "internalType": "uint8",
-              "name": "l3",
-              "type": "uint8"
             }
           ],
           "internalType": "struct Colors",
@@ -1696,21 +1700,6 @@
                   "internalType": "uint8",
                   "name": "l2",
                   "type": "uint8"
-                },
-                {
-                  "internalType": "uint16",
-                  "name": "h3",
-                  "type": "uint16"
-                },
-                {
-                  "internalType": "uint8",
-                  "name": "s3",
-                  "type": "uint8"
-                },
-                {
-                  "internalType": "uint8",
-                  "name": "l3",
-                  "type": "uint8"
                 }
               ],
               "internalType": "struct Colors",
@@ -1771,6 +1760,19 @@
           "internalType": "uint256",
           "name": "",
           "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "randomManager",
+      "outputs": [
+        {
+          "internalType": "contract IRandomManagerCapture",
+          "name": "",
+          "type": "address"
         }
       ],
       "stateMutability": "view",
@@ -1904,6 +1906,19 @@
       "inputs": [
         {
           "internalType": "address",
+          "name": "_randomManager",
+          "type": "address"
+        }
+      ],
+      "name": "setRandomManager",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
           "name": "_ships",
           "type": "address"
         }
@@ -1996,12 +2011,12 @@
       "type": "function"
     }
   ],
-  "poolId": "0x7a481be6df7c5ee25fe47a5e5de3176435c281edd32c640a56cecae39d43c2c3",
+  "poolId": "0xe667d899a29217e51d565cb663838a3ff00c76e30da9068243761ed1d009585c",
   "poolKey": {
     "currency0": "0x0000000000000000000000000000000000000000",
-    "currency1": "0xf6bf2068bF1D5D566af5Ca0fAF4B81E1565573a6",
+    "currency1": "0x031511aC4d6647aAed7ea3F9265a5f070BdD6e4B",
     "fee": 3000,
     "tickSpacing": 60,
-    "hooks": "0x31cB582846700DF93cD7FC9158716dea002da040"
+    "hooks": "0x48f56B0014A4D025D37AEAdDD4ed926B3eF6a040"
   }
 }

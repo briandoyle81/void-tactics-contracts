@@ -1,6 +1,13 @@
 # Frontend Handoff — Storage Packing, Dead Code Removed, 60-Second Turns
 
-_Written 2026-10-30. Covers contract changes since `frontend-handoff-2026-10-23.md`. **None of this is deployed yet.** Everything here takes effect at the next full deploy; until then the live contracts keep the old shapes and behavior._
+_Written 2026-10-30, last updated 2026-11-02. Covers contract changes since `frontend-handoff-2026-10-23.md`._
+
+**Deployed to Base Sepolia (chain 84532) on 2026-11-01.** Every "next deploy" below is now live. This was a full redeploy: every contract has a new address, including `Ships`, `RandomManager` and the lottery hook.
+
+- **Addresses:** `ignition/deployments/chain-84532/deployed_addresses.json`.
+- **ABIs:** `ignition/deployments/chain-84532/artifacts/DeployModule#<Name>.json`. Take all of them together, not only the contracts named below.
+- **Lottery:** a new `UTCLotteryHook` and pool. Its address, ABI, `poolKey` and `poolId` are in `uniswap-lottery-hook.json`. The old pool and hook are retired.
+- **Old ships stay on the old contract:** ships minted on the old `Ships` (§8) don't carry over to the new one.
 
 ---
 
@@ -252,3 +259,7 @@ _Added 2026-11-01 (fixes `docs/audit-4.md` HA7-10; design in `docs/trustless-ran
 - [ ] Treat DEC as a 0-decimal token: remove the divide-by-1e18 (`formatEther`) from every DEC display and amount (§10).
 - [ ] Replace the expired-ship "awaiting admin" state with a "builds a basic ship" notice, and drop `retargetExpired`/`RandomnessRetargeted` (§11).
 - [ ] Add the 4-hour-idle `capturePending` keeper to the backend behind an env var, disabled until mainnet production (§11).
+- [ ] Take every new address and ABI from `ignition/deployments/chain-84532/`, and the new lottery hook and pool key from `uniswap-lottery-hook.json` (added 2026-11-02).
+- [ ] After `takeAITurn`/`takeAITurns`, check the receipt for `AITurnTaken` and resend with more gas if it's missing (§9).
+- [ ] Show the lottery "resolve soon or it re-rolls" warning only while `UTCLotteryHook.drawSeed(drawId)` is zero (§9).
+- [ ] Update the outdated "permissionless" comment on `syncShipCosts` at `ManageNavy.tsx:1328`; it now reverts `NotYourShip` for ships the caller doesn't own (§9).
