@@ -293,6 +293,7 @@ _Added 2026-11-03. **Not deployed yet**: it ships with §12 in the next full red
   - ships close on live enemies before wrecks.
 - **Walls:** ships don't park beside a tile their own ally holds.
 - **Pathfinding:** ships approaching a target find a way around walls. They move to the tile within reach that's nearest the target by walking distance, not just the nearest in a straight line. Moves are unchanged: still one clear line within movement, so nothing new is needed to display them.
+- **Shooting after a fallback move (2026-11-04):** when every scoring tile is held, Supports and Turtles in both factions step toward a tile. They now shoot an enemy that's in range of where they land. Before, they passed there even with an enemy in range (found in roguelike game 2199023255555).
 
 - **Turn order:** the AI no longer always moves its ships in id order. It moves first a ship that can destroy an enemy with one shot, then a ship with an enemy in range, then the rest, and Supports last. The frontend shouldn't assume which AI ship acts next; read it from `AITurnTaken`.
 

@@ -71,6 +71,21 @@ describe("Seeded AI ship configs", function () {
   const SNIPER_EXCEPTIONS: Record<string, { gun: number; minRange: number }> = {
     v2sniper3: { gun: 2, minRange: 4 }, // intentional, 2026-10-12
   };
+  // Ships outside the level ramp: the shiny variant 1 set (La Sombra,
+  // Murcielago, Umbria, Abismo, Vacia, Oscuridad, Velo, Umbral) made in the
+  // content editor and exported from chain on the 2026-11-04 deploy, which
+  // keyed them chainConfig53-60 (the trailing digit isn't a level). Roguelike
+  // m08 fights most of them (map rlM06). Every other rule still applies.
+  const OFF_LADDER = new Set([
+    "chainConfig53",
+    "chainConfig54",
+    "chainConfig55",
+    "chainConfig56",
+    "chainConfig57",
+    "chainConfig58",
+    "chainConfig59",
+    "chainConfig60",
+  ]);
   const levelOf = (key: string) => {
     if (key in LEVEL_OVERRIDES) return LEVEL_OVERRIDES[key];
     const m = key.match(/(\d)$/);
@@ -207,7 +222,7 @@ describe("Seeded AI ship configs", function () {
       for (const variant of [1, 2]) {
         for (let archetype = 0; archetype <= RAMMER; archetype++) {
           const line = rows
-            .filter((r) => r.variant === variant && r.archetype === archetype)
+            .filter((r) => r.variant === variant && r.archetype === archetype && !OFF_LADDER.has(r.key))
             .sort((a, b) => a.level - b.level);
           for (let i = 1; i < line.length; i++) {
             expect(
@@ -228,7 +243,7 @@ describe("Seeded AI ship configs", function () {
       for (const variant of [1, 2]) {
         for (const archetype of [GRUNT, AGGRESSOR, SNIPER, SUPPORT, TURTLE]) {
           const line = rows
-            .filter((r) => r.variant === variant && r.archetype === archetype)
+            .filter((r) => r.variant === variant && r.archetype === archetype && !OFF_LADDER.has(r.key))
             .sort((a, b) => a.level - b.level);
           const first = line[0];
           const last = line[line.length - 1];

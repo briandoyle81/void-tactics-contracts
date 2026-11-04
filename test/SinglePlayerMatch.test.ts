@@ -14,6 +14,7 @@ import {
   setShipPosition,
   setShipHullPointsToZero,
   primeShipForRealDestruction,
+  setShipStat,
 } from "./helpers/gameStorage";
 
 // Node-match game ids live in a disjoint range above Lobbies-sourced (PvP)
@@ -1216,6 +1217,12 @@ describe("SinglePlayerMatch", function () {
       // tiles to (5,12) — exactly maximum range from (5,9) — and fires from there.
       await setShipPosition(game.address, gameId, aiShipId, 5, 10);
       await setShipPosition(game.address, gameId, 1n, 5, 9);
+      // The human ship rolls its range, and a kiter first takes the nearest
+      // firing tile outside every enemy's range (2026-11-03), so a short
+      // roll sent the Sniper elsewhere (failed once in a full run,
+      // 2026-11-04). Range 5 out-ranges the Sniper's 3: no firing tile is
+      // safe, and it backs off to maximum range.
+      await setShipStat(game.address, gameId, 1n, "range", 5);
       await humanGame.write.moveShip([gameId, 1n, 5, 9, ActionType.Pass, 0n], {
         account: human.account,
       });
@@ -1745,7 +1752,8 @@ describe("SinglePlayerMatch", function () {
       // history for that version of this test) — now the stepping primitive
       // gets it right on the first try, no fallback needed. (The Plasma
       // Cannon's range of 2 keeps the enemy out of gun range from the
-      // Turtle's starting tile, so no shot preempts the move.)
+      // Turtle's starting tile, so no shot preempts the move. From (5,8) the
+      // enemy is in range, so it shoots there: 2026-11-04, it used to pass.)
       await maps.write.createPresetScoringMap([
         [{ row: 5, col: 7, points: 5, onlyOnce: false }],
         MapMode.Both,
@@ -1788,8 +1796,8 @@ describe("SinglePlayerMatch", function () {
       );
       const ev = events.find((e: any) => e.args.shipId === aiShipId);
       expect(ev).to.not.be.undefined;
-      expect(ev!.args.actionType).to.equal(ActionType.Pass);
-      expect(ev!.args.targetShipId).to.equal(0n);
+      expect(ev!.args.actionType).to.equal(ActionType.Shoot);
+      expect(ev!.args.targetShipId).to.equal(1n);
 
       const gameData = (await game.read.getGame([gameId])) as GameDataView;
       const pos = findShipPosition(gameData, aiShipId);

@@ -1900,12 +1900,19 @@ library AIBehavior {
         );
         d.destRow = newPos.row;
         d.destCol = newPos.col;
+        // Shoot from where the move ends (2026-11-04; it used to pass there
+        // with an enemy in range: roguelike game 2199023255555).
+        (target, found) = _bestEnemyInRange(ctx, newPos, ctx.attrs.range);
+        if (found) {
+            d.action = ActionType.Shoot;
+            d.actionTarget = target;
+        }
     }
 
     // Holds/seeks unclaimed scoring tiles (weapon-range-biased, see
-    // _bestScoringTile); shoots opportunistically from wherever it ends up
-    // if an enemy is in range from the current position (never gives up a
-    // free shot just to move toward a tile).
+    // _bestScoringTile); shoots an enemy in range from the current position
+    // (never gives up a free shot just to move toward a tile), else from
+    // wherever its move ends.
     function decideTurtle(
         Ctx memory ctx
     ) internal view returns (Decision memory d) {
@@ -1948,6 +1955,13 @@ library AIBehavior {
         );
         d.destRow = newPos.row;
         d.destCol = newPos.col;
+        // Shoot from where the move ends (2026-11-04, as in
+        // decideSupportFallback).
+        (target, found) = _bestEnemyInRange(ctx, newPos, ctx.attrs.range);
+        if (found) {
+            d.action = ActionType.Shoot;
+            d.actionTarget = target;
+        }
     }
 
     // ---- objective-first toolbox (ram-on-objective, heal priorities) ----

@@ -1,5 +1,5 @@
 {
-  "address": "0x48f56B0014A4D025D37AEAdDD4ed926B3eF6a040",
+  "address": "0x72D0930d6456489F5A2f648924ED6689EF262040",
   "abi": [
     {
       "inputs": [
@@ -2011,12 +2011,12 @@
       "type": "function"
     }
   ],
-  "poolId": "0xe667d899a29217e51d565cb663838a3ff00c76e30da9068243761ed1d009585c",
+  "poolId": "0xe6711874845001582c84d18c1c2037cb1acc5b35fddc4a18d34948e66d17c69a",
   "poolKey": {
     "currency0": "0x0000000000000000000000000000000000000000",
-    "currency1": "0x031511aC4d6647aAed7ea3F9265a5f070BdD6e4B",
+    "currency1": "0x258F2406eDc1AE17E7A4cCCe34Fe75A14e0dBEb7",
     "fee": 3000,
     "tickSpacing": 60,
-    "hooks": "0x48f56B0014A4D025D37AEAdDD4ed926B3eF6a040"
+    "hooks": "0x72D0930d6456489F5A2f648924ED6689EF262040"
   }
 }

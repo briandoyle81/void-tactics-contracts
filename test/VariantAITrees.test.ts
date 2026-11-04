@@ -1087,6 +1087,34 @@ describe("Per-variant AI behavior trees", function () {
     });
   });
 
+  // Roguelike game 2199023255555 (found live 2026-11-04): a variant 1
+  // Support at (5,12), range 3, with every scoring tile held, stepped toward
+  // the enemy-held tile at (5,8), stopped beside it at (5,9) and passed with
+  // that enemy 1 tile away. decideSupportFallback and decideTurtle only
+  // looked for a shot before moving.
+  describe("Shoots after the fallback move", function () {
+    for (const [variant, archetype, name, special] of [
+      [1, SUPPORT, "variant 1 Support", 2], // Repair Drones, as in the game
+      [1, TURTLE, "variant 1 Turtle", 0],
+      [2, SUPPORT, "variant 2 Support", 0],
+      [2, TURTLE, "variant 2 Turtle", 0],
+    ] as const) {
+      it(`${name} shoots the enemy it ends up in range of`, async function () {
+        // The only scoring tile is held by the enemy, 4 tiles away: out of
+        // range (3 for variant 1, 2 for variant 2) before the move, in range
+        // after it.
+        const r = await run({
+          ai: [{ variant, archetype, special, at: [5, 12] }],
+          humans: [{ at: [5, 8] }],
+          scoringTiles: [{ row: 5, col: 8 }],
+        });
+        expect([r.row, r.col]).to.deep.equal([5, 9]);
+        expect(r.action).to.equal(ActionType.Shoot);
+        expect(r.target).to.equal(1n);
+      });
+    }
+  });
+
   // 2026-11-03: the two archetypes added after the live-game evaluation.
   describe("Objective Runner and Hunter", function () {
     // Each side holds one tile, so the score is level and other archetypes

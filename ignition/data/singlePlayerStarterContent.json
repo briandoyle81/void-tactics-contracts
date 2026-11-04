@@ -891,6 +891,158 @@
         "speed": 0
       },
       "archetype": 3
+    },
+    {
+      "key": "chainConfig53",
+      "name": "La Sombra",
+      "equipment": {
+        "mainWeapon": 3,
+        "armor": 0,
+        "shields": 2,
+        "special": 0
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 2,
+        "hull": 1,
+        "speed": 2
+      },
+      "archetype": 1,
+      "shiny": true,
+      "shipsDestroyed": 30
+    },
+    {
+      "key": "chainConfig54",
+      "name": "Murciélago",
+      "equipment": {
+        "mainWeapon": 3,
+        "armor": 0,
+        "shields": 1,
+        "special": 1
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 0,
+        "hull": 1,
+        "speed": 2
+      },
+      "archetype": 1,
+      "shiny": true,
+      "shipsDestroyed": 10
+    },
+    {
+      "key": "chainConfig55",
+      "name": "Umbría",
+      "equipment": {
+        "mainWeapon": 3,
+        "armor": 0,
+        "shields": 1,
+        "special": 2
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 0,
+        "hull": 1,
+        "speed": 2
+      },
+      "archetype": 3,
+      "shiny": true,
+      "shipsDestroyed": 10
+    },
+    {
+      "key": "chainConfig56",
+      "name": "Abismo",
+      "equipment": {
+        "mainWeapon": 1,
+        "armor": 0,
+        "shields": 3,
+        "special": 0
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 2,
+        "hull": 1,
+        "speed": 1
+      },
+      "archetype": 2,
+      "shiny": true,
+      "shipsDestroyed": 0
+    },
+    {
+      "key": "chainConfig57",
+      "name": "Vacía",
+      "equipment": {
+        "mainWeapon": 2,
+        "armor": 0,
+        "shields": 2,
+        "special": 2
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 2,
+        "hull": 1,
+        "speed": 1
+      },
+      "archetype": 3,
+      "shiny": true,
+      "shipsDestroyed": 0
+    },
+    {
+      "key": "chainConfig58",
+      "name": "Oscuridad",
+      "equipment": {
+        "mainWeapon": 0,
+        "armor": 0,
+        "shields": 1,
+        "special": 0
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 1,
+        "hull": 0,
+        "speed": 1
+      },
+      "archetype": 0,
+      "shiny": true,
+      "shipsDestroyed": 0
+    },
+    {
+      "key": "chainConfig59",
+      "name": "Velo",
+      "equipment": {
+        "mainWeapon": 0,
+        "armor": 0,
+        "shields": 1,
+        "special": 0
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 1,
+        "hull": 1,
+        "speed": 1
+      },
+      "archetype": 0,
+      "shiny": true,
+      "shipsDestroyed": 0
+    },
+    {
+      "key": "chainConfig60",
+      "name": "Umbral",
+      "equipment": {
+        "mainWeapon": 1,
+        "armor": 0,
+        "shields": 1,
+        "special": 0
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 1,
+        "hull": 1,
+        "speed": 2
+      },
+      "archetype": 2,
+      "shiny": true,
+      "shipsDestroyed": 0
     }
   ],
   "maps": [
