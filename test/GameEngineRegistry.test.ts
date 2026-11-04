@@ -355,6 +355,8 @@ describe("GameEngineRegistry — in-flight engine upgrades", function () {
         defaultEquipment,
         { ...defaultTraits, variant: 1 },
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);

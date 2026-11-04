@@ -25,9 +25,9 @@ import "./IMaps.sol";
 // primitives. So this is deliberately a cheap ordered priority-list per
 // archetype (check a primitive, act or fall through) rather than anything
 // resembling enumerate-and-score optimization. Movement ("step toward"/
-// "step away") is greedy axis-priority stepping toward/away from a single
-// target point, not pathfinding — it ignores obstacles/other ships, the
-// same simplification the original v0 script already had. SinglePlayerMatch
+// "step away") was greedy axis-priority stepping toward/away from a single
+// target point. Stepping toward a target now uses a bitboard pathfinding
+// search (_pathStep, 2026-11-03), with the greedy step as its fallback. SinglePlayerMatch
 // wraps each ship's actual moveShip call in try/catch specifically to
 // absorb the rare case this produces an illegal move (e.g. stepping onto an
 // occupied cell) rather than reverting the whole turn.
@@ -66,6 +66,8 @@ library AIBehavior {
         uint256 joinerLive;
         // This ship's own cell, for excluding it from `occupied`.
         uint256 selfBit;
+        // Maps' impassable tiles, for _pathStep.
+        uint256 impassable;
     }
 
     // Game.GRID_WIDTH / GRID_HEIGHT.
@@ -90,6 +92,7 @@ library AIBehavior {
         (ctx.attrs, ) = findAttributes(ctx.g, ctx.shipId);
         ctx.selfBit = _cellBit(ctx.pos);
         ctx.scoringPositions = ctx.maps.getGameScoringPositions(ctx.gameId);
+        ctx.impassable = ctx.maps.getImpassableBitmap(ctx.gameId);
         ctx.gridWidth = GRID_WIDTH;
         ctx.gridHeight = GRID_HEIGHT;
     }
@@ -99,13 +102,19 @@ library AIBehavior {
 
     // What an AI orchestrator (always the joiner) needs before an AI move,
     // from Game.getAIBoard's array: whether the joiner has a live ship, and
-    // the next joiner ship to move, the first in the active list with
-    // HP > 0 that hasn't moved this round (0 if none), with its position.
+    // the next joiner ship to move (0 if none), with its position. Game
+    // lets any unmoved ship go next, so the AI picks (2026-11-03), from
+    // the board alone: a ship that can destroy a live enemy with one shot
+    // first, then one with a live enemy in range, then the rest, and
+    // Supports (`isSupport`, the orchestrator's archetype lookup) last, so
+    // they repair after the ships they would repair have acted. Ties go to
+    // the first in the active list. Before, it was always the first.
     function turnState(
-        uint[] memory board
+        uint[] memory board,
+        function(uint) view returns (bool) isSupport
     )
         internal
-        pure
+        view
         returns (
             bool ended,
             address currentTurn,
@@ -119,25 +128,91 @@ library AIBehavior {
         currentTurn = address(uint160(board[5]));
         creator = address(uint160(board[6]));
         hasLiveShip = board[2] != 0;
+        uint w;
+        (nextShipId, w) = _pickShip(board, isSupport);
+        nextPosition = Position(int16(uint16(w)), int16(uint16(w >> 16)));
+    }
+
+    struct Pick {
+        uint[] enemies;
+        uint n;
+        uint best;
+        uint8 gun;
+        bool cached;
+        uint256 killMask;
+    }
+
+    // turnState's pick: the unmoved live joiner ship with the highest
+    // _turnRank, the first on a tie. One pass: Game.getAIBoard lists the
+    // creator's ships before the joiner's, so the live creator ships are
+    // gathered before any joiner ship is ranked.
+    function _pickShip(
+        uint[] memory board,
+        function(uint) view returns (bool) isSupport
+    ) private view returns (uint id, uint word) {
+        Pick memory p;
+        p.enemies = new uint[]((board.length - BOARD_HEADER) / 2);
         uint round = board[3];
         for (uint i = BOARD_HEADER; i + 1 < board.length; i += 2) {
             uint w = board[i + 1];
-            // Skip creator ships (isCreator @4), 0 HP (hullPoints @11) and
-            // ships that moved this round (movedInRound u24 @16).
-            if (
-                uint8(w >> 32) != 0 ||
-                uint8(w >> 88) == 0 ||
-                uint24(w >> 128) == round
-            ) continue;
-            return (
-                ended,
-                currentTurn,
-                creator,
-                hasLiveShip,
-                board[i],
-                Position(int16(uint16(w)), int16(uint16(w >> 16)))
-            );
+            // 0 HP (hullPoints @11): never picked, never a target.
+            if (uint8(w >> 88) == 0) continue;
+            // A creator ship (isCreator @4).
+            if (uint8(w >> 32) != 0) {
+                p.enemies[p.n++] = w;
+                continue;
+            }
+            // Moved this round (movedInRound u24 @16).
+            if (uint24(w >> 128) == round) continue;
+            uint rank = _turnRank(board[1], p, w);
+            if (rank <= p.best) continue;
+            // Looked up only when this ship would be picked.
+            if (isSupport(board[i])) rank = 1;
+            if (rank <= p.best) continue;
+            (p.best, id, word) = (rank, board[i], w);
+            if (rank == 4) break;
         }
+    }
+
+    // 4: a live creator ship within gun range (Manhattan, line of sight not
+    // checked) that one shot destroys; 3: one within range; 2: neither.
+    // The range check is one bitboard: this ship's cell grown by its range,
+    // against the live creator bitmap. Which creator ships one shot
+    // destroys is a bitmap per gun damage, reused while the gun repeats.
+    function _turnRank(
+        uint256 creatorLive,
+        Pick memory p,
+        uint w
+    ) private pure returns (uint) {
+        uint256 inRange = _dilate(
+            uint256(1) << _wordCell(w),
+            uint8(w >> 72),
+            BOARD_MASK
+        ) & creatorLive;
+        if (inRange == 0) return 2;
+        uint8 gun = uint8(w >> 80);
+        if (!p.cached || p.gun != gun) {
+            p.killMask = _killMask(p, gun);
+            (p.gun, p.cached) = (gun, true);
+        }
+        return inRange & p.killMask != 0 ? 4 : 3;
+    }
+
+    function _killMask(
+        Pick memory p,
+        uint8 gun
+    ) private pure returns (uint256 mask) {
+        for (uint i = 0; i < p.n; i++) {
+            uint e = p.enemies[i];
+            if (shotDamage(gun, uint8(e >> 112)) >= uint8(e >> 88))
+                mask |= uint256(1) << _wordCell(e);
+        }
+    }
+
+    // A board word's cell index (row @0, col @2), row * GRID_WIDTH + col.
+    function _wordCell(uint w) private pure returns (uint) {
+        return
+            uint(uint16(w)) * uint(uint16(GRID_WIDTH)) + uint(uint16(w >> 16));
     }
 
     // Rebuilds the AIView from Game.getAIBoard's flat array (2026-10-31):
@@ -283,12 +358,8 @@ library AIBehavior {
         return rowDiff + colDiff;
     }
 
-    // Enemy (opposing side) in manhattan range with LOS. Primary sort key is
-    // "standing on a scoring tile" (contesting the objective is worth more
-    // than shaving HP off someone who isn't); within the same tier, prefers
-    // the lowest nonzero HP target (focus the weakest), falling back to the
-    // first found if every in-range enemy in that tier is already at 0 HP
-    // (still a legal Shoot, still meaningful reactor-timer progress).
+    // The enemy in manhattan range (with line of sight past range 1) to
+    // shoot, ranked by _targetKey.
     function _bestEnemyInRange(
         Ctx memory ctx,
         Position memory fromPos,
@@ -305,9 +376,7 @@ library AIBehavior {
         uint8 range,
         bool needsLineOfSight
     ) private view returns (uint targetId, bool found) {
-        uint8 bestHp = type(uint8).max;
-        bool bestIsZero = false;
-        bool bestOnTile = false;
+        uint bestKey;
         // Every OTHER enemy ship blocks LOS to a given candidate — computed
         // once (O(fleet size)), then per-candidate a single bit is cleared
         // to exclude that candidate's own tile (see hasMapsAvoidingShips for
@@ -326,44 +395,53 @@ library AIBehavior {
                 dist > 1 &&
                 !_hasLosExcludingTarget(ctx, fromPos, sp.position, enemyBitmap)
             ) continue;
-
             // sp.status == 0 already checked above, so index i is in the
             // active range and shipAttributes[i] is guaranteed to be this
             // exact ship's attributes (G-01) — no scan needed.
-            Attributes memory attrs = ctx.g.shipAttributes[i];
-
-            bool onTile = _isScoringTile(ctx.scoringPositions, sp.position);
-
-            if (!found) {
+            uint key = _targetKey(
+                ctx,
+                ctx.g.shipAttributes[i],
+                sp.position,
+                needsLineOfSight
+            );
+            // Strictly greater: on a tie the first candidate found stays.
+            if (!found || key > bestKey) {
                 targetId = sp.shipId;
+                bestKey = key;
                 found = true;
-                bestHp = attrs.hullPoints;
-                bestIsZero = attrs.hullPoints == 0;
-                bestOnTile = onTile;
-                continue;
-            }
-            if (onTile != bestOnTile) {
-                // on-tile always beats off-tile, regardless of HP
-                if (onTile) {
-                    targetId = sp.shipId;
-                    bestHp = attrs.hullPoints;
-                    bestIsZero = attrs.hullPoints == 0;
-                    bestOnTile = true;
-                }
-                continue;
-            }
-            if (bestIsZero && attrs.hullPoints > 0) {
-                // any live target beats defaulting to a 0-HP one
-                targetId = sp.shipId;
-                bestHp = attrs.hullPoints;
-                bestIsZero = false;
-            } else if (
-                !bestIsZero && attrs.hullPoints > 0 && attrs.hullPoints < bestHp
-            ) {
-                targetId = sp.shipId;
-                bestHp = attrs.hullPoints;
             }
         }
+    }
+
+    // A target's rank, higher first (2026-11-03; was: on a scoring tile,
+    // then lowest HP): a live ship before a disabled one (a 0-HP ship can
+    // neither shoot nor score), then a shot that destroys it, then standing
+    // on a scoring tile, then more damage after its damage reduction, then
+    // lower HP. `gun` is false for a no-line-of-sight special (Drone Swarm),
+    // whose damage isn't the gun's, so the two damage keys are left out.
+    function _targetKey(
+        Ctx memory ctx,
+        Attributes memory a,
+        Position memory p,
+        bool gun
+    ) private pure returns (uint key) {
+        bool onTile = _isScoringTile(ctx.scoringPositions, p);
+        if (a.hullPoints == 0) return onTile ? 1 : 0;
+        key = 1 << 30;
+        uint dmg = gun ? shotDamage(ctx.attrs.gunDamage, a.damageReduction) : 0;
+        if (gun && dmg >= a.hullPoints) key |= 1 << 29;
+        if (onTile) key |= 1 << 28;
+        key |= dmg << 8;
+        key |= 255 - a.hullPoints;
+    }
+
+    // A gun shot's damage as Game applies it: gunDamage less
+    // damageReduction percent, rounded down.
+    function shotDamage(
+        uint8 gunDamage,
+        uint8 damageReduction
+    ) internal pure returns (uint) {
+        return gunDamage - (uint(gunDamage) * damageReduction) / 100;
     }
 
     function _isScoringTile(
@@ -418,7 +496,8 @@ library AIBehavior {
         }
     }
 
-    // Nearest enemy position, anywhere on the board (any HP). preferZeroHP
+    // Nearest enemy position, anywhere on the board (live ones first, see
+    // below). preferZeroHP
     // makes this look only at 0-HP enemies first, falling back to any enemy
     // if none exist — kept as a general targeting option even though no
     // archetype currently passes true (Rammer, the only caller that did,
@@ -445,17 +524,34 @@ library AIBehavior {
             }
             if (found) return (pos, found);
         }
-        for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
-            ShipPosition memory sp = ctx.g.shipPositions[i];
-            if (sp.shipId == ctx.shipId || sp.status != 0 || !sp.isCreator)
-                continue;
-            uint16 dist = _manhattan(ctx.pos, sp.position);
-            if (!found || dist < bestDist) {
-                pos = sp.position;
-                found = true;
-                bestDist = dist;
+        // Live ships first (2026-11-03): a wreck can't shoot or score, so
+        // closing on one ahead of a live ship wastes moves. Wrecks only when
+        // nothing else is left.
+        for (uint pass = 0; pass < 2 && !found; pass++) {
+            for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
+                ShipPosition memory sp = ctx.g.shipPositions[i];
+                if (sp.shipId == ctx.shipId || sp.status != 0 || !sp.isCreator)
+                    continue;
+                // sp.status == 0 already checked above (G-01) — direct index read.
+                if (pass == 0 && ctx.g.shipAttributes[i].hullPoints == 0) continue;
+                uint16 dist = _manhattan(ctx.pos, sp.position);
+                if (!found || dist < bestDist) {
+                    pos = sp.position;
+                    found = true;
+                    bestDist = dist;
+                }
             }
         }
+    }
+
+    // Another ship stands on `p` and it isn't a live enemy: an ally, or a
+    // disabled ship of either side. The AI is always the joiner, so live
+    // enemies are creatorLive (as in every _shipOccupiedBitmap(ctx, true) call).
+    function _unclaimableTile(
+        Ctx memory ctx,
+        Position memory p
+    ) private pure returns (bool) {
+        return _isOccupiedByOther(ctx, p) && (ctx.creatorLive & _cellBit(p)) == 0;
     }
 
     function _isOccupiedByOther(
@@ -541,7 +637,12 @@ library AIBehavior {
         uint8 stopShortBy
     ) private view returns (Position memory dest) {
         uint256 enemyBitmap = _shipOccupiedBitmap(ctx, true);
+        if (_manhattan(ctx.pos, target) <= stopShortBy) return ctx.pos;
         bool moved;
+        (dest, moved) = _pathStep(ctx, target, maxSteps, stopShortBy, enemyBitmap);
+        if (moved) return dest;
+        // No tile within reach is closer by the path search (or the line
+        // checks ran out): the older greedy step, detours and sidestep.
         (dest, moved) = _primaryAttempt(
             ctx,
             target,
@@ -564,7 +665,201 @@ library AIBehavior {
         if (moved) return dest;
         (dest, moved) = _tryDetour(ctx, target, 0, -1, maxSteps, stopShortBy, enemyBitmap);
         if (moved) return dest;
+        // Within one tile of where it wants to be, only the ship on that tile
+        // is in the way, not a wall: stepping aside would just pull it away.
+        if (_manhattan(ctx.pos, target) <= uint16(stopShortBy) + 1) return ctx.pos;
+        (dest, moved) = _trySidestep(ctx, target, maxSteps, enemyBitmap);
+        if (moved) return dest;
         return ctx.pos;
+    }
+
+    // Board masks for the bitboard search: every cell, and the first and
+    // last columns (a one-bit shift wraps between them across rows).
+    uint256 constant BOARD_MASK = 0x7ffffffffffffffffffffffffffffffffffffffffffffff;
+    uint256 constant COL_FIRST = 0x4000200010000800040002000100008000400020001;
+    uint256 constant COL_LAST = 0x40002000100008000400020001000080004000200010000;
+    // Line checks (Maps calls) one _pathStep may spend before giving up.
+    uint constant PATH_CHECKS_MAX = 12;
+
+    struct PathSearch {
+        uint256 passable;
+        uint256 frontier;
+        uint256 visited;
+        uint256 reach;
+        uint256 greedyBit;
+        uint256 enemyBitmap;
+        uint checks;
+    }
+
+    // Pathfinding toward `target` (2026-11-03). A breadth-first search grows
+    // out from the goal, every tile within `stopShortBy` of the target, one
+    // ring of walking distance at a time. Impassable tiles and live enemies
+    // stop it; allies and wrecks don't, since ships can pass them. The board
+    // is 187 cells, so each ring is a few shifts on one word. The first ring
+    // holding a tile this ship can land on with a clear line this turn gives
+    // the move: the tile closest to the goal by walking distance, around
+    // walls. Ties go to the greedy step's tile, then the shortest move. Gives
+    // up (moved == false) on reaching this ship's own ring, since nothing
+    // reachable is closer, or after PATH_CHECKS_MAX line checks.
+    function _pathStep(
+        Ctx memory ctx,
+        Position memory target,
+        uint8 maxSteps,
+        uint8 stopShortBy,
+        uint256 enemyBitmap
+    ) private view returns (Position memory, bool) {
+        PathSearch memory p;
+        p.enemyBitmap = enemyBitmap;
+        p.passable = BOARD_MASK & ~(ctx.impassable | enemyBitmap);
+        p.reach =
+            _dilate(ctx.selfBit, maxSteps, BOARD_MASK) &
+            ~(ctx.occupied | ctx.impassable);
+        p.greedyBit = _cellBit(
+            _stepToward(
+                ctx.pos,
+                target,
+                _min8(_manhattan(ctx.pos, target) - stopShortBy, maxSteps)
+            )
+        );
+        p.frontier = _dilate(_cellBit(target), stopShortBy, BOARD_MASK);
+        p.visited = p.frontier;
+        while (p.frontier != 0) {
+            if (p.frontier & ctx.selfBit != 0) break;
+            (Position memory dest, bool found) = _tryRing(ctx, p);
+            if (found) return (dest, true);
+            if (p.checks >= PATH_CHECKS_MAX) break;
+            uint256 next = _dilate(p.frontier, 1, p.passable) & ~p.visited;
+            p.visited |= next;
+            p.frontier = next;
+        }
+        return (ctx.pos, false);
+    }
+
+    // The tiles of one ring that this ship can land on: the greedy step's
+    // tile first, then the shortest move first (the lowest cell on a tie),
+    // each checked for a clear line.
+    function _tryRing(
+        Ctx memory ctx,
+        PathSearch memory p
+    ) private view returns (Position memory dest, bool) {
+        uint256 cands = p.frontier & p.reach;
+        if (cands & p.greedyBit != 0) {
+            cands &= ~p.greedyBit;
+            dest = _cellPos(_lowestBit(p.greedyBit));
+            p.checks++;
+            if (_isReachable(ctx, dest, p.enemyBitmap)) return (dest, true);
+        }
+        while (cands != 0 && p.checks < PATH_CHECKS_MAX) {
+            uint256 bit = _nearestCell(ctx.pos, cands);
+            cands &= ~bit;
+            dest = _cellPos(_lowestBit(bit));
+            p.checks++;
+            if (_isReachable(ctx, dest, p.enemyBitmap)) return (dest, true);
+        }
+        return (ctx.pos, false);
+    }
+
+    // The bit of the cell in `cells` nearest `from`, the lowest on a tie.
+    function _nearestCell(
+        Position memory from,
+        uint256 cells
+    ) private pure returns (uint256 best) {
+        uint16 bestDist = type(uint16).max;
+        while (cells != 0) {
+            uint256 bit = cells & (~cells + 1);
+            cells &= cells - 1;
+            uint16 d = _manhattan(from, _cellPos(_lowestBit(bit)));
+            if (d < bestDist) (bestDist, best) = (d, bit);
+        }
+    }
+
+    // `x` grown by `n` tiles in the four directions, kept within `mask`.
+    function _dilate(
+        uint256 x,
+        uint n,
+        uint256 mask
+    ) private pure returns (uint256) {
+        for (; n > 0; n--) {
+            x =
+                (x |
+                    ((x << 1) & ~COL_FIRST) |
+                    ((x >> 1) & ~COL_LAST) |
+                    (x << 17) |
+                    (x >> 17)) &
+                mask;
+        }
+        return x;
+    }
+
+    function _lowestBit(uint256 x) private pure returns (uint i) {
+        if (x & type(uint128).max == 0) { x >>= 128; i += 128; }
+        if (x & type(uint64).max == 0) { x >>= 64; i += 64; }
+        if (x & type(uint32).max == 0) { x >>= 32; i += 32; }
+        if (x & type(uint16).max == 0) { x >>= 16; i += 16; }
+        if (x & type(uint8).max == 0) { x >>= 8; i += 8; }
+        if (x & 0xf == 0) { x >>= 4; i += 4; }
+        if (x & 0x3 == 0) { x >>= 2; i += 2; }
+        if (x & 0x1 == 0) i += 1;
+    }
+
+    function _cellPos(uint idx) private pure returns (Position memory) {
+        return
+            Position({
+                row: int16(uint16(idx / uint(uint16(GRID_WIDTH)))),
+                col: int16(uint16(idx % uint(uint16(GRID_WIDTH))))
+            });
+    }
+
+    // Last resort for _stepTowardReachable, when the direct line and every
+    // detour hit the same obstacle. That happens when a wall lies across the
+    // long axis toward the target: _stepToward spends the whole move on that
+    // axis first, so every candidate runs into it. Movement is straight-line
+    // only (Maps.hasMovementPath), so getting around takes a sideways step:
+    // along the short axis, toward the target's side first and then the
+    // other, as far as movement allows (shorter if that isn't reachable).
+    // The next turn's line toward the target then starts clear of the wall.
+    // Found live 2026-11-03: two Grunts stood behind impassable tiles for
+    // several turns while every enemy was on the far side.
+    function _trySidestep(
+        Ctx memory ctx,
+        Position memory target,
+        uint8 maxSteps,
+        uint256 enemyBitmap
+    ) private view returns (Position memory dest, bool moved) {
+        int16 rowDelta = target.row - ctx.pos.row;
+        int16 colDelta = target.col - ctx.pos.col;
+        // Same tie-break as _stepToward: rows are the long axis on a tie.
+        bool sideIsCol = (rowDelta < 0 ? -rowDelta : rowDelta) >=
+            (colDelta < 0 ? -colDelta : colDelta);
+        int16 first = (sideIsCol ? colDelta : rowDelta) < 0 ? int16(-1) : int16(1);
+        (dest, moved) = _sidestepDir(ctx, sideIsCol, first, maxSteps, enemyBitmap);
+        if (moved) return (dest, true);
+        return _sidestepDir(ctx, sideIsCol, -first, maxSteps, enemyBitmap);
+    }
+
+    // One direction of _trySidestep: the farthest reachable tile up to
+    // `maxSteps` along that axis. Split out for stack pressure, like _tryDetour.
+    function _sidestepDir(
+        Ctx memory ctx,
+        bool alongCol,
+        int16 dir,
+        uint8 maxSteps,
+        uint256 enemyBitmap
+    ) private view returns (Position memory p, bool) {
+        for (uint8 steps = maxSteps; steps > 0; steps--) {
+            int16 off = dir * int16(uint16(steps));
+            p = alongCol
+                ? Position({row: ctx.pos.row, col: ctx.pos.col + off})
+                : Position({row: ctx.pos.row + off, col: ctx.pos.col});
+            if (
+                p.row >= 0 &&
+                p.row < ctx.gridHeight &&
+                p.col >= 0 &&
+                p.col < ctx.gridWidth &&
+                _isReachable(ctx, p, enemyBitmap)
+            ) return (p, true);
+        }
+        return (ctx.pos, false);
     }
 
     // The un-detoured attempt: dist<=stopShortBy counts as "already there"
@@ -614,47 +909,92 @@ library AIBehavior {
         return _backoffToward(ctx, detourTarget, detourSteps, enemyBitmap);
     }
 
-    // Picks a scoring-tile movement target. Preference order:
-    //   1. Unclaimed (unoccupied) tile on this ship's weapon-range-
-    //      appropriate side of the grid — long-range weapons (Sniper,
-    //      Missile) stick close to the AI's own spawn side (high
-    //      columns), short-range weapons (Generic, Close) push toward
-    //      the midline/opponent's side (low columns) — nearest first.
-    //   2. Unclaimed tile on either side, nearest first (no matching-side
-    //      tile exists on this map).
-    //   3. Any tile at all, even one currently held by a ship, nearest
-    //      first — so there's always somewhere to head as long as scoring
-    //      tiles exist, rather than stalling out with nothing to do.
+    // Picks a scoring-tile movement target: the tile this ship is best
+    // placed to take. Tiers, best first:
+    //   0. free, and this ship gets there in fewer turns than any live enemy;
+    //   1. free, and it's a tie;
+    //   2. free, but an enemy gets there first;
+    //   3. held by a live enemy (worth contesting).
+    // A tile held by another of its own ships, or by a wreck, is never
+    // picked. Within a tier: the most points per turn of travel, then the
+    // nearest. Replaced a weapon-range side bias (2026-11-03) that sent
+    // short-range ships to the tiles on the enemy's half first, which the
+    // enemy, moving first from that side, always reached first.
     function _bestScoringTile(
         Ctx memory ctx
     ) private pure returns (Position memory pos, bool found) {
-        int16 midCol = ctx.gridWidth / 2;
-        bool longRange = ctx.mainWeapon == MainWeapon.Sniper ||
-            ctx.mainWeapon == MainWeapon.Missile;
-
-        for (uint pass = 0; pass < 3; pass++) {
-            uint16 bestDist = type(uint16).max;
-            for (uint i = 0; i < ctx.scoringPositions.length; i++) {
-                Position memory candidate = Position({
-                    row: ctx.scoringPositions[i].row,
-                    col: ctx.scoringPositions[i].col
-                });
-                if (pass < 2 && _isOccupiedByOther(ctx, candidate)) continue;
-                if (pass == 0) {
-                    bool onOwnSide = longRange
-                        ? candidate.col >= midCol
-                        : candidate.col <= midCol;
-                    if (!onOwnSide) continue;
-                }
-                uint16 dist = _manhattan(ctx.pos, candidate);
-                if (!found || dist < bestDist) {
-                    pos = candidate;
-                    bestDist = dist;
-                    found = true;
-                }
-            }
-            if (found) return (pos, true);
+        TileChoice memory best;
+        for (uint i = 0; i < ctx.scoringPositions.length; i++) {
+            ScoringPosition memory sp = ctx.scoringPositions[i];
+            TileChoice memory c = _tileRace(
+                ctx,
+                Position({row: sp.row, col: sp.col}),
+                sp.points
+            );
+            if (c.ok && (!best.ok || _betterTile(c, best))) best = c;
         }
+        return (best.pos, best.ok);
+    }
+
+    // One scoring tile as _bestScoringTile sees it.
+    struct TileChoice {
+        Position pos;
+        bool ok; // a tile this ship could take or contest
+        uint tier;
+        uint turns; // this ship's turns to reach it
+        uint points;
+        uint16 dist;
+    }
+
+    function _tileRace(
+        Ctx memory ctx,
+        Position memory t,
+        uint8 points
+    ) private pure returns (TileChoice memory c) {
+        c.pos = t;
+        c.points = points;
+        c.dist = _manhattan(ctx.pos, t);
+        c.turns = _turnsToReach(c.dist, ctx.attrs.movement);
+        if (ctx.creatorLive & _cellBit(t) != 0) {
+            c.tier = 3;
+            c.ok = true;
+            return c;
+        }
+        if (_isOccupiedByOther(ctx, t)) return c; // own ship or a wreck
+        uint enemyTurns = type(uint).max;
+        for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
+            ShipPosition memory sp = ctx.g.shipPositions[i];
+            if (sp.status != 0 || !sp.isCreator) continue;
+            // sp.status == 0 already checked above (G-01) — direct index read.
+            Attributes memory a = ctx.g.shipAttributes[i];
+            if (a.hullPoints == 0) continue;
+            uint n = _turnsToReach(_manhattan(sp.position, t), a.movement);
+            if (n < enemyTurns) enemyTurns = n;
+        }
+        c.tier = c.turns < enemyTurns ? 0 : c.turns == enemyTurns ? 1 : 2;
+        c.ok = true;
+    }
+
+    // Lower tier, then more points per turn of travel (points / (turns + 1),
+    // compared by cross-multiplying), then the shorter distance.
+    function _betterTile(
+        TileChoice memory a,
+        TileChoice memory b
+    ) private pure returns (bool) {
+        if (a.tier != b.tier) return a.tier < b.tier;
+        uint av = a.points * (b.turns + 1);
+        uint bv = b.points * (a.turns + 1);
+        if (av != bv) return av > bv;
+        return a.dist < b.dist;
+    }
+
+    function _turnsToReach(
+        uint16 dist,
+        uint8 movement
+    ) private pure returns (uint) {
+        if (dist == 0) return 0;
+        if (movement == 0) return type(uint).max;
+        return (uint(dist) + movement - 1) / movement;
     }
 
     // True when this ship is already standing on a scoring tile with no
@@ -787,7 +1127,12 @@ library AIBehavior {
         }
 
         (Position memory tilePos, bool tileFound) = _bestScoringTile(ctx);
-        if (tileFound) {
+        // A tile another of its own ships already holds (or a wreck sits on)
+        // can't be claimed, and heading there parks the ship beside it for as
+        // long as the holder stays: close on the enemy instead. One held by a
+        // live enemy is still worth contesting. Found live 2026-11-03: a
+        // variant 1 Aggressor sat next to its ally's tile, the map's only one.
+        if (tileFound && !_unclaimableTile(ctx, tilePos)) {
             Position memory towardTile = _stepTowardReachable(
                 ctx,
                 tilePos,
@@ -888,10 +1233,50 @@ library AIBehavior {
         return _holdDecision(ctx);
     }
 
+    // The enemy to close on. While the enemy side is taking more points per
+    // round from scoring tiles than this side, that's the nearest enemy
+    // standing on one: knocking it off is how the AI stops losing on points
+    // (2026-11-03). Otherwise the nearest enemy.
     function nearestEnemy(
         Ctx memory ctx
     ) internal pure returns (Position memory pos, bool found) {
+        (uint enemyIncome, uint ownIncome) = _tileIncome(ctx);
+        if (enemyIncome > ownIncome) {
+            (pos, found) = _nearestEnemyOnTile(ctx);
+            if (found) return (pos, true);
+        }
         return _nearestEnemyPosition(ctx, false);
+    }
+
+    // Points per round each side's live ships stand on, as Game's round
+    // scoring counts them (live ships only; a spent once-only tile isn't
+    // listed).
+    function _tileIncome(
+        Ctx memory ctx
+    ) private pure returns (uint enemy, uint own) {
+        for (uint i = 0; i < ctx.scoringPositions.length; i++) {
+            ScoringPosition memory t = ctx.scoringPositions[i];
+            uint256 bit = _cellBit(Position({row: t.row, col: t.col}));
+            if (ctx.creatorLive & bit != 0) enemy += t.points;
+            else if (ctx.joinerLive & bit != 0) own += t.points;
+        }
+    }
+
+    function _nearestEnemyOnTile(
+        Ctx memory ctx
+    ) private pure returns (Position memory pos, bool found) {
+        uint16 bestDist = type(uint16).max;
+        for (uint i = 0; i < ctx.scoringPositions.length; i++) {
+            ScoringPosition memory t = ctx.scoringPositions[i];
+            Position memory p = Position({row: t.row, col: t.col});
+            if (ctx.creatorLive & _cellBit(p) == 0) continue;
+            uint16 dist = _manhattan(ctx.pos, p);
+            if (dist < bestDist) {
+                pos = p;
+                found = true;
+                bestDist = dist;
+            }
+        }
     }
 
     function onScoringTile(Ctx memory ctx) internal pure returns (bool) {
@@ -911,6 +1296,317 @@ library AIBehavior {
     ) internal view returns (Decision memory) {
         if (_shouldHoldScoringTile(ctx)) return _holdDecision(ctx);
         return _approachOrSeekTile(ctx, ctx.pos, false);
+    }
+
+    // At most this many tiles get shotWithinReach's external path and line
+    // of sight checks, to bound its gas.
+    uint constant SHOT_SEARCH_MAX = 16;
+
+    // Line-of-sight seeking (2026-11-03): the nearest tile this ship can move
+    // to this turn from which its gun has a target (see _bestEnemyWithin),
+    // for when the tile its tree planned has none. Searches outward from
+    // where the ship stands, nearest first, its own tile included. Before
+    // this, a ship whose target sat behind blocked tiles took its usual step
+    // and passed again every turn. Only tiles with an enemy within gun range
+    // get the external checks, and at most SHOT_SEARCH_MAX of them.
+    function shotWithinReach(
+        Ctx memory ctx,
+        bool safeOnly
+    ) internal view returns (Position memory dest, uint target, bool found) {
+        uint256 enemyBitmap = _shipOccupiedBitmap(ctx, true);
+        uint checks;
+        int16 m = int16(uint16(ctx.attrs.movement));
+        for (int16 d = 0; d <= m; d++) {
+            for (int16 dr = -d; dr <= d; dr++) {
+                int16 rem = d - (dr < 0 ? -dr : dr);
+                for (int16 side = 1; side >= -1; side -= 2) {
+                    dest = Position({
+                        row: ctx.pos.row + dr,
+                        col: ctx.pos.col + side * rem
+                    });
+                    (target, found, checks) = _shotFrom(
+                        ctx,
+                        dest,
+                        enemyBitmap,
+                        checks,
+                        safeOnly
+                    );
+                    if (found) return (dest, target, true);
+                    if (checks >= SHOT_SEARCH_MAX) return (ctx.pos, 0, false);
+                    if (rem == 0) break; // one tile on the axis, not two
+                }
+            }
+        }
+        return (ctx.pos, 0, false);
+    }
+
+    // One candidate for shotWithinReach: a gun target from `t`, if `t` is on
+    // the board, has an enemy within gun range and (with `safeOnly`) is out
+    // of every live enemy's range, both checked in memory first, and is
+    // reachable this turn. `checks` counts the external checks spent.
+    function _shotFrom(
+        Ctx memory ctx,
+        Position memory t,
+        uint256 enemyBitmap,
+        uint checks,
+        bool safeOnly
+    ) private view returns (uint target, bool found, uint) {
+        if (!_onBoard(ctx, t)) return (0, false, checks);
+        if (!_enemyWithin(ctx, t, ctx.attrs.range)) return (0, false, checks);
+        if (safeOnly && _threatened(ctx, t)) return (0, false, checks);
+        checks++;
+        if (!_isReachable(ctx, t, enemyBitmap)) return (0, false, checks);
+        (target, found) = _bestEnemyWithin(ctx, t, ctx.attrs.range, true);
+        return (target, found, checks);
+    }
+
+    function _onBoard(
+        Ctx memory ctx,
+        Position memory t
+    ) private pure returns (bool) {
+        return
+            t.row >= 0 &&
+            t.col >= 0 &&
+            t.row < ctx.gridHeight &&
+            t.col < ctx.gridWidth;
+    }
+
+    // Any live enemy within its own gun range of `p`, by distance alone:
+    // conservative (a wall may block the shot) and free of external calls.
+    function _threatened(
+        Ctx memory ctx,
+        Position memory p
+    ) private pure returns (bool) {
+        for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
+            ShipPosition memory sp = ctx.g.shipPositions[i];
+            if (sp.status != 0 || !sp.isCreator) continue;
+            // sp.status == 0 already checked above (G-01) — direct index read.
+            Attributes memory a = ctx.g.shipAttributes[i];
+            if (a.hullPoints == 0) continue; // a disabled ship can't fire
+            if (_manhattan(p, sp.position) <= a.range) return true;
+        }
+        return false;
+    }
+
+    // Self-preservation (2026-11-03), for a ship below a quarter of its max
+    // HP that isn't holding a scoring tile (the points are worth the risk):
+    // a reachable tile out of every live enemy's range that still has a
+    // shot; else, if where it stands is in range of one, the nearest
+    // reachable tile that isn't. ok == false: carry on with the tree.
+    function lowHpEvade(
+        Ctx memory ctx
+    ) internal view returns (Decision memory d, bool ok) {
+        if (
+            ctx.attrs.hullPoints == 0 ||
+            uint(ctx.attrs.hullPoints) * 4 >= ctx.attrs.maxHullPoints ||
+            _isScoringTile(ctx.scoringPositions, ctx.pos)
+        ) return (d, false);
+        (Position memory p, uint target, bool found) = shotWithinReach(
+            ctx,
+            true
+        );
+        if (found) return (decision(p, ActionType.Shoot, target), true);
+        if (!_threatened(ctx, ctx.pos)) return (d, false);
+        (p, found) = _safeTileWithinReach(ctx);
+        if (found) return (decision(p, ActionType.Pass, 0), true);
+        return (d, false);
+    }
+
+    // The nearest tile this ship can move to this turn that no live enemy
+    // has in range; at most SHOT_SEARCH_MAX external path checks.
+    function _safeTileWithinReach(
+        Ctx memory ctx
+    ) private view returns (Position memory t, bool found) {
+        uint256 enemyBitmap = _shipOccupiedBitmap(ctx, true);
+        uint checks;
+        int16 m = int16(uint16(ctx.attrs.movement));
+        for (int16 d = 1; d <= m; d++) {
+            for (int16 dr = -d; dr <= d; dr++) {
+                int16 rem = d - (dr < 0 ? -dr : dr);
+                for (int16 side = 1; side >= -1; side -= 2) {
+                    t = Position({
+                        row: ctx.pos.row + dr,
+                        col: ctx.pos.col + side * rem
+                    });
+                    if (_onBoard(ctx, t) && !_threatened(ctx, t)) {
+                        if (_isReachable(ctx, t, enemyBitmap)) return (t, true);
+                        if (++checks >= SHOT_SEARCH_MAX) return (ctx.pos, false);
+                    }
+                    if (rem == 0) break;
+                }
+            }
+        }
+        return (ctx.pos, false);
+    }
+
+    // A ship on the board at 0 HP.
+    function isDisabled(
+        Ctx memory ctx,
+        uint shipId
+    ) internal pure returns (bool) {
+        (Attributes memory a, bool found) = findAttributes(ctx.g, shipId);
+        return found && a.hullPoints == 0;
+    }
+
+    // ---- Objective Runner and Hunter (2026-11-03) ----
+
+    // The nearest live enemy standing on a scoring tile.
+    function nearestTileHolder(
+        Ctx memory ctx
+    ) internal pure returns (Position memory, bool) {
+        return _nearestEnemyOnTile(ctx);
+    }
+
+    // Stay put if `target` is within `range`, else step toward it just far
+    // enough to bring it within `range` (never past movement).
+    function withinRangeOf(
+        Ctx memory ctx,
+        Position memory target,
+        uint8 range
+    ) internal view returns (Position memory) {
+        return _withinRangeOf(ctx, target, range);
+    }
+
+    // Whether this ship's gun can hit `target` from `from`: in range, with
+    // line of sight past range 1.
+    function canShoot(
+        Ctx memory ctx,
+        Position memory from,
+        Position memory target
+    ) internal view returns (bool) {
+        return _canShootFrom(ctx, from, target, _shipOccupiedBitmap(ctx, true));
+    }
+
+    function _canShootFrom(
+        Ctx memory ctx,
+        Position memory from,
+        Position memory target,
+        uint256 enemyBitmap
+    ) private view returns (bool) {
+        uint16 dist = _manhattan(from, target);
+        if (dist > ctx.attrs.range) return false;
+        return
+            dist <= 1 || _hasLosExcludingTarget(ctx, from, target, enemyBitmap);
+    }
+
+    // The Runner's gun target from `from`: a live enemy on a scoring tile
+    // (lowest HP first), ahead of any other; else the usual best target.
+    function holderFirstWithin(
+        Ctx memory ctx,
+        Position memory from
+    ) internal view returns (uint id, bool found) {
+        uint256 enemyBitmap = _shipOccupiedBitmap(ctx, true);
+        uint8 bestHp;
+        for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
+            ShipPosition memory sp = ctx.g.shipPositions[i];
+            if (sp.status != 0 || !sp.isCreator) continue;
+            // sp.status == 0 already checked above (G-01) — direct index read.
+            uint8 hp = ctx.g.shipAttributes[i].hullPoints;
+            if (hp == 0 || (found && hp >= bestHp)) continue;
+            if (!_isScoringTile(ctx.scoringPositions, sp.position)) continue;
+            if (!_canShootFrom(ctx, from, sp.position, enemyBitmap)) continue;
+            id = sp.shipId;
+            bestHp = hp;
+            found = true;
+        }
+        if (found) return (id, true);
+        return _bestEnemyWithin(ctx, from, ctx.attrs.range, true);
+    }
+
+    // The Hunter's quarry: the live enemy it can destroy soonest (turns to
+    // come within gun range, plus shots to destroy it by Game's damage
+    // formula). Ties go to one on a scoring tile, then the nearer.
+    function huntTarget(
+        Ctx memory ctx
+    ) internal pure returns (uint id, Position memory pos, bool found) {
+        Quarry memory best;
+        for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
+            ShipPosition memory sp = ctx.g.shipPositions[i];
+            if (sp.status != 0 || !sp.isCreator) continue;
+            // sp.status == 0 already checked above (G-01) — direct index read.
+            Quarry memory q = _quarry(ctx, ctx.g.shipAttributes[i], sp.position);
+            if (!q.ok) continue;
+            if (
+                !found ||
+                q.cost < best.cost ||
+                (q.cost == best.cost &&
+                    ((q.onTile && !best.onTile) ||
+                        (q.onTile == best.onTile && q.dist < best.dist)))
+            ) {
+                best = q;
+                id = sp.shipId;
+                pos = sp.position;
+                found = true;
+            }
+        }
+    }
+
+    // One candidate for huntTarget.
+    struct Quarry {
+        bool ok; // live, and this ship's gun can damage it
+        uint cost; // turns to come within range plus shots to destroy it
+        bool onTile;
+        uint16 dist;
+    }
+
+    function _quarry(
+        Ctx memory ctx,
+        Attributes memory a,
+        Position memory p
+    ) private pure returns (Quarry memory q) {
+        if (a.hullPoints == 0) return q;
+        uint dmg = shotDamage(ctx.attrs.gunDamage, a.damageReduction);
+        if (dmg == 0) return q;
+        q.dist = _manhattan(ctx.pos, p);
+        uint travel = q.dist > ctx.attrs.range
+            ? _turnsToReach(q.dist - ctx.attrs.range, ctx.attrs.movement)
+            : 0;
+        if (travel == type(uint).max) return q; // can't move, can't reach it
+        q.cost = travel + (uint(a.hullPoints) + dmg - 1) / dmg;
+        q.onTile = _isScoringTile(ctx.scoringPositions, p);
+        q.ok = true;
+    }
+
+    // Whether a repair of `allyId` can't wait (2026-11-03): it's disabled
+    // (a repair revives it), or a live enemy that could reach it next turn
+    // (within its range plus movement) would destroy it with one shot.
+    function healIsUrgent(
+        Ctx memory ctx,
+        uint allyId
+    ) internal pure returns (bool) {
+        (Position memory at, bool found) = findPosition(ctx.g, allyId);
+        if (!found) return false;
+        (Attributes memory ally, ) = findAttributes(ctx.g, allyId);
+        if (ally.hullPoints == 0) return true;
+        for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
+            ShipPosition memory sp = ctx.g.shipPositions[i];
+            if (sp.status != 0 || !sp.isCreator) continue;
+            // sp.status == 0 already checked above (G-01) — direct index read.
+            Attributes memory e = ctx.g.shipAttributes[i];
+            if (e.hullPoints == 0) continue;
+            if (_manhattan(sp.position, at) > uint16(e.range) + e.movement)
+                continue;
+            if (shotDamage(e.gunDamage, ally.damageReduction) >= ally.hullPoints)
+                return true;
+        }
+        return false;
+    }
+
+    // Any live enemy within `range` of `p`, by distance alone. Live only:
+    // shotWithinReach shouldn't move a ship just to shoot a wreck.
+    function _enemyWithin(
+        Ctx memory ctx,
+        Position memory p,
+        uint8 range
+    ) private pure returns (bool) {
+        for (uint i = 0; i < ctx.g.shipPositions.length; i++) {
+            ShipPosition memory sp = ctx.g.shipPositions[i];
+            if (sp.status != 0 || !sp.isCreator) continue;
+            // sp.status == 0 already checked above (G-01) — direct index read.
+            if (ctx.g.shipAttributes[i].hullPoints == 0) continue;
+            if (_manhattan(p, sp.position) <= range) return true;
+        }
+        return false;
     }
 
     // Close in on an enemy only as far as it brings a shot into range,

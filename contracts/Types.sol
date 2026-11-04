@@ -72,7 +72,11 @@ enum Archetype {
     Sniper, // long-gun fire support; a skirmisher faction also kites
     Support, // heals the most injured ally (each faction's own way), hangs back
     Turtle, // seeks/holds scoring tiles, fights only opportunistically
-    Rammer // faction-1 only: hunts 0-HP enemies to Ram, else shoots
+    Rammer, // faction-1 only: hunts 0-HP enemies to Ram, else shoots
+    // Added 2026-11-03 (append only: configs and minted ships store the
+    // number):
+    Runner, // takes free scoring tiles, else goes after enemies holding one
+    Hunter // goes after the enemy it can destroy soonest, ignoring tiles
 }
 
 // Which game mode(s) a preset map is valid for. Enforced at the point a

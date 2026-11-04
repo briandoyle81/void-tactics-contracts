@@ -350,6 +350,35 @@ export async function setShipHullPoints(
   }
 }
 
+// Byte offsets of ShipBoardState's single-byte stats (Types.sol).
+const SB_STAT_BYTE_OFFSET = {
+  range: 9,
+  gunDamage: 10,
+  movement: 13,
+  damageReduction: 14,
+} as const;
+
+// Overwrites one of a ship's board stats, for scenarios that need exact
+// numbers (purchased test ships roll theirs).
+export async function setShipStat(
+  gameAddress: string,
+  gameId: bigint,
+  shipId: bigint,
+  stat: keyof typeof SB_STAT_BYTE_OFFSET,
+  value: number
+): Promise<void> {
+  const boardSlot = mappingSlot(
+    shipId,
+    gameBaseSlot(gameId) + GD_SHIP_BOARD
+  );
+  const boardWord = await readWord(gameAddress, boardSlot);
+  await setStorageAt(
+    gameAddress,
+    boardSlot,
+    writeByteRange(boardWord, SB_STAT_BYTE_OFFSET[stat], 1, BigInt(value))
+  );
+}
+
 // Clears a ship's live bit (it just went to 0 HP), if it is on the board.
 async function clearLiveBitOf(
   gameAddress: string,

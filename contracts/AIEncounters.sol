@@ -25,7 +25,17 @@ contract AIEncounters is Ownable {
         Equipment equipment;
         Traits traits; // accuracy/hull/speed must be 0-2; variant must be > 0
         Archetype archetype; // drives SinglePlayerMatch's takeAITurn rules
+        // Copied onto every ship minted from this config (AIShips.allocateShip):
+        // shiny is cosmetic; shipsDestroyed is the kill count ShipAttributes
+        // derives the rank bonus from, so it sets how veteran the ship is.
+        bool shiny;
+        uint32 shipsDestroyed;
     }
+
+    // A config's kill count is copied onto each ship minted from it, and every
+    // kill that ship makes adds one (AIShips.recordKill). Capping it far below
+    // uint32's max means a mistyped value can't make that kill overflow and revert.
+    uint32 public constant MAX_AI_KILLS = 1_000_000;
 
     Maps public maps;
 
@@ -71,6 +81,7 @@ contract AIEncounters is Ownable {
     error InvalidPosition();
     error TooManyPlacements();
     error ArrayLengthMismatch();
+    error InvalidKillCount();
 
     event EncounterEditorSet(address indexed editor, bool allowed);
     event AIShipConfigCreated(uint indexed configId);
@@ -123,9 +134,12 @@ contract AIEncounters is Ownable {
         string calldata _name,
         Equipment calldata _equipment,
         Traits calldata _traits,
-        Archetype _archetype
+        Archetype _archetype,
+        bool _shiny,
+        uint32 _shipsDestroyed
     ) external onlyEncounterEditor returns (uint configId) {
         _validateTraits(_traits);
+        if (_shipsDestroyed > MAX_AI_KILLS) revert InvalidKillCount();
         aiShipConfigCount++;
         configId = aiShipConfigCount;
         aiShipConfigs[configId] = AIShipConfig({
@@ -133,7 +147,9 @@ contract AIEncounters is Ownable {
             name: _name,
             equipment: _equipment,
             traits: _traits,
-            archetype: _archetype
+            archetype: _archetype,
+            shiny: _shiny,
+            shipsDestroyed: _shipsDestroyed
         });
         emit AIShipConfigCreated(configId);
     }
@@ -143,17 +159,22 @@ contract AIEncounters is Ownable {
         string calldata _name,
         Equipment calldata _equipment,
         Traits calldata _traits,
-        Archetype _archetype
+        Archetype _archetype,
+        bool _shiny,
+        uint32 _shipsDestroyed
     ) external onlyEncounterEditor {
         if (_configId == 0 || _configId > aiShipConfigCount)
             revert ConfigNotFound();
         _validateTraits(_traits);
+        if (_shipsDestroyed > MAX_AI_KILLS) revert InvalidKillCount();
         aiShipConfigs[_configId] = AIShipConfig({
             id: _configId,
             name: _name,
             equipment: _equipment,
             traits: _traits,
-            archetype: _archetype
+            archetype: _archetype,
+            shiny: _shiny,
+            shipsDestroyed: _shipsDestroyed
         });
         emit AIShipConfigUpdated(_configId);
     }

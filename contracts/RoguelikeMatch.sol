@@ -796,6 +796,8 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
         s.owner = address(this); // allocateShip overwrites this with _to anyway
         s.equipment = _config.equipment;
         s.traits = _config.traits;
+        s.shipData.shiny = _config.shiny;
+        s.shipData.shipsDestroyed = _config.shipsDestroyed;
     }
 
     function takeAITurn(uint _gameId) external {
@@ -835,7 +837,7 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             bool hasLiveShip,
             uint shipId,
             Position memory pos
-        ) = AIBehavior.turnState(board);
+        ) = AIBehavior.turnState(board, _isSupport);
         if (ended) {
             if (_strict) revert GameEnded();
             return false;
@@ -850,11 +852,16 @@ contract RoguelikeMatch is Ownable, IGameOrchestrator {
             return false;
         }
 
-        // The first joiner ship with HP > 0 that hasn't moved this round
-        // (AIBehavior.turnState); 0 if none.
+        // The joiner ship AIBehavior.turnState picked to move next: HP > 0,
+        // not moved this round; 0 if none.
         if (shipId == 0) return false;
 
         return _takeShipTurn(_gameId, shipId, pos, board);
+    }
+
+    // For AIBehavior.turnState, which moves Supports last.
+    function _isSupport(uint _shipId) internal view returns (bool) {
+        return aiShipInfo[_shipId].archetype == Archetype.Support;
     }
 
     function _takeShipTurn(

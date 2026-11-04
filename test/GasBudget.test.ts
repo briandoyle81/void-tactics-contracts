@@ -139,6 +139,8 @@ describe("Gas budgets for the largest player transactions", function () {
         speed: 0,
       },
       AI_ARCHETYPE_GRUNT,
+      false, // shiny
+      0, // shipsDestroyed
     ]);
     const configId = await aiEncounters.read.aiShipConfigCount();
     const aiCount = Number(await aiEncounters.read.maxPlacementsPerMap());

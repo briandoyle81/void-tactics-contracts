@@ -1594,6 +1594,10 @@ const DeployModule = buildModule("DeployModule", (m) => {
           ...config.traits,
         },
         config.archetype,
+        // Optional in the seed (older files have neither): a shiny AI ship,
+        // and its kill count, which sets its rank.
+        (config as { shiny?: boolean }).shiny ?? false,
+        (config as { shipsDestroyed?: number }).shipsDestroyed ?? 0,
       ],
       { id: `Create${capitalizedKey}AIShipConfig` },
     );

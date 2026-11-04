@@ -40,6 +40,8 @@ interface IMaps {
         int16 _col
     ) external view returns (bool);
 
+    function getImpassableBitmap(uint _gameId) external view returns (uint256);
+
     // Main line of sight function using Bresenham's algorithm
     function hasMaps(
         uint _gameId,

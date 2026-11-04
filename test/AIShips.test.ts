@@ -167,6 +167,34 @@ describe("AIShips", function () {
       expect(await aiShips.read.isShipDestroyed([firstId])).to.equal(false);
     });
 
+    it("takes the kill count and shiny flag from each allocation's template, never from a slot's prior occupant", async function () {
+      const { minterAiShips, routerAiShips, aiShips, other } =
+        await loadFixture(deployFixture);
+      const firstId = AI_SHIP_ID_OFFSET + 1n;
+
+      await minterAiShips.write.allocateShip([
+        other.account.address,
+        shipTemplate({
+          name: "Veteran",
+          shipData: { ...shipTemplate().shipData, shipsDestroyed: 120, shiny: true },
+        }),
+      ]);
+      const veteran = await aiShips.read.getShip([firstId]);
+      expect(veteran.shipData.shipsDestroyed).to.equal(120);
+      expect(veteran.shipData.shiny).to.equal(true);
+
+      // Its match adds a kill; the next ship in the slot starts from its own template.
+      await routerAiShips.write.recordKill([firstId]);
+      await minterAiShips.write.releaseShips([[firstId]]);
+      await minterAiShips.write.allocateShip([
+        other.account.address,
+        shipTemplate({ name: "Rookie" }),
+      ]);
+      const rookie = await aiShips.read.getShip([firstId]);
+      expect(rookie.shipData.shipsDestroyed).to.equal(0);
+      expect(rookie.shipData.shiny).to.equal(false);
+    });
+
     it("expands past any prior high-water mark once the pool is empty again", async function () {
       const { minterAiShips, aiShips, other } = await loadFixture(deployFixture);
 

@@ -133,6 +133,8 @@ describe("SinglePlayerMatch", function () {
       defaultEquipment,
       { ...defaultTraits, variant },
       defaultArchetype,
+      false, // shiny
+      0, // shipsDestroyed
     ]);
     const configId = await aiEncounters.read.aiShipConfigCount();
     await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -477,6 +479,8 @@ describe("SinglePlayerMatch", function () {
         equipment,
         { serialNumber: 0n, colors, variant, accuracy: 0, hull: 0, speed: 0 },
         0,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, row, 16, configId]);
@@ -795,6 +799,8 @@ describe("SinglePlayerMatch", function () {
       { mainWeapon: 0, armor: 0, shields: 0, special: 1 }, // Generic/None/None/EMP
       { ...defaultTraits, variant: 1, accuracy: 1 },
       1, // Aggressor
+      true, // shiny
+      120, // shipsDestroyed (a veteran: rank from kills)
     ]);
     const scoutConfigId = await aiEncounters.read.aiShipConfigCount();
     await aiEncounters.write.createAIShipConfig([
@@ -802,6 +808,8 @@ describe("SinglePlayerMatch", function () {
       { mainWeapon: 1, armor: 1, shields: 0, special: 2 }, // Sniper/Light/None/RepairDrones
       { ...defaultTraits, variant: 1, hull: 2 },
       3, // Support
+      false, // shiny
+      0, // shipsDestroyed
     ]);
     const bruiserConfigId = await aiEncounters.read.aiShipConfigCount();
     await aiEncounters.write.createAIShipConfig([
@@ -809,6 +817,8 @@ describe("SinglePlayerMatch", function () {
       { mainWeapon: 2, armor: 0, shields: 1, special: 3 }, // Missile/None/Light/FlakArray
       { ...defaultTraits, variant: 1, speed: 2 },
       0, // Grunt
+      false, // shiny
+      0, // shipsDestroyed
     ]);
     const supportConfigId = await aiEncounters.read.aiShipConfigCount();
     await aiEncounters.write.setMapPlacements([
@@ -849,6 +859,11 @@ describe("SinglePlayerMatch", function () {
 
     const bruiser = await aiShips.read.getShip([bruiserId]);
     expect(bruiser.name).to.equal("Bruiser");
+    // The config's shiny flag and kill count carry onto the minted ship.
+    expect(scout.shipData.shiny).to.equal(true);
+    expect(scout.shipData.shipsDestroyed).to.equal(120);
+    expect(bruiser.shipData.shiny).to.equal(false);
+    expect(bruiser.shipData.shipsDestroyed).to.equal(0);
     expect(bruiser.equipment.mainWeapon).to.equal(1);
     expect(bruiser.traits.hull).to.equal(2);
 
@@ -875,6 +890,8 @@ describe("SinglePlayerMatch", function () {
       defaultEquipment,
       defaultTraits,
       defaultArchetype,
+      false, // shiny
+      0, // shipsDestroyed
     ]);
     const configId = await aiEncounters.read.aiShipConfigCount();
 
@@ -1117,6 +1134,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment, // Generic, range 3
         defaultTraits,
         1, // Aggressor
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -1174,6 +1193,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         defaultTraits,
         2, // Sniper
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -1242,6 +1263,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         defaultTraits,
         2, // Sniper
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -1312,6 +1335,8 @@ describe("SinglePlayerMatch", function () {
         { mainWeapon: 0, armor: 0, shields: 0, special: 2 }, // Generic/.../RepairDrones
         defaultTraits,
         3, // Support
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const healerConfigId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.createAIShipConfig([
@@ -1319,6 +1344,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         defaultTraits,
         0, // Grunt
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const allyConfigId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacements([
@@ -1396,6 +1423,8 @@ describe("SinglePlayerMatch", function () {
         { mainWeapon: 0, armor: 0, shields: 0, special: 2 },
         variant2Traits,
         3, // Support
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const healerConfigId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.createAIShipConfig([
@@ -1403,6 +1432,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         variant2Traits,
         0, // Grunt
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const allyConfigId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacements([
@@ -1471,6 +1502,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         defaultTraits, // variant 1
         0, // Grunt
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -1537,6 +1570,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         defaultTraits,
         0,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -1588,6 +1623,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         defaultTraits,
         0,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -1637,6 +1674,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         defaultTraits,
         4, // Turtle
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -1717,6 +1756,8 @@ describe("SinglePlayerMatch", function () {
         { mainWeapon: 3, armor: 0, shields: 0, special: 0 },
         defaultTraits,
         4, // Turtle
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const configId = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -1786,6 +1827,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const config1 = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.createAIShipConfig([
@@ -1793,6 +1836,8 @@ describe("SinglePlayerMatch", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const config2 = await aiEncounters.read.aiShipConfigCount();
       await aiEncounters.write.setMapPlacements([

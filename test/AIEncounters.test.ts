@@ -102,7 +102,9 @@ describe("AIEncounters", function () {
           defaultEquipment,
           defaultTraits,
         defaultArchetype,
-        ]),
+        false, // shiny
+        0, // shipsDestroyed
+      ]),
       ).to.be.rejectedWith("NotEncounterEditor");
     });
 
@@ -120,7 +122,9 @@ describe("AIEncounters", function () {
           defaultEquipment,
           defaultTraits,
         defaultArchetype,
-        ]),
+        false, // shiny
+        0, // shipsDestroyed
+      ]),
       ).to.not.be.rejected;
     });
   });
@@ -134,12 +138,16 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.createAIShipConfig([
         "Bruiser",
         { mainWeapon: 1, armor: 2, shields: 0, special: 1 },
         { ...defaultTraits, variant: 2, accuracy: 1, hull: 2, speed: 1 },
         1, // Aggressor
+        false, // shiny
+        0, // shipsDestroyed
       ]);
 
       expect(await aiEncounters.read.aiShipConfigCount()).to.equal(2n);
@@ -166,6 +174,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       const publicClient = await hre.viem.getPublicClient();
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -180,6 +190,8 @@ describe("AIEncounters", function () {
           defaultEquipment,
           { ...defaultTraits, accuracy: 3 },
           defaultArchetype,
+          false, // shiny
+          0, // shipsDestroyed
         ]),
       ).to.be.rejectedWith("InvalidTier");
       await expect(
@@ -188,6 +200,8 @@ describe("AIEncounters", function () {
           defaultEquipment,
           { ...defaultTraits, hull: 3 },
           defaultArchetype,
+          false, // shiny
+          0, // shipsDestroyed
         ]),
       ).to.be.rejectedWith("InvalidTier");
       await expect(
@@ -196,8 +210,46 @@ describe("AIEncounters", function () {
           defaultEquipment,
           { ...defaultTraits, speed: 3 },
           defaultArchetype,
+          false, // shiny
+          0, // shipsDestroyed
         ]),
       ).to.be.rejectedWith("InvalidTier");
+    });
+
+    it("reverts with InvalidKillCount above MAX_AI_KILLS, on create and update", async function () {
+      const { aiEncounters } = await loadFixture(deployFixture);
+      const max = await aiEncounters.read.MAX_AI_KILLS();
+      await expect(
+        aiEncounters.write.createAIShipConfig([
+          "Bad",
+          defaultEquipment,
+          defaultTraits,
+          defaultArchetype,
+          false, // shiny
+          max + 1, // shipsDestroyed
+        ]),
+      ).to.be.rejectedWith("InvalidKillCount");
+      // The cap itself is allowed.
+      await aiEncounters.write.createAIShipConfig([
+        "Veteran",
+        defaultEquipment,
+        defaultTraits,
+        defaultArchetype,
+        true, // shiny
+        max, // shipsDestroyed
+      ]);
+      const id = await aiEncounters.read.aiShipConfigCount();
+      await expect(
+        aiEncounters.write.updateAIShipConfig([
+          id,
+          "Bad",
+          defaultEquipment,
+          defaultTraits,
+          defaultArchetype,
+          false, // shiny
+          max + 1, // shipsDestroyed
+        ]),
+      ).to.be.rejectedWith("InvalidKillCount");
     });
 
     it("reverts with InvalidVariant when variant is 0", async function () {
@@ -208,6 +260,8 @@ describe("AIEncounters", function () {
           defaultEquipment,
           { ...defaultTraits, variant: 0 },
           defaultArchetype,
+          false, // shiny
+          0, // shipsDestroyed
         ]),
       ).to.be.rejectedWith("InvalidVariant");
     });
@@ -219,6 +273,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
 
       await aiEncounters.write.updateAIShipConfig([
@@ -227,6 +283,8 @@ describe("AIEncounters", function () {
         { ...defaultEquipment, mainWeapon: 2 },
         { ...defaultTraits, speed: 2 },
         2, // Sniper
+        false, // shiny
+        0, // shipsDestroyed
       ]);
 
       const updated = await aiEncounters.read.getAIShipConfig([1n]);
@@ -238,6 +296,35 @@ describe("AIEncounters", function () {
       expect(await aiEncounters.read.aiShipConfigCount()).to.equal(1n);
     });
 
+    it("stores and updates a config's shiny flag and kill count", async function () {
+      const { aiEncounters } = await loadFixture(deployFixture);
+      await aiEncounters.write.createAIShipConfig([
+        "Veteran",
+        defaultEquipment,
+        defaultTraits,
+        defaultArchetype,
+        true, // shiny
+        120, // shipsDestroyed
+      ]);
+      const configId = await aiEncounters.read.aiShipConfigCount();
+      const created = await aiEncounters.read.getAIShipConfig([configId]);
+      expect(created.shiny).to.equal(true);
+      expect(created.shipsDestroyed).to.equal(120);
+
+      await aiEncounters.write.updateAIShipConfig([
+        configId,
+        "Veteran",
+        defaultEquipment,
+        defaultTraits,
+        defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
+      ]);
+      const updated = await aiEncounters.read.getAIShipConfig([configId]);
+      expect(updated.shiny).to.equal(false);
+      expect(updated.shipsDestroyed).to.equal(0);
+    });
+
     it("reverts ConfigNotFound when updating id 0 or a nonexistent id", async function () {
       const { aiEncounters } = await loadFixture(deployFixture);
       await expect(
@@ -247,6 +334,8 @@ describe("AIEncounters", function () {
           defaultEquipment,
           defaultTraits,
           defaultArchetype,
+          false, // shiny
+          0, // shipsDestroyed
         ]),
       ).to.be.rejectedWith("ConfigNotFound");
       await expect(
@@ -256,6 +345,8 @@ describe("AIEncounters", function () {
           defaultEquipment,
           defaultTraits,
           defaultArchetype,
+          false, // shiny
+          0, // shipsDestroyed
         ]),
       ).to.be.rejectedWith("ConfigNotFound");
     });
@@ -277,12 +368,16 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.createAIShipConfig([
         "Second",
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
 
       const all = await aiEncounters.read.getAllAIShipConfigs();
@@ -299,6 +394,8 @@ describe("AIEncounters", function () {
           defaultEquipment,
           defaultTraits,
           defaultArchetype,
+          false, // shiny
+          0, // shipsDestroyed
         ]);
       }
 
@@ -327,6 +424,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
 
       const page = await aiEncounters.read.getAIShipConfigsPaginated([
@@ -345,6 +444,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await expect(
         aiEncounters.write.setMapPlacement([999n, 0, 13, 1n]),
@@ -358,6 +459,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await expect(
         aiEncounters.write.setMapPlacement([1n, -1, 13, 1n]),
@@ -383,6 +486,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await maps.write.setJoinerZone([
         1n,
@@ -423,6 +528,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.setMapPlacements([
         1n,
@@ -448,12 +555,16 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.createAIShipConfig([
         "Bruiser",
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.setMapPlacement([1n, 6, 16, 2n]);
       await aiEncounters.write.setMapPlacement([1n, 1, 13, 1n]);
@@ -487,6 +598,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.setMapPlacement([1n, 3, 14, 1n]);
 
@@ -509,6 +622,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.setMapPlacement([1n, 3, 14, 1n]);
       expect(await aiEncounters.read.mapHasPlacements([1n])).to.be.true;
@@ -526,12 +641,16 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.createAIShipConfig([
         "Bruiser",
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
 
       await aiEncounters.write.setMapPlacement([1n, 3, 14, 1n]);
@@ -551,6 +670,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await expect(
         aiEncounters.write.setMapPlacements([
@@ -571,6 +692,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.setMapPlacements([
         1n,
@@ -593,6 +716,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
 
       // First deployment: 3 ships.
@@ -645,6 +770,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await aiEncounters.write.setMapPlacements([
         1n,
@@ -666,6 +793,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
 
       // Joiner window is rows 0-10, cols 13-16 -> 8 distinct cells across 2 rows.
@@ -691,6 +820,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
 
       await aiEncounters.write.setMaxPlacementsPerMap([2n]);
@@ -719,6 +850,8 @@ describe("AIEncounters", function () {
         defaultEquipment,
         defaultTraits,
         defaultArchetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       await maps.write.createPresetMap([[], MapMode.Both]); // map id 2
 

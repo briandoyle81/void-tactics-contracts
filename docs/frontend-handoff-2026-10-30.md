@@ -2,7 +2,7 @@
 
 _Written 2026-10-30, last updated 2026-11-02. Covers contract changes since `frontend-handoff-2026-10-23.md`._
 
-**Deployed to Base Sepolia (chain 84532) on 2026-11-01.** Every "next deploy" below is now live. This was a full redeploy: every contract has a new address, including `Ships`, `RandomManager` and the lottery hook.
+**Deployed to Base Sepolia (chain 84532) on 2026-11-01.** Every "next deploy" in §1–§11 is now live; §12 and §13 are not deployed yet. This was a full redeploy: every contract has a new address, including `Ships`, `RandomManager` and the lottery hook.
 
 - **Addresses:** `ignition/deployments/chain-84532/deployed_addresses.json`.
 - **ABIs:** `ignition/deployments/chain-84532/artifacts/DeployModule#<Name>.json`. Take all of them together, not only the contracts named below.
@@ -245,7 +245,69 @@ _Added 2026-11-01 (fixes `docs/audit-4.md` HA7-10; design in `docs/trustless-ran
 
 ---
 
-## 12. Checklist
+## 12. AI ship configs set shiny and kills (next full deploy)
+
+_Added 2026-11-02. **Not deployed yet**, unlike §1–§11: it needs another full redeploy after the 2026-11-01 one._ An AI ship config can now make its ships shiny and give them a starting kill count, which sets their rank (and its stat bonus) the same way a player ship's kills do.
+
+### ABI changes
+
+- **`AIEncounters.AIShipConfig`** gains two final fields: `(..., uint8 archetype, bool shiny, uint32 shipsDestroyed)`. `getAIShipConfig`, `getAllAIShipConfigs` and the `aiShipConfigs(id)` getter all change shape.
+- **`createAIShipConfig` and `updateAIShipConfig`** take `shiny` and `shipsDestroyed` as two new final arguments.
+- **New:** `AIEncounters.MAX_AI_KILLS()` (1,000,000). A higher `shipsDestroyed` reverts `InvalidKillCount()`.
+- Every AI ship minted from a config starts with its `shiny` and `shipsDestroyed` (in `Ships.getShip`/`ShipsRouter.getShip`, as for any ship), and its kills go up from there during the match.
+
+### Frontend changes needed
+
+- **ABIs:** take the new `AIEncounters`, `AIShips`, `SinglePlayerMatch` and `RoguelikeMatch` artifacts together after the redeploy.
+- **Admin editors:** `useAIEncountersAdmin.ts` already passes the two arguments when the synced ABI has them, and `AIShipConfig` in `app/types/types.ts` already has them as optional fields. Limit the kill-count input to `MAX_AI_KILLS`.
+- **Ship cards:** AI ships can now be shiny and ranked above 1. Anything that assumed AI ships are never shiny, or always rank 1, should read the ship's own `shiny` and `shipsDestroyed`.
+
+---
+
+## 13. AI behavior changes and two new archetypes (next full deploy)
+
+_Added 2026-11-03. **Not deployed yet**: it ships with §12 in the next full redeploy._ The on-chain AI (`AIBehavior`, `Variant1AI`, `Variant2AI`) was reworked after a review of every live AI game (`docs/ai-evaluation-2026-11-03.md`). No function or event changes shape. The changes are in what the AI decides, plus one enum.
+
+### New archetypes
+
+`Archetype` gains two values, appended so existing configs and ships keep their numbers:
+
+| Value | Name | Plays as |
+|---|---|---|
+| 6 | `Runner` | Takes the best free scoring tile. With none free, it goes after the nearest enemy holding one, and shoots tile holders ahead of anything else. With no scoring tiles on the map, it plays as a Grunt. |
+| 7 | `Hunter` | Goes after the enemy it can destroy soonest (turns to reach plus shots to destroy it), ignoring tiles. |
+
+`createAIShipConfig` and `updateAIShipConfig` accept 6 and 7. No seed config uses them yet.
+
+### Behavior changes, both factions
+
+- **Tile choice:** ships head for the scoring tile they reach before any enemy, preferring more points per turn of travel. Before, short-range ships went for the tiles on the player's half first.
+- **Variant 1 Grunt, Rammer and Support** take a free tile before fighting.
+- **Contesting:** while the player earns more points per round from tiles than the AI, ships close on the player's tile holders.
+- **Line of sight:** a ship whose target is hidden steps to a reachable tile that has a shot.
+- **Targets:** in order, a live ship before a wreck, a kill, a ship on a tile, damage after damage reduction, then lower HP.
+- **Variant 2 repair:** it comes first only for a disabled ally, or an ally on a tile that one enemy shot would destroy. Otherwise the ship shoots first.
+- **Threat:**
+  - variant 1 kiters prefer a firing tile outside every enemy's range;
+  - ships below a quarter of their HP, and off a tile, step out of range;
+  - ships close on live enemies before wrecks.
+- **Walls:** ships don't park beside a tile their own ally holds.
+- **Pathfinding:** ships approaching a target find a way around walls. They move to the tile within reach that's nearest the target by walking distance, not just the nearest in a straight line. Moves are unchanged: still one clear line within movement, so nothing new is needed to display them.
+
+- **Turn order:** the AI no longer always moves its ships in id order. It moves first a ship that can destroy an enemy with one shot, then a ship with an enemy in range, then the rest, and Supports last. The frontend shouldn't assume which AI ship acts next; read it from `AITurnTaken`.
+
+### New Maps function
+
+`Maps.getImpassableBitmap(uint gameId) returns (uint256)`: the game's impassable tiles as one bit per cell (`row * 17 + col`). The AI uses it. The frontend can use it too, in place of reading the impassable tiles one by one. It ships with this redeploy, so take the new `Maps` ABI.
+
+### Frontend changes needed
+
+- **Archetype lists:** add `Runner = 6` and `Hunter = 7` to `Archetype` in `app/types/types.ts`, add labels in `app/utils/aiShipConfig.ts` (used by `AIShipConfigEditor.tsx`), and update the value comment in `prisma/schema.prisma`.
+- **Web2 AI port:** `app/lib/aiBehaviorWeb2.ts` mirrors the on-chain trees for the off-chain game. It doesn't have any of the changes above. Until it's re-ported from the new `AIBehavior.sol`, `Variant1AI.sol` and `Variant2AI.sol`, web2 AI ships will play the old way, and won't recognize archetypes 6 and 7.
+
+---
+
+## 14. Checklist
 
 - [ ] After the redeploy: new ABIs for `Game`, `ShipAttributes`, `Fleets`, `GameResults`, `Lobbies`, `GameEngineRegistry` and `AIShips` (§1–§6; `AIShips` lost `shipAttributes()` and `setShipAttributesAddress`).
 - [ ] Remove `statusEffects` from the `Attributes` type and everywhere the frontend builds one (§1).
@@ -263,3 +325,5 @@ _Added 2026-11-01 (fixes `docs/audit-4.md` HA7-10; design in `docs/trustless-ran
 - [ ] After `takeAITurn`/`takeAITurns`, check the receipt for `AITurnTaken` and resend with more gas if it's missing (§9).
 - [ ] Show the lottery "resolve soon or it re-rolls" warning only while `UTCLotteryHook.drawSeed(drawId)` is zero (§9).
 - [ ] Update the outdated "permissionless" comment on `syncShipCosts` at `ManageNavy.tsx:1328`; it now reverts `NotYourShip` for ships the caller doesn't own (§9).
+- [ ] After the next full redeploy: take the new `AIEncounters`, `AIShips` and match ABIs, cap the admin kill-count input at `MAX_AI_KILLS`, and show shiny and rank on AI ships (§12).
+- [ ] Add `Runner = 6` and `Hunter = 7` to the frontend `Archetype` enum, the config editor labels and the Prisma comment, and re-port `aiBehaviorWeb2.ts` from the new AI contracts, including the path search (§13).

@@ -926,6 +926,16 @@ contract Maps is Ownable {
     }
 
     /**
+     * @dev The game's whole impassable bitmap (row * GRID_WIDTH + col), for
+     * the AI's pathfinding: one call instead of one isTileImpassable per tile.
+     * @param _gameId The game ID
+     * @return Bit-per-cell mask of impassable tiles
+     */
+    function getImpassableBitmap(uint _gameId) external view returns (uint256) {
+        return impassableTilesBitmap[_gameId];
+    }
+
+    /**
      * @dev Check if a tile is scoring for a specific game
      * @param _gameId The game ID
      * @param _row The row coordinate (0-19)

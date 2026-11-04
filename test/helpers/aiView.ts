@@ -34,16 +34,15 @@ export async function expectAIViewsConsistent(game: any, gameId: bigint): Promis
   expect(board[1]).to.equal(await getLiveBitmap(game.address, gameId, true));
   expect(board[2]).to.equal(await getLiveBitmap(game.address, gameId, false));
 
+  // turnState picks among the unmoved live joiner ships by its own ranking
+  // (AIBehavior._pickShip); this checks the pick is one of them.
   const moved = new Set(g.joinerMovedShipIds.map(String));
   const base = g.creatorActiveShipIds.length;
-  let expectedNext = 0n;
-  let expectedPos = { row: 0, col: 0 };
+  const eligible = new Set<string>();
   for (let i = 0; i < g.joinerActiveShipIds.length; i++) {
     const id = g.joinerActiveShipIds[i];
     if (moved.has(String(id)) || g.shipAttributes[base + i].hullPoints === 0) continue;
-    expectedNext = id;
-    expectedPos = g.shipPositions.find((p: any) => p.shipId === id).position;
-    break;
+    eligible.add(String(id));
   }
   const hasLive = g.joinerActiveShipIds.some(
     (_: bigint, i: number) => g.shipAttributes[base + i].hullPoints > 0,
@@ -54,6 +53,12 @@ export async function expectAIViewsConsistent(game: any, gameId: bigint): Promis
   expect(currentTurn).to.equal(g.turnState.currentTurn);
   expect(creator).to.equal(g.metadata.creator);
   expect(hasLiveShip).to.equal(hasLive);
-  expect(nextShipId).to.equal(expectedNext);
-  if (expectedNext !== 0n) expect(nextPosition).to.deep.equal(expectedPos);
+  if (eligible.size === 0) {
+    expect(nextShipId).to.equal(0n);
+  } else {
+    expect(eligible.has(String(nextShipId)), `picked ${nextShipId}`).to.equal(true);
+    expect(nextPosition).to.deep.equal(
+      g.shipPositions.find((p: any) => p.shipId === nextShipId).position,
+    );
+  }
 }

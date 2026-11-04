@@ -232,6 +232,9 @@ async function main() {
         speed: Number(c.traits.speed),
       },
       archetype: Number(c.archetype),
+      // Configs from before the shiny/kills fields read as the defaults.
+      shiny: Boolean(c.shiny ?? false),
+      shipsDestroyed: Number(c.shipsDestroyed ?? 0),
     };
     let key = configKeyOf.get(id) ?? reuse(`chainConfig${id}`, configEntry, configIds);
     if (key !== undefined) configKeyOf.set(id, key);
@@ -245,7 +248,14 @@ async function main() {
       continue;
     }
     const e = configEntry.get(key)!;
-    const have = { name: e.name, equipment: e.equipment, traits: e.traits, archetype: e.archetype };
+    const have = {
+      name: e.name,
+      equipment: e.equipment,
+      traits: e.traits,
+      archetype: e.archetype,
+      shiny: e.shiny ?? false,
+      shipsDestroyed: e.shipsDestroyed ?? 0,
+    };
     if (JSON.stringify(have) !== JSON.stringify(want)) {
       Object.assign(e, want);
       change(`AI config "${key}" (#${id}) -> ${c.name}`);

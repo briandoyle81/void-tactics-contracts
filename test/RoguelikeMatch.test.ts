@@ -107,6 +107,8 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       defaultEquipment,
       defaultTraits,
       archetype,
+      false, // shiny
+      0, // shipsDestroyed
     ]);
     const configId = await aiEncounters.read.aiShipConfigCount();
     await aiEncounters.write.setMapPlacement([mapId, 0, 16, configId]);
@@ -399,6 +401,49 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       // One whole core per AI kill (docs/audit-4.md HA7-01).
       expect(decAfter - decBefore).to.equal(1n);
       expect(utcAfter).to.equal(utcBefore);
+    });
+
+    it("mints a combat node's AI ships with their config's shiny flag and kill count", async function () {
+      const { deployed, human } = await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, aiShips, roguelikeNodeMap, randomManager } = deployed;
+      const humanRoguelikeMatch = await hre.viem.getContractAt(
+        "RoguelikeMatch",
+        deployed.roguelikeMatch.address,
+        { client: { wallet: human } },
+      );
+
+      const { rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      // The root's one AI ship is the newest config: make it a shiny veteran.
+      const configId = await aiEncounters.read.aiShipConfigCount();
+      const config = await aiEncounters.read.getAIShipConfig([configId]);
+      await aiEncounters.write.updateAIShipConfig([
+        configId,
+        "Veteran",
+        config.equipment,
+        config.traits,
+        config.archetype,
+        true, // shiny
+        300, // shipsDestroyed
+      ]);
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([
+        await roguelikeNodeMap.read.campaignCount(),
+        [1n],
+      ]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+
+      const aiShip = await aiShips.read.getShip([AI_SHIP_ID_OFFSET + 1n]);
+      expect(aiShip.name).to.equal("Veteran");
+      expect(aiShip.shipData.shiny).to.equal(true);
+      expect(aiShip.shipData.shipsDestroyed).to.equal(300);
     });
   });
 

@@ -14,6 +14,7 @@ import {
   setShipPosition,
   setShipHullPointsToZero,
   setShipHullPoints,
+  setShipStat,
   primeShipForRealDestruction,
 } from "./helpers/gameStorage";
 
@@ -45,6 +46,8 @@ describe("Per-variant AI behavior trees", function () {
   const SUPPORT = 3;
   const TURTLE = 4;
   const RAMMER = 5;
+  const RUNNER = 6;
+  const HUNTER = 7;
 
   // MainWeapon ids
   const GENERIC = 0;
@@ -119,12 +122,21 @@ describe("Per-variant AI behavior trees", function () {
     downed?: boolean;
     // 0 HP with its reactor timer at 2 (one more tick destroys it)
     primed?: boolean;
+    // Exact stats, overriding the purchased ship's rolled ones.
+    hp?: number;
+    range?: number;
+    gunDamage?: number;
   };
   type Scenario = {
-    ai: AIShip[]; // ai[0] is the ship under test; it acts first
+    // ai[0] is the ship under test. It must be the ship the AI picks to act
+    // first (AIBehavior._pickShip), unless `anyActor` is set: then the
+    // result's `actor` says which ship acted.
+    ai: AIShip[];
+    anyActor?: boolean;
     humans: HumanShip[]; // humans[0] must be live: it makes the turn-passing move
     scoringTiles?: { row: number; col: number }[];
     blocked?: [number, number][];
+    impassable?: [number, number][];
   };
 
   // Builds the match described by `sc`, lets the human pass, has the AI take
@@ -160,6 +172,8 @@ describe("Per-variant AI behavior trees", function () {
         },
         traits(a.variant),
         a.archetype,
+        false, // shiny
+        0, // shipsDestroyed
       ]);
       configIds.push(await f.aiEncounters.read.aiShipConfigCount());
       spawns.push({ row: 0, col: 13 + i });
@@ -193,6 +207,12 @@ describe("Per-variant AI behavior trees", function () {
       });
     }
 
+    for (const [row, col] of sc.impassable ?? []) {
+      await f.maps.write.setImpassableTile([gameId, row, col, true], {
+        account: f.owner.account,
+      });
+    }
+
     const aiIds = sc.ai.map((_, i) => AI_SHIP_ID_OFFSET + 1n + BigInt(i));
     for (let i = 0; i < sc.ai.length; i++) {
       await setShipPosition(
@@ -220,10 +240,19 @@ describe("Per-variant AI behavior trees", function () {
       }
     }
     for (let i = 0; i < sc.humans.length; i++) {
-      if (sc.humans[i].primed) {
+      const h = sc.humans[i];
+      if (h.primed) {
         await primeShipForRealDestruction(f.game.address, gameId, humanIds[i]);
-      } else if (sc.humans[i].downed) {
+      } else if (h.downed) {
         await setShipHullPointsToZero(f.game.address, gameId, humanIds[i]);
+      } else if (h.hp !== undefined) {
+        await setShipHullPoints(f.game.address, gameId, humanIds[i], h.hp);
+      }
+      if (h.range !== undefined) {
+        await setShipStat(f.game.address, gameId, humanIds[i], "range", h.range);
+      }
+      if (h.gunDamage !== undefined) {
+        await setShipStat(f.game.address, gameId, humanIds[i], "gunDamage", h.gunDamage);
       }
     }
 
@@ -247,6 +276,8 @@ describe("Per-variant AI behavior trees", function () {
       logs: receipt.logs,
       eventName: "AITurnTaken",
     });
+    const actor = events[0]?.args.shipId as bigint;
+    if (sc.anyActor) return { actor, events, aiIds, humanIds };
     const ev = events.find((e: any) => e.args.shipId === aiIds[0]);
     expect(ev, "the AI ship under test took a turn").to.not.be.undefined;
 
@@ -257,6 +288,7 @@ describe("Per-variant AI behavior trees", function () {
       target: ev!.args.targetShipId as bigint,
       row: Number(where.position.row),
       col: Number(where.position.col),
+      actor,
       aiIds,
       humanIds,
       game: f.game,
@@ -409,6 +441,34 @@ describe("Per-variant AI behavior trees", function () {
       expect(r.action).to.not.equal(ActionType.Pass);
     });
 
+    it("closes on the enemy instead of parking beside a scoring tile its ally holds", async function () {
+      // Roguelike game 559 (found live 2026-11-03): the map's only scoring
+      // tile, (8,12), is held by an ally, with walls to the west and north
+      // and allies on every other way around the tile. The Aggressor used to
+      // head for that tile and stand beside it every turn. Now it closes on
+      // the enemy: the path search takes it past the wall's east end to
+      // (7,14), its line passing through its ally at (8,13).
+      const r = await run({
+        ai: [
+          { variant: 1, archetype: AGGRESSOR, weapon: CLOSE, at: [9, 12] },
+          { variant: 1, archetype: GRUNT, at: [8, 12] },
+          { variant: 1, archetype: GRUNT, at: [9, 13] },
+          { variant: 1, archetype: GRUNT, at: [8, 13] },
+        ],
+        humans: [{ at: [3, 14] }],
+        scoringTiles: [{ row: 8, col: 12 }],
+        impassable: [
+          [7, 11],
+          [7, 12],
+          [7, 13],
+          [8, 11],
+          [9, 11],
+        ],
+      });
+      expect(r.action).to.equal(ActionType.Pass); // nothing in range yet
+      expect([r.row, r.col]).to.deep.equal([7, 14]);
+    });
+
     it("Rammer fights like a Grunt when there is nothing to ram", async function () {
       const r = await run({
         ai: [{ variant: 1, archetype: RAMMER, at: [5, 10] }],
@@ -456,8 +516,11 @@ describe("Per-variant AI behavior trees", function () {
 
     it("EMP finishes an adjacent enemy that is one tick from destruction", async function () {
       const r = await run({
+        // The live enemy sits at (5,13), within gun range: ships close on live
+        // enemies before wrecks (2026-11-03), and with it far away this
+        // Aggressor would walk off toward it instead.
         ai: [{ variant: 1, archetype: AGGRESSOR, special: 1, at: [5, 10] }],
-        humans: [{ at: [0, 0] }, { at: [5, 9], primed: true }],
+        humans: [{ at: [5, 13] }, { at: [5, 9], primed: true }],
       });
       expect(r.action).to.equal(ActionType.Special);
       expect(r.target).to.equal(2n);
@@ -474,6 +537,54 @@ describe("Per-variant AI behavior trees", function () {
       });
       expect(r.action).to.equal(ActionType.Pass); // nothing in range yet
       expect([r.row, r.col]).to.deep.equal([5, 8]);
+    });
+
+    // Rows 4-6, columns 12-14 impassable, directly west of the AI ship.
+    // A move is one line from tile to tile, so every line toward an enemy
+    // to the west runs into it. Found live 2026-11-03 (roguelike game 57).
+    const WALL: [number, number][] = [];
+    for (let row = 4; row <= 6; row++)
+      for (let col = 12; col <= 14; col++) WALL.push([row, col]);
+
+    it("goes around a wall across its path instead of standing still", async function () {
+      // The enemy is south-west: the path search goes round the wall's
+      // south-east corner, to the tile nearest the enemy by walking distance.
+      const r = await run({
+        ai: [{ variant: 2, archetype: GRUNT, special: 2, at: [5, 15] }],
+        humans: [{ at: [7, 3] }],
+        impassable: WALL,
+      });
+      expect(r.action).to.equal(ActionType.Pass); // nothing in range yet
+      expect([r.row, r.col]).to.deep.equal([7, 14]);
+    });
+
+    it("goes around a wall when the enemy is level with it", async function () {
+      const r = await run({
+        ai: [{ variant: 2, archetype: GRUNT, at: [5, 15] }],
+        humans: [{ at: [5, 3] }],
+        impassable: WALL,
+      });
+      // Round either corner, onto the row just past the wall.
+      expect(r.row === 3 || r.row === 7, `ended at (${r.row},${r.col})`).to.equal(true);
+      expect(r.col).to.equal(14);
+    });
+
+    it("walks out of a pocket open away from the enemy instead of rocking inside it", async function () {
+      // A U of impassable tiles open to the east, with the ship inside it and
+      // the enemy due west. Every line west, north or south hits the wall;
+      // the old sidestep went up and down inside the U. The only way out is
+      // east and around a corner of the U.
+      const POCKET: [number, number][] = [];
+      for (let row = 2; row <= 8; row++) POCKET.push([row, 13]);
+      for (const col of [14, 15]) POCKET.push([2, col], [8, col]);
+      const r = await run({
+        ai: [{ variant: 2, archetype: GRUNT, at: [5, 15] }],
+        humans: [{ at: [5, 3] }],
+        impassable: POCKET,
+      });
+      expect(r.action).to.equal(ActionType.Pass); // nothing in range yet
+      expect(r.col).to.equal(16);
+      expect(r.row === 2 || r.row === 8, `ended at (${r.row},${r.col})`).to.equal(true);
     });
 
     it("Grunt closes to melee and fires, stopping adjacent — never on the enemy's own tile", async function () {
@@ -729,8 +840,10 @@ describe("Per-variant AI behavior trees", function () {
     });
 
     it("4: shooting comes before the last-resort repair", async function () {
+      // Injured but above a quarter of its HP: at 10 HP it would step out
+      // of range instead (low-HP evasion, 2026-11-03).
       const r = await run({
-        ai: [GRUNT_AT([5, 12], { hp: 10 })],
+        ai: [GRUNT_AT([5, 12], { hp: 60 })],
         humans: [{ at: [5, 11] }],
       });
       expect(r.action).to.equal(ActionType.Shoot);
@@ -767,6 +880,341 @@ describe("Per-variant AI behavior trees", function () {
         humans: [{ at: [5, 2] }],
       });
       expect(r.action).to.equal(ActionType.Pass);
+    });
+  });
+
+  // 2026-11-03, from the live-game evaluation (docs/ai-evaluation-2026-11-03.md):
+  // players won almost every game on points while the AI chased ships.
+  describe("Objective play", function () {
+    it("heads for the tile it reaches before the enemy, not one on the enemy's half", async function () {
+      // A short-range variant 2 Grunt used to prefer tiles at col <= 8
+      // (toward the enemy) and walk to (5,4), which the enemy at (5,1) owns.
+      const r = await run({
+        ai: [{ variant: 2, archetype: GRUNT, at: [5, 15] }],
+        humans: [{ at: [5, 1] }],
+        scoringTiles: [
+          { row: 5, col: 4 },
+          { row: 5, col: 12 },
+        ],
+      });
+      expect(r.action).to.equal(ActionType.Pass);
+      expect([r.row, r.col]).to.deep.equal([5, 12]);
+    });
+
+    it("variant 1 Grunt takes a free tile before kiting to shoot", async function () {
+      // Before, it stood off at range 3 from the enemy at (5,10) and shot.
+      const r = await run({
+        ai: [{ variant: 1, archetype: GRUNT, at: [5, 15] }],
+        humans: [{ at: [5, 10] }],
+        scoringTiles: [{ row: 2, col: 15 }],
+      });
+      expect(r.action).to.equal(ActionType.Pass); // nothing in range from the tile
+      expect([r.row, r.col]).to.deep.equal([2, 15]);
+    });
+
+    it("variant 1 Aggressor still presses the fight instead of taking the tile", async function () {
+      const r = await run({
+        ai: [{ variant: 1, archetype: AGGRESSOR, at: [5, 15] }],
+        humans: [{ at: [5, 10] }],
+        scoringTiles: [{ row: 2, col: 15 }],
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+    });
+
+    it("closes on the enemy holding a tile, not the nearer one, while the enemy out-earns it", async function () {
+      // The only tile, (5,6), is held by humans[0], 9 away. The nearest
+      // enemy is at (0,13), 7 away: out of reach of a shot this turn
+      // (range 2 + movement 4), so line-of-sight seeking doesn't apply.
+      // Advancing at full speed toward the holder stops at (5,11); toward
+      // the nearer enemy it would have gone to (1,15).
+      const r = await run({
+        ai: [{ variant: 2, archetype: GRUNT, at: [5, 15] }],
+        humans: [{ at: [5, 6] }, { at: [0, 13] }],
+        scoringTiles: [{ row: 5, col: 6 }],
+      });
+      expect(r.action).to.equal(ActionType.Pass);
+      expect([r.row, r.col]).to.deep.equal([5, 11]);
+    });
+
+    it("goes for the nearer enemy when no tile is being held", async function () {
+      // Same two enemies, no scoring tiles: the nearer one, (2,15), is the
+      // target. The Grunt stops adjacent at (3,15) and shoots it.
+      const r = await run({
+        ai: [{ variant: 2, archetype: GRUNT, at: [5, 15] }],
+        humans: [{ at: [5, 7] }, { at: [2, 15] }],
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect(r.target).to.equal(r.humanIds[1]);
+    });
+  });
+
+  // 2026-11-03: a ship whose target sits behind a line-of-sight blocker
+  // used to take its usual step and pass. Here the blocker at (5,10) hides
+  // the enemy at (5,8) from (5,12), and a wall at column 11 (rows 4-6)
+  // stops it walking in. One step north, (4,12), has a clear line.
+  describe("Line-of-sight seeking", function () {
+    const wallAndBlocker = {
+      blocked: [[5, 10]] as [number, number][],
+      impassable: [
+        [4, 11],
+        [5, 11],
+        [6, 11],
+      ] as [number, number][],
+    };
+
+    it("variant 1 Aggressor steps to a tile with a clear shot and fires", async function () {
+      const r = await run({
+        // Sniper gun (range 6), so (4,12) is in range of (5,8).
+        ai: [{ variant: 1, archetype: AGGRESSOR, weapon: SNIPER_GUN, at: [5, 12] }],
+        humans: [{ at: [5, 8] }],
+        ...wallAndBlocker,
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect(r.target).to.equal(r.humanIds[0]);
+      expect([r.row, r.col]).to.deep.equal([4, 12]);
+    });
+
+    it("variant 2 Sniper does the same", async function () {
+      const r = await run({
+        ai: [{ variant: 2, archetype: SNIPER, weapon: SNIPER_GUN, at: [5, 12] }],
+        humans: [{ at: [5, 8] }],
+        ...wallAndBlocker,
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect([r.row, r.col]).to.deep.equal([4, 12]);
+    });
+
+    it("a ship holding a scoring tile keeps holding instead of leaving for a shot", async function () {
+      const r = await run({
+        ai: [{ variant: 1, archetype: SNIPER, weapon: SNIPER_GUN, at: [5, 12] }],
+        humans: [{ at: [5, 8] }],
+        scoringTiles: [{ row: 5, col: 12 }],
+        ...wallAndBlocker,
+      });
+      expect(r.action).to.equal(ActionType.Pass);
+      expect([r.row, r.col]).to.deep.equal([5, 12]);
+    });
+  });
+
+  // 2026-11-03, from the live-game evaluation: shoot before a routine
+  // repair, rank targets by kills, and keep low-HP ships out of fire.
+  describe("Repairs, targets and threat", function () {
+    it("variant 2 shoots an enemy instead of a repair that can wait", async function () {
+      // The ally on the tile is injured but no enemy shot can destroy it
+      // (the only enemy hits for 40). Before, the repair came first.
+      const r = await run({
+        ai: [
+          { variant: 2, archetype: GRUNT, at: [5, 12] },
+          { variant: 2, archetype: GRUNT, at: [5, 9], hp: 100 },
+        ],
+        humans: [{ at: [4, 12], gunDamage: 40 }],
+        scoringTiles: [{ row: 5, col: 9 }],
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect(r.target).to.equal(r.humanIds[0]);
+    });
+
+    it("variant 2 still makes a repair that can wait when it has no shot", async function () {
+      const r = await run({
+        ai: [
+          { variant: 2, archetype: GRUNT, at: [5, 12] },
+          { variant: 2, archetype: GRUNT, at: [5, 9], hp: 100 },
+        ],
+        humans: [{ at: [0, 0], gunDamage: 40 }],
+        scoringTiles: [{ row: 5, col: 9 }],
+      });
+      expect(r.action).to.equal(ActionType.FactionAbility);
+      expect(r.target).to.equal(r.aiIds[1]);
+    });
+
+    it("takes the kill over a healthy enemy holding a tile", async function () {
+      // Before, the enemy on the tile was always shot first.
+      const r = await run({
+        ai: [{ variant: 2, archetype: SNIPER, weapon: SNIPER_GUN, at: [5, 12] }],
+        humans: [{ at: [5, 9] }, { at: [3, 12], hp: 5 }],
+        scoringTiles: [{ row: 5, col: 9 }],
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect(r.target).to.equal(r.humanIds[1]);
+    });
+
+    it("shoots a live enemy before a disabled one on a tile", async function () {
+      const r = await run({
+        ai: [{ variant: 2, archetype: SNIPER, weapon: SNIPER_GUN, at: [5, 12] }],
+        humans: [{ at: [3, 12] }, { at: [5, 9], downed: true }],
+        scoringTiles: [{ row: 5, col: 9 }],
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect(r.target).to.equal(r.humanIds[0]);
+    });
+
+    it("closes on a live enemy, not a nearer wreck", async function () {
+      // The wreck at (2,14) is 5 away and the live enemy at (5,4) 10 away.
+      // Toward the live one at full speed (movement 4) is (5,8).
+      const r = await run({
+        ai: [{ variant: 2, archetype: GRUNT, at: [5, 12] }],
+        humans: [{ at: [5, 4] }, { at: [2, 14], downed: true }],
+      });
+      expect(r.action).to.equal(ActionType.Pass);
+      expect([r.row, r.col]).to.deep.equal([5, 8]);
+    });
+
+    it("variant 1 kiter shoots from a tile no enemy can return fire on", async function () {
+      // Sniper gun, range 6. Backing off to range 6 from the nearer enemy
+      // (5,8) would land at (5,14), inside the range-3 enemy at (5,16).
+      // Where it stands, (5,10), is out of both enemies' range.
+      const r = await run({
+        ai: [{ variant: 1, archetype: SNIPER, weapon: SNIPER_GUN, at: [5, 10] }],
+        humans: [
+          { at: [5, 8], range: 1 },
+          { at: [5, 16], range: 3 },
+        ],
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect([r.row, r.col]).to.deep.equal([5, 10]);
+    });
+
+    it("a low-HP variant 2 ship steps out of range and repairs itself", async function () {
+      // 10 HP, enemy 3 away with range 3. Its own gun (range 2) has no tile
+      // out of that enemy's range, so it moves to the nearest safe tile.
+      const r = await run({
+        ai: [{ variant: 2, archetype: GRUNT, at: [5, 12], hp: 10 }],
+        humans: [{ at: [5, 9], range: 3 }],
+      });
+      expect(r.action).to.equal(ActionType.FactionAbility);
+      expect(r.target).to.equal(r.aiIds[0]);
+      expect([r.row, r.col]).to.deep.equal([4, 12]);
+    });
+  });
+
+  // 2026-11-03: the two archetypes added after the live-game evaluation.
+  describe("Objective Runner and Hunter", function () {
+    // Each side holds one tile, so the score is level and other archetypes
+    // aren't drawn to the holder. humans[1] is nearer and destroyable in one
+    // shot, which every other archetype would shoot first.
+    const levelTiles = {
+      scoringTiles: [
+        { row: 5, col: 8 },
+        { row: 2, col: 15 },
+      ],
+    };
+
+    it("variant 1 Runner goes after the enemy holding a tile and shoots it over an easy kill", async function () {
+      const r = await run({
+        ai: [
+          { variant: 1, archetype: RUNNER, at: [5, 13] },
+          { variant: 1, archetype: GRUNT, at: [2, 15] },
+        ],
+        humans: [{ at: [5, 8] }, { at: [3, 11], hp: 5 }],
+        ...levelTiles,
+      });
+      // Gun range 3: it closes to (5,11), 3 from the holder.
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect(r.target).to.equal(r.humanIds[0]);
+      expect([r.row, r.col]).to.deep.equal([5, 11]);
+    });
+
+    it("variant 2 Runner does the same", async function () {
+      const r = await run({
+        ai: [
+          { variant: 2, archetype: RUNNER, at: [5, 13] },
+          { variant: 2, archetype: GRUNT, at: [2, 15] },
+        ],
+        humans: [{ at: [5, 8] }, { at: [4, 11], hp: 5 }],
+        ...levelTiles,
+      });
+      // Gun range 2: it closes to (5,10), 2 from the holder.
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect(r.target).to.equal(r.humanIds[0]);
+      expect([r.row, r.col]).to.deep.equal([5, 10]);
+    });
+
+    it("variant 2 Hunter goes after the enemy it can destroy soonest, not the one in range", async function () {
+      // humans[0] is in gun range (2) but, at 200 HP, takes at least three
+      // shots; humans[1], 3 away, takes one turn to reach and one shot. A
+      // Grunt would shoot humans[0] where it stands.
+      const r = await run({
+        ai: [{ variant: 2, archetype: HUNTER, at: [5, 12] }],
+        humans: [{ at: [5, 10], hp: 200 }, { at: [2, 12], hp: 5 }],
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect(r.target).to.equal(r.humanIds[1]);
+    });
+
+    it("variant 1 Hunter ignores a free tile and closes to shoot", async function () {
+      // A variant 1 Grunt would take the tile at (2,15) instead.
+      const r = await run({
+        ai: [{ variant: 1, archetype: HUNTER, at: [5, 15] }],
+        humans: [{ at: [5, 10] }],
+        scoringTiles: [{ row: 2, col: 15 }],
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect([r.row, r.col]).to.deep.equal([5, 13]);
+    });
+
+    it("variant 2 Hunter skips the claim step every other variant 2 ship takes", async function () {
+      const r = await run({
+        ai: [{ variant: 2, archetype: HUNTER, at: [5, 15] }],
+        humans: [{ at: [5, 10] }],
+        scoringTiles: [{ row: 2, col: 15 }],
+      });
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect([r.row, r.col]).to.deep.equal([5, 12]);
+    });
+  });
+
+  describe("Turn order", function () {
+    it("moves a ship that can destroy an enemy before one that can only shoot", async function () {
+      // ai[0] has the 200-HP enemy in range; ai[1] has a 1-HP enemy in range.
+      const r: any = await run({
+        ai: [
+          { variant: 2, archetype: GRUNT, at: [5, 10] },
+          { variant: 2, archetype: GRUNT, at: [1, 14] },
+        ],
+        humans: [{ at: [5, 8], hp: 200 }, { at: [1, 12], hp: 1 }],
+        anyActor: true,
+      });
+      expect(r.actor).to.equal(r.aiIds[1]);
+      expect(Number(r.events[0].args.actionType)).to.equal(ActionType.Shoot);
+      expect(r.events[0].args.targetShipId).to.equal(r.humanIds[1]);
+    });
+
+    it("moves a ship with an enemy in range before one with none", async function () {
+      const r: any = await run({
+        ai: [
+          { variant: 2, archetype: GRUNT, at: [9, 16] },
+          { variant: 2, archetype: GRUNT, at: [5, 10] },
+        ],
+        humans: [{ at: [5, 8], hp: 200 }],
+        anyActor: true,
+      });
+      expect(r.actor).to.equal(r.aiIds[1]);
+    });
+
+    it("moves a Support after the other ships", async function () {
+      // The Support has an enemy in range and the Grunt doesn't; the
+      // Support still waits.
+      const r: any = await run({
+        ai: [
+          { variant: 1, archetype: SUPPORT, at: [5, 10] },
+          { variant: 1, archetype: GRUNT, at: [9, 16] },
+        ],
+        humans: [{ at: [5, 8], hp: 200 }],
+        anyActor: true,
+      });
+      expect(r.actor).to.equal(r.aiIds[1]);
+    });
+
+    it("keeps the first ship first when nothing separates them", async function () {
+      const r: any = await run({
+        ai: [
+          { variant: 2, archetype: GRUNT, at: [9, 16] },
+          { variant: 2, archetype: GRUNT, at: [8, 16] },
+        ],
+        humans: [{ at: [5, 3] }],
+        anyActor: true,
+      });
+      expect(r.actor).to.equal(r.aiIds[0]);
     });
   });
 

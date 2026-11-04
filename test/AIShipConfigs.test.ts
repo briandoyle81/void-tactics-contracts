@@ -437,8 +437,11 @@ describe("Seeded AI ship configs", function () {
 
     it("a variant 1 top-level Aggressor finishes an adjacent doomed enemy with EMP", async function () {
       const r = await run({
+        // The live enemy is within gun range at (5,13): ships close on live
+        // enemies before wrecks (2026-11-03), so with it far away the
+        // Aggressor walks off toward it and shoots the wreck instead.
         ai: [{ key: "aggressor5", at: [5, 10] }],
-        humans: [{ at: [0, 0] }, { at: [5, 9], primed: true }],
+        humans: [{ at: [5, 13] }, { at: [5, 9], primed: true }],
       });
       expect(r.action).to.equal(ActionType.Special);
       expect(r.target).to.equal(2n);

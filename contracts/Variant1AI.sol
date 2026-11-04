@@ -65,9 +65,17 @@ contract Variant1AI is IVariantAI, Ownable {
                 .ramOnScoringTile(ctx, ramAbility.range());
             if (rams) return r;
         }
+        // Below a quarter of its HP and off a scoring tile, stay out of
+        // enemy range (see AIBehavior.lowHpEvade).
+        (AIBehavior.Decision memory e, bool evades) = AIBehavior.lowHpEvade(
+            ctx
+        );
+        if (evades) return e;
         if (archetype == Archetype.Support) return _support(ctx, special);
         if (archetype == Archetype.Turtle) return _turtle(ctx, special);
         if (archetype == Archetype.Rammer) return _rammer(ctx, special);
+        if (archetype == Archetype.Runner) return _runner(ctx, special);
+        if (archetype == Archetype.Hunter) return _hunter(ctx, special);
         if (archetype == Archetype.Sniper) {
             // Strictest kiter: gives up an objective tile to keep its range.
             return _skirmish(ctx, special, true, true);
@@ -76,8 +84,51 @@ contract Variant1AI is IVariantAI, Ownable {
             // Presses the fight: closes to maximum range but never backs off.
             return _skirmish(ctx, special, false, false);
         }
-        // Grunt: keeps its distance, but won't abandon a scoring tile to do it.
+        // Grunt: takes a free scoring tile first; otherwise keeps its
+        // distance, but won't abandon a scoring tile to do it.
+        return _claimOrSkirmish(ctx, special);
+    }
+
+    // The objective step (2026-11-03; before this, faction 1 only went for a
+    // tile when chasing the enemy gave no shot, and lost on points): stand
+    // on the scoring tile it's on, or head for the best free one (see
+    // AIBehavior.claimScoringTile), and fight from there. With no free tile,
+    // the skirmish tree. The Aggressor and the Sniper skip this: one presses
+    // the fight, the other keeps its range.
+    function _claimOrSkirmish(
+        AIBehavior.Ctx memory ctx,
+        Special special
+    ) internal view returns (AIBehavior.Decision memory) {
+        (Position memory stand, bool objective) = AIBehavior.claimScoringTile(
+            ctx
+        );
+        if (objective) return _fightFrom(ctx, special, stand);
         return _skirmish(ctx, special, true, false);
+    }
+
+    // Act from `dest`: an attack special if it beats shooting, else a shot
+    // if a gun target is in range, else just take the move.
+    function _fightFrom(
+        AIBehavior.Ctx memory ctx,
+        Special special,
+        Position memory dest
+    ) internal view returns (AIBehavior.Decision memory) {
+        (bool used, AIBehavior.Decision memory d) = _specialFrom(
+            ctx,
+            special,
+            dest
+        );
+        if (used) return d;
+        (uint target, bool inRange) = AIBehavior.bestEnemyWithin(
+            ctx,
+            dest,
+            ctx.attrs.range,
+            true
+        );
+        if (inRange) {
+            return AIBehavior.decision(dest, ActionType.Shoot, target);
+        }
+        return AIBehavior.decision(dest, ActionType.Pass, 0);
     }
 
     // ---- trees ----
@@ -94,10 +145,11 @@ contract Variant1AI is IVariantAI, Ownable {
         (Position memory enemyPos, bool found) = AIBehavior.nearestEnemy(ctx);
         if (!found) return AIBehavior.idleOrSeekTile(ctx);
 
+        bool kite = retreat && (leaveTiles || !AIBehavior.onScoringTile(ctx));
         Position memory stand = AIBehavior.standoffPosition(
             ctx,
             enemyPos,
-            retreat && (leaveTiles || !AIBehavior.onScoringTile(ctx))
+            kite
         );
 
         (bool used, AIBehavior.Decision memory d) = _specialFrom(
@@ -107,7 +159,21 @@ contract Variant1AI is IVariantAI, Ownable {
         );
         if (used) return d;
 
-        (uint target, bool inRange) = AIBehavior.bestEnemyWithin(
+        uint target;
+        bool inRange;
+        // A kiter's maximum-range stand-off is usually still inside the
+        // enemy's range (2026-11-03: player ships out-range most of this
+        // faction's guns). A reachable tile with a shot that no live enemy
+        // can return beats it, unless that means leaving a scoring tile.
+        if (kite && !AIBehavior.onScoringTile(ctx)) {
+            Position memory safePos;
+            (safePos, target, inRange) = AIBehavior.shotWithinReach(ctx, true);
+            if (inRange) {
+                return AIBehavior.decision(safePos, ActionType.Shoot, target);
+            }
+        }
+
+        (target, inRange) = AIBehavior.bestEnemyWithin(
             ctx,
             stand,
             ctx.attrs.range,
@@ -119,12 +185,20 @@ contract Variant1AI is IVariantAI, Ownable {
         if (AIBehavior.onScoringTile(ctx) && AIBehavior.shouldHoldTile(ctx)) {
             return AIBehavior.hold(ctx);
         }
+        // No line of sight from the stand-off tile: any reachable tile with a
+        // shot beats walking on without one.
+        Position memory shotPos;
+        (shotPos, target, inRange) = AIBehavior.shotWithinReach(ctx, false);
+        if (inRange) {
+            return AIBehavior.decision(shotPos, ActionType.Shoot, target);
+        }
         return AIBehavior.approachOrSeekTile(ctx, enemyPos);
     }
 
     // Heal with Repair Drones if equipped (moving just far enough to bring an
-    // injured ally into range), otherwise the shared Support fallback: shoot,
-    // hold/seek a scoring tile, or stay near an injured ally.
+    // injured ally into range), then the objective step (see
+    // _claimOrSkirmish), otherwise the shared Support fallback: shoot, or
+    // stay near an injured ally.
     function _support(
         AIBehavior.Ctx memory ctx,
         Special special
@@ -141,6 +215,10 @@ contract Variant1AI is IVariantAI, Ownable {
                 .healWithReach(ctx, healRange, ActionType.Special);
             if (healed) return d;
         }
+        (Position memory stand, bool objective) = AIBehavior.claimScoringTile(
+            ctx
+        );
+        if (objective) return _fightFrom(ctx, special, stand);
         return AIBehavior.decideSupportFallback(ctx);
     }
 
@@ -162,7 +240,7 @@ contract Variant1AI is IVariantAI, Ownable {
     // The Ram archetype: hunt a downed enemy — move just far enough to be
     // within Ram's range and evict it — as long as this ship's own reactor
     // timer can afford another tick (each ram adds one; three destroy it).
-    // Otherwise it fights like a Grunt.
+    // Otherwise it plays like a Grunt, objective step included.
     function _rammer(
         AIBehavior.Ctx memory ctx,
         Special special
@@ -194,7 +272,64 @@ contract Variant1AI is IVariantAI, Ownable {
                 }
             }
         }
-        return _skirmish(ctx, special, true, false);
+        return _claimOrSkirmish(ctx, special);
+    }
+
+    // The Objective Runner (2026-11-03): takes the best free scoring tile;
+    // with none free, closes to gun range of the nearest enemy holding one,
+    // whatever the score. It shoots tile holders ahead of anything else. On
+    // a map with no scoring tiles it plays as a Grunt.
+    function _runner(
+        AIBehavior.Ctx memory ctx,
+        Special special
+    ) internal view returns (AIBehavior.Decision memory) {
+        (Position memory stand, bool objective) = AIBehavior.claimScoringTile(
+            ctx
+        );
+        if (!objective) {
+            (Position memory holder, bool held) = AIBehavior.nearestTileHolder(
+                ctx
+            );
+            if (!held) return _skirmish(ctx, special, true, false);
+            stand = AIBehavior.withinRangeOf(ctx, holder, ctx.attrs.range);
+        }
+        (bool used, AIBehavior.Decision memory d) = _specialFrom(
+            ctx,
+            special,
+            stand
+        );
+        if (used) return d;
+        (uint target, bool found) = AIBehavior.holderFirstWithin(ctx, stand);
+        if (found) return AIBehavior.decision(stand, ActionType.Shoot, target);
+        return AIBehavior.decision(stand, ActionType.Pass, 0);
+    }
+
+    // The Hunter (2026-11-03): goes after the enemy it can destroy soonest
+    // (AIBehavior.huntTarget), closing to gun range of it and shooting it
+    // when it can, else fighting from there. Ignores tiles; never kites.
+    function _hunter(
+        AIBehavior.Ctx memory ctx,
+        Special special
+    ) internal view returns (AIBehavior.Decision memory) {
+        (uint quarry, Position memory at, bool found) = AIBehavior.huntTarget(
+            ctx
+        );
+        if (!found) return AIBehavior.idleOrSeekTile(ctx);
+        Position memory dest = AIBehavior.withinRangeOf(
+            ctx,
+            at,
+            ctx.attrs.range
+        );
+        (bool used, AIBehavior.Decision memory d) = _specialFrom(
+            ctx,
+            special,
+            dest
+        );
+        if (used) return d;
+        if (AIBehavior.canShoot(ctx, dest, at)) {
+            return AIBehavior.decision(dest, ActionType.Shoot, quarry);
+        }
+        return _fightFrom(ctx, special, dest);
     }
 
     // ---- specials ----

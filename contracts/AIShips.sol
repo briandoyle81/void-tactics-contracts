@@ -88,7 +88,9 @@ contract AIShips is Ownable, IAIShips {
         // Every field is overwritten unconditionally so a reused slot is
         // indistinguishable from a fresh one — a previous occupant's kill
         // count or destroyed flag must never leak into the next allocation
-        // (ShipAttributes derives a rank bonus from shipsDestroyed).
+        // (ShipAttributes derives a rank bonus from shipsDestroyed). The
+        // kill count and shiny come from the template (the AI ship config's
+        // own, see AIEncounters.AIShipConfig), nothing else from its shipData.
         Ship storage ship = ships[localId];
         ship.name = _template.name;
         ship.id = globalId;
@@ -97,9 +99,9 @@ contract AIShips is Ownable, IAIShips {
         ship.traits.serialNumber = 0; // AI ships never go through constructShip
         ship.owner = _to;
 
-        ship.shipData.shipsDestroyed = 0;
+        ship.shipData.shipsDestroyed = _template.shipData.shipsDestroyed;
         ship.shipData.modified = 0; // never customized via DroneYard
-        ship.shipData.shiny = false;
+        ship.shipData.shiny = _template.shipData.shiny;
         ship.shipData.constructed = true;
         ship.shipData.inFleet = false;
         ship.shipData.isFreeShip = false;

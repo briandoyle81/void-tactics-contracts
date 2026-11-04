@@ -53,8 +53,14 @@ contract Variant2AI is IVariantAI, Ownable {
 
     // Every ship has the Repair ability, so every ship follows the same
     // priorities, highest first (the first that applies wins):
-    //  1. Repair an injured OR disabled friendly ship standing on a scoring
-    //     tile (moving within reach of it if needed).
+    //  1. Repair a friendly ship standing on a scoring tile (moving within
+    //     reach of it if needed) when the repair can't wait: it's disabled,
+    //     or one enemy shot would destroy it (AIBehavior.healIsUrgent). Any
+    //     other on-tile repair waits for a turn that would otherwise end
+    //     without an action (2026-11-03: repairing while live enemies were
+    //     in range and in sight cost the faction its shots).
+    //  Then, below a quarter of its HP and off a scoring tile, stay out of
+    //  enemy range (AIBehavior.lowHpEvade).
     //  2. Claim a scoring tile: hold the one it stands on, else head for the
     //     nearest unclaimed one at full speed.
     //  3. Repair a disabled (0 HP) friendly ship — from where it ends up if it
@@ -69,16 +75,32 @@ contract Variant2AI is IVariantAI, Ownable {
     ) external view override returns (AIBehavior.Decision memory) {
         AIBehavior.loadView(ctx);
         uint8 healRange = healAbility.range();
-        (AIBehavior.Decision memory d, bool ok) = AIBehavior.healOnScoringTile(
-            ctx,
-            healRange,
-            ActionType.FactionAbility
-        );
-        if (ok) return d;
+        (AIBehavior.Decision memory onTileHeal, bool canHeal) = AIBehavior
+            .healOnScoringTile(ctx, healRange, ActionType.FactionAbility);
+        if (canHeal && AIBehavior.healIsUrgent(ctx, onTileHeal.actionTarget)) {
+            return onTileHeal;
+        }
+        (AIBehavior.Decision memory d, bool ok) = AIBehavior.lowHpEvade(ctx);
+        if (ok) return d.action == ActionType.Pass ? _repairFrom(ctx, d, healRange) : d;
 
         d = _claimOrFight(ctx, archetype, special, healRange);
+        // A shot at a disabled ship only advances its reactor timer; the
+        // waiting repair is worth more.
+        if (canHeal && (d.action == ActionType.Pass || AIBehavior.isDisabled(ctx, d.actionTarget))) {
+            return onTileHeal;
+        }
         if (d.action != ActionType.Pass) return d;
 
+        return _repairFrom(ctx, d, healRange);
+    }
+
+    // Priority 4, the last-resort repair: `d` is a move with no action;
+    // repair this ship or an injured friendly within reach of where it ends.
+    function _repairFrom(
+        AIBehavior.Ctx memory ctx,
+        AIBehavior.Decision memory d,
+        uint8 healRange
+    ) internal view returns (AIBehavior.Decision memory) {
         (AIBehavior.Decision memory h, bool healed) = AIBehavior.healAnyFrom(
             ctx,
             Position({row: d.destRow, col: d.destCol}),
@@ -96,9 +118,10 @@ contract Variant2AI is IVariantAI, Ownable {
         Special special,
         uint8 healRange
     ) internal view returns (AIBehavior.Decision memory) {
-        (Position memory stand, bool objective) = AIBehavior.claimScoringTile(
-            ctx
-        );
+        // The Hunter ignores tiles (2026-11-03).
+        (Position memory stand, bool objective) = archetype == Archetype.Hunter
+            ? (ctx.pos, false)
+            : AIBehavior.claimScoringTile(ctx);
         AIBehavior.Decision memory d;
         bool ok;
         if (objective) {
@@ -132,6 +155,8 @@ contract Variant2AI is IVariantAI, Ownable {
             return _support(ctx, special, healRange);
         }
         if (archetype == Archetype.Turtle) return _turtle(ctx, special);
+        if (archetype == Archetype.Runner) return _runner(ctx, special);
+        if (archetype == Archetype.Hunter) return _hunter(ctx, special);
         if (archetype == Archetype.Sniper) return _fireSupport(ctx, special);
         // Aggressor never stops to hold an objective; Grunt does. Rammer is
         // faction-1 only (no Ram here), so it plays as a Grunt too.
@@ -177,6 +202,14 @@ contract Variant2AI is IVariantAI, Ownable {
             return AIBehavior.hold(ctx);
         }
 
+        // A reachable tile with a gun shot this turn beats advancing to one
+        // without (line of sight; see AIBehavior.shotWithinReach).
+        Position memory shotPos;
+        (shotPos, target, inRange) = AIBehavior.shotWithinReach(ctx, false);
+        if (inRange) {
+            return AIBehavior.decision(shotPos, ActionType.Shoot, target);
+        }
+
         Position memory dest = AIBehavior.advanceToward(
             ctx,
             enemyPos,
@@ -219,6 +252,11 @@ contract Variant2AI is IVariantAI, Ownable {
         if (used) return d;
         if (AIBehavior.onScoringTile(ctx) && AIBehavior.shouldHoldTile(ctx)) {
             return AIBehavior.hold(ctx);
+        }
+        Position memory shotPos;
+        (shotPos, target, inRange) = AIBehavior.shotWithinReach(ctx, false);
+        if (inRange) {
+            return AIBehavior.decision(shotPos, ActionType.Shoot, target);
         }
         return AIBehavior.approachOrSeekTile(ctx, enemyPos);
     }
@@ -281,6 +319,62 @@ contract Variant2AI is IVariantAI, Ownable {
             if (used) return d;
         }
         return AIBehavior.decideTurtle(ctx);
+    }
+
+    // The Objective Runner (2026-11-03), once decide's shared claim step
+    // found no free tile: closes to gun range of the nearest enemy holding
+    // one, whatever the score, shooting tile holders ahead of anything
+    // else. With no enemy on a tile it brawls like a Grunt.
+    function _runner(
+        AIBehavior.Ctx memory ctx,
+        Special special
+    ) internal view returns (AIBehavior.Decision memory) {
+        (Position memory holder, bool held) = AIBehavior.nearestTileHolder(ctx);
+        if (!held) return _brawl(ctx, special, true);
+        Position memory dest = AIBehavior.withinRangeOf(
+            ctx,
+            holder,
+            ctx.attrs.range
+        );
+        (bool used, AIBehavior.Decision memory d) = _stormFrom(
+            ctx,
+            special,
+            dest
+        );
+        if (used) return d;
+        (uint target, bool found) = AIBehavior.holderFirstWithin(ctx, dest);
+        if (found) return AIBehavior.decision(dest, ActionType.Shoot, target);
+        (used, d) = _swarmFrom(ctx, special, dest);
+        if (used) return d;
+        return AIBehavior.decision(dest, ActionType.Pass, 0);
+    }
+
+    // The Hunter (2026-11-03): goes after the enemy it can destroy soonest
+    // (AIBehavior.huntTarget), closing to gun range of it and shooting it
+    // when it can, else fighting from there. Skips the claim step.
+    function _hunter(
+        AIBehavior.Ctx memory ctx,
+        Special special
+    ) internal view returns (AIBehavior.Decision memory) {
+        (uint quarry, Position memory at, bool found) = AIBehavior.huntTarget(
+            ctx
+        );
+        if (!found) return AIBehavior.idleOrSeekTile(ctx);
+        Position memory dest = AIBehavior.withinRangeOf(
+            ctx,
+            at,
+            ctx.attrs.range
+        );
+        (bool used, AIBehavior.Decision memory d) = _stormFrom(
+            ctx,
+            special,
+            dest
+        );
+        if (used) return d;
+        if (AIBehavior.canShoot(ctx, dest, at)) {
+            return AIBehavior.decision(dest, ActionType.Shoot, quarry);
+        }
+        return _fightFrom(ctx, special, dest);
     }
 
     // ---- shared pieces ----

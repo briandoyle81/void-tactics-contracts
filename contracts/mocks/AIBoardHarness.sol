@@ -14,9 +14,13 @@ contract AIBoardHarness {
         uint[] memory board
     )
         external
-        pure
+        view
         returns (bool, address, address, bool, uint, Position memory)
     {
-        return AIBehavior.turnState(board);
+        return AIBehavior.turnState(board, _noSupport);
+    }
+
+    function _noSupport(uint) internal pure returns (bool) {
+        return false;
     }
 }
