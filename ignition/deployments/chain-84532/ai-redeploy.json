@@ -6,5 +6,9 @@
   "Variant2AI@0xd4d65b2eee4e5617:0x3740297437335f0c": {
     "hash": "0x20cde5a4cc8b99664d96794dc9eb7c9427dc74fe38e65c74328a2d13b2bcdacc",
     "address": "0xB6B7338D766906bA7A2a9E3913258be1b2Ca1f19"
+  },
+  "Variant1AI@0x41cfa0bb8c027da2:0x27b41946ec058445": {
+    "hash": "0xbcf2a7a3553451daec351c1d220e7c0e6b4ddbb0c865130a1fea63360e9e0561",
+    "address": "0x61DB6f7C0e9d882235459FDADcC4c058Ef8299B8"
   }
 }

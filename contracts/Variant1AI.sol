@@ -145,6 +145,16 @@ contract Variant1AI is IVariantAI, Ownable {
         (Position memory enemyPos, bool found) = AIBehavior.nearestEnemy(ctx);
         if (!found) return AIBehavior.idleOrSeekTile(ctx);
 
+        // A ship that won't leave its scoring tile fights from it (2026-11-07;
+        // an Aggressor used to step off toward an enemy tile holder out of
+        // range, with a shot from where it stood: roguelike game
+        // 2199023255558).
+        if (
+            !leaveTiles &&
+            AIBehavior.onScoringTile(ctx) &&
+            AIBehavior.shouldHoldTile(ctx)
+        ) return _fightFrom(ctx, special, ctx.pos);
+
         bool kite = retreat && (leaveTiles || !AIBehavior.onScoringTile(ctx));
         Position memory stand = AIBehavior.standoffPosition(
             ctx,

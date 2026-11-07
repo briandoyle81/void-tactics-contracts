@@ -1115,6 +1115,43 @@ describe("Per-variant AI behavior trees", function () {
     }
   });
 
+  // 2026-11-07, roguelike game 2199023255558: a variant 1 Aggressor on a
+  // scoring tile, with an enemy in range, stepped off the tile toward an
+  // enemy tile holder out of range (the enemy side out-earned it on tiles)
+  // and shot the same nearby enemy from there.
+  describe("Aggressor holding a tile", function () {
+    it("variant 1 Aggressor shoots from its tile instead of advancing off it", async function () {
+      // humans[0] is 2 away (range 3); humans[1] and [2] hold the other two
+      // tiles, 10 and 15 away.
+      const r = await run({
+        ai: [{ variant: 1, archetype: AGGRESSOR, at: [5, 12] }],
+        humans: [{ at: [5, 10] }, { at: [5, 2] }, { at: [0, 2] }],
+        scoringTiles: [
+          { row: 5, col: 12 },
+          { row: 5, col: 2 },
+          { row: 0, col: 2 },
+        ],
+      });
+      expect([r.row, r.col]).to.deep.equal([5, 12]);
+      expect(r.action).to.equal(ActionType.Shoot);
+      expect(r.target).to.equal(r.humanIds[0]);
+    });
+
+    it("and holds it when nothing is in range", async function () {
+      const r = await run({
+        ai: [{ variant: 1, archetype: AGGRESSOR, at: [5, 12] }],
+        humans: [{ at: [5, 2] }, { at: [0, 2] }],
+        scoringTiles: [
+          { row: 5, col: 12 },
+          { row: 5, col: 2 },
+          { row: 0, col: 2 },
+        ],
+      });
+      expect([r.row, r.col]).to.deep.equal([5, 12]);
+      expect(r.action).to.equal(ActionType.Pass);
+    });
+  });
+
   // 2026-11-03: the two archetypes added after the live-game evaluation.
   describe("Objective Runner and Hunter", function () {
     // Each side holds one tile, so the score is level and other archetypes
