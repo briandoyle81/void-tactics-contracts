@@ -23,6 +23,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
 
     uint public lobbyCount;
     uint public freeGamesPerAddress = 1;
+    // In UTC (2026-11-12; it was a native-token fee, so 1 ETH on Base).
     uint public additionalLobbyFee = 1 ether;
     uint public maxFleetCostLimit = 2000;
     bool public paused;
@@ -79,7 +80,6 @@ contract Lobbies is Ownable, ReentrancyGuard {
     error ShipNotOwned();
     error ShipCostVersionMismatch();
     error PlayerAlreadyInLobby();
-    error InsufficientFee();
     error LobbyCreationPaused();
     error NotInLobby();
     error FleetAlreadyCreated();
@@ -324,7 +324,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
         uint _selectedMapId,
         uint _maxScore,
         address _reservedJoiner
-    ) public payable nonReentrant {
+    ) public nonReentrant {
         if (paused) revert LobbyCreationPaused();
         if (_turnTime < MIN_TURN_TIME || _turnTime > MAX_TURN_TIME)
             revert InvalidTurnTime();
@@ -341,25 +341,12 @@ contract Lobbies is Ownable, ReentrancyGuard {
         PlayerLobbyState storage state = playerStates[msg.sender];
         if (block.timestamp < getPlayerTimeoutEnd(msg.sender)) revert PlayerInTimeout();
 
-        // If reserving for a specific player, charge 1 UTC (no ETH involved).
+        // Reserving for a specific player costs 1 UTC; otherwise a lobby past
+        // the free ones costs additionalLobbyFee UTC.
         if (_reservedJoiner != address(0)) {
-            if (msg.value != 0) revert InsufficientFee();
-            if (address(universalCredits) == address(0)) revert UTCTransferFailed();
-            uint reservationFee = 1 ether; // 1 UTC
-            uint balance = universalCredits.balanceOf(msg.sender);
-            if (balance < reservationFee) revert InsufficientUTC();
-            require(
-                universalCredits.transferFrom(msg.sender, address(this), reservationFee),
-                "UTC transfer failed"
-            );
-        } else {
-            // Check if player needs to pay for additional lobbies (FLOW payment)
-            if (state.activeLobbiesCount >= freeGamesPerAddress) {
-                if (msg.value != additionalLobbyFee) revert InsufficientFee();
-            } else if (msg.value != 0) {
-                // Free lobby available: no fee is owed, so don't silently keep ETH
-                revert InsufficientFee();
-            }
+            _chargeUTC(1 ether);
+        } else if (state.activeLobbiesCount >= freeGamesPerAddress) {
+            _chargeUTC(additionalLobbyFee);
         }
 
         lobbyCount++;
@@ -402,7 +389,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
         );
     }
 
-    function joinLobby(uint _lobbyId) public payable nonReentrant {
+    function joinLobby(uint _lobbyId) public nonReentrant {
         Lobby storage lobby = lobbies[_lobbyId];
         if (lobby.basic.id == 0) revert LobbyNotFound();
         if (lobby.state.status != LobbyStatus.Open) revert LobbyNotOpen();
@@ -422,18 +409,12 @@ contract Lobbies is Ownable, ReentrancyGuard {
         // Check if player is in timeout
         if (block.timestamp < getPlayerTimeoutEnd(msg.sender)) revert PlayerInTimeout();
 
-        // Check if player needs to pay for additional lobbies (only for non-reserved lobbies)
-        if (lobby.players.reservedJoiner == address(0)) {
-            if (state.activeLobbiesCount >= freeGamesPerAddress) {
-                if (msg.value != additionalLobbyFee) revert InsufficientFee();
-            } else if (msg.value != 0) {
-                // Free lobby available: no fee is owed, so don't silently keep ETH
-                revert InsufficientFee();
-            }
-        } else if (msg.value != 0) {
-            // Reserved lobbies don't charge the joiner an ETH fee
-            revert InsufficientFee();
-        }
+        // A lobby past the free ones costs additionalLobbyFee UTC; a reserved
+        // joiner pays nothing (the creator paid the reservation).
+        if (
+            lobby.players.reservedJoiner == address(0) &&
+            state.activeLobbiesCount >= freeGamesPerAddress
+        ) _chargeUTC(additionalLobbyFee);
 
         // Clear the reservation once consumed (harmless no-op if it was
         // never reserved) — acceptGame already does this; joinLobby is the
@@ -777,6 +758,15 @@ contract Lobbies is Ownable, ReentrancyGuard {
             _maxScore
         );
         emit PlayerJoinedLobby(lobbyCount, _joiner);
+    }
+
+    function _chargeUTC(uint _amount) private {
+        if (address(universalCredits) == address(0)) revert UTCTransferFailed();
+        if (universalCredits.balanceOf(msg.sender) < _amount) revert InsufficientUTC();
+        require(
+            universalCredits.transferFrom(msg.sender, address(this), _amount),
+            "UTC transfer failed"
+        );
     }
 
     // Owner functions

@@ -94,18 +94,23 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Direct UTC Purchase - saves the trouble of buying a ship pack
-     * and recycling it via Ships.shipBreaker.
+     * @dev Direct UTC Purchase: pays a tier's native-token price
+     * (flowTierPrices) and mints that tier's UTC pack price (tierPrices), so
+     * buying UTC and then ships with it costs the same as buying the ships
+     * directly (2026-11-12). It used to mint tierShips * recycleReward, the
+     * value of recycling the pack, which made UTC ~10x dearer than ships.
      *
-     * Mints the same UTC a player would net from buying that tier's ship
-     * pack with FLOW and recycling every ship (tierShips[_tier] * recycleReward),
-     * for the same FLOW cost - just skipping the extra steps.
+     * Both arrays are owner-settable, so the rate is tuned without a
+     * redeploy. To keep 1 UTC worth the same at every tier, set flowTierPrices
+     * in proportion to tierPrices.
      */
     function purchaseUTCWithFlow(
         address _to,
         uint _tier
     ) public payable nonReentrant {
-        if (_tier >= flowTierPrices.length) {
+        // setPurchaseInfo can change the tier count without
+        // setFlowTierPrices, so check both arrays.
+        if (_tier >= flowTierPrices.length || _tier >= tierPrices.length) {
             revert InvalidPurchase(_tier, msg.value);
         }
 
@@ -114,9 +119,7 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
             revert InvalidPurchase(_tier, msg.value);
         }
 
-        // Mint the UTC equivalent of buying + recycling this tier's ship pack
-        uint mintAmount = tierShips[_tier] * ships.recycleReward();
-        universalCreditsMintable.mint(_to, mintAmount);
+        universalCreditsMintable.mint(_to, tierPrices[_tier]);
     }
 
     function _processReferral(

@@ -5,6 +5,7 @@ const { alphaThreshold } = require("./lib/psd");
 const { vectorizeLayerFragment } = require("./lib/vtrace");
 const { BANDS } = require("./lib/tiers");
 const { MERGE_THRESHOLD } = require("./lib/palette");
+const { removeBackground } = require("./lib/background");
 
 // Single-image entry point to the same tracer the PSD pipeline uses (see
 // README.md "Single image"): no manifest, no PSD, no Solidity output, no
@@ -34,7 +35,10 @@ function svgPathFor(imagePath) {
   return path.join(dir, `${name}.svg`);
 }
 
-// opts.outPath (code only, not a CLI flag) overrides the default
+// opts.removeBg (--remove-bg) makes a dark space background transparent
+// before tracing (lib/background.js), so the SVG has no full-canvas bottom
+// shape. It may be an object of that module's thresholds; --bg-dim and
+// --bg-blue-tint set its dim / blueTint for brighter nebula (and imply it). opts.outPath (code only, not a CLI flag) overrides the default
 // next-to-the-source output location.
 async function imageToSvg(imagePath, opts = {}) {
   const { colors, simplify, brightness, merge } = {
@@ -52,7 +56,9 @@ async function imageToSvg(imagePath, opts = {}) {
   const { width, height } = img;
   const ctx = createCanvas(width, height).getContext("2d");
   ctx.drawImage(img, 0, 0);
-  const layer = alphaThreshold(ctx.getImageData(0, 0, width, height));
+  const pixels = ctx.getImageData(0, 0, width, height);
+  if (opts.removeBg) removeBackground(pixels, opts.removeBg === true ? {} : opts.removeBg);
+  const layer = alphaThreshold(pixels);
 
   const body = await vectorizeLayerFragment(layer, {
     k: colors,
@@ -79,6 +85,17 @@ function parseArgs(argv) {
       opts.portrait = true;
       continue;
     }
+    if (arg === "--remove-bg") {
+      opts.removeBg = opts.removeBg || true;
+      continue;
+    }
+    const bg = arg.match(/^--bg-(dim|blue-tint)=(.+)$/);
+    if (bg) {
+      const value = Number(bg[2]);
+      if (!Number.isFinite(value)) throw new Error(`Invalid value for --bg-${bg[1]}: ${bg[2]}`);
+      opts.removeBg = { ...(opts.removeBg === true ? {} : opts.removeBg), [bg[1] === "dim" ? "dim" : "blueTint"]: value };
+      continue;
+    }
     const m = arg.match(/^--(colors|simplify|brightness|merge)=(.+)$/);
     if (!m) {
       positional.push(arg);
@@ -96,7 +113,7 @@ async function main() {
   if (!imagePath) {
     console.error(
       "Usage: node scripts/renderer-pipeline/image-to-svg.js <image> " +
-        "[--portrait] [--colors=N] [--simplify=EPSILON] [--brightness=PERCENT] [--merge=DISTANCE]",
+        "[--portrait] [--remove-bg] [--bg-dim=N] [--bg-blue-tint=N] [--colors=N] [--simplify=EPSILON] [--brightness=PERCENT] [--merge=DISTANCE]",
     );
     process.exit(1);
   }

@@ -24,8 +24,15 @@ export const WIN_EFFECT_CONTRACTS: Record<string, string> = {
 export type Pos = { row: number; col: number };
 export type ScoringPos = Pos & { points: number; onlyOnce: boolean };
 export type SyncState = {
+  // The deployment's Maps address. The file outlives the deployment folder,
+  // so a record for an older deployment is ignored rather than applied.
+  mapsAddress?: string;
   maps: Record<string, string>;
   roguelikeNodes: Record<string, string>;
+  // AI config ids for seed keys the journal doesn't know: configs created
+  // outside the deploy (frontend editors), or seed keys renamed after it
+  // (2026-11-12). Overrides the journal.
+  aiConfigs?: Record<string, string>;
   ignored?: { maps?: string[]; roguelikeNodes?: string[] };
 };
 
@@ -106,10 +113,20 @@ export function idsFromJournal(
   return new Map(found.map(({ key }, i) => [key, BigInt(i + 1)]));
 }
 
+// Where a deployment's content-sync record lives (2026-11-12): outside
+// ignition/deployments/, which a redeploy deletes. Ids in it are for one
+// deployment, identified by its Maps address (SyncState.mapsAddress).
+export function syncStatePathFor(deploymentId: string) {
+  return path.join(__dirname, "..", "..", "ignition", "content-sync", `${deploymentId}.json`);
+}
+
 // Everything about a deployment folder that maps seed keys to chain ids.
-export function loadDeployment(deployDir: string) {
+// syncStatePath defaults to content-sync.json inside the folder (test copies).
+export function loadDeployment(
+  deployDir: string,
+  syncStatePath = path.join(deployDir, "content-sync.json"),
+) {
   const journalPath = path.join(deployDir, "journal.jsonl");
-  const syncStatePath = path.join(deployDir, "content-sync.json");
   if (!fs.existsSync(journalPath))
     throw new Error(`No deployment journal at ${journalPath}`);
   const deployed: Record<string, string> = readJson(
@@ -131,9 +148,17 @@ export function loadDeployment(deployDir: string) {
   const journal = readJournal(journalPath);
   // "ignored": on-chain ids that belong to no seed entry (e.g. a duplicate
   // left by a failed run), so they don't count as unknown.
-  const syncState: SyncState = fs.existsSync(syncStatePath)
+  const mapsAddress = addressOf("Maps");
+  let syncState: SyncState = fs.existsSync(syncStatePath)
     ? readJson(syncStatePath)
     : { maps: {}, roguelikeNodes: {} };
+  if (syncState.mapsAddress && getAddress(syncState.mapsAddress) !== mapsAddress) {
+    console.warn(
+      `${syncStatePath} is for an older deployment (Maps ${syncState.mapsAddress}); ignoring it.`,
+    );
+    syncState = { maps: {}, roguelikeNodes: {} };
+  }
+  syncState.mapsAddress = mapsAddress;
 
   const mapIds = idsFromJournal(
     journal,
@@ -154,6 +179,8 @@ export function loadDeployment(deployDir: string) {
     const id = journal.readResults.get(`DeployModule#Read${cap(c.key)}ConfigId`);
     if (id !== undefined) configIds.set(c.key, id);
   }
+  for (const [k, id] of Object.entries(syncState.aiConfigs ?? {}))
+    configIds.set(k, BigInt(id));
 
   return {
     deployDir,

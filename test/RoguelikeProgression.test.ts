@@ -21,8 +21,9 @@ describe("Roguelike enemy progression", function () {
   // their variant 1 rosters. The seed files are the source of truth; drop a
   // key from here once its node is back on the rule. m08 (mission 7) moved
   // to map rlM06 on the 2026-11-04 deploy's content export, which fights the
-  // shiny variant 1 set (see AIShipConfigs.test.ts's OFF_LADDER).
-  const RULE_EXEMPT_NODE_KEYS = new Set(["d01", "s01", "m08"]);
+  // shiny variant 1 set (see AIShipConfigs.test.ts's OFF_LADDER). m10 (map70)
+  // and m15 (map72) fight it too since the 2026-11-10 content export.
+  const RULE_EXEMPT_NODE_KEYS = new Set(["d01", "s01", "m08", "m10", "m15"]);
   const nodeKeyOf = (id: bigint) => roguelikeStarterContent.nodes[Number(id) - 1]?.key;
 
   // Mission number of every root-reachable Combat node in the data file

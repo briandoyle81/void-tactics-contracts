@@ -5,7 +5,10 @@
     "l1": 0,
     "h2": 0,
     "s2": 0,
-    "l2": 0
+    "l2": 0,
+    "h3": 0,
+    "s3": 0,
+    "l3": 0
   },
   "aiShipConfigs": [
     {
@@ -893,7 +896,7 @@
       "archetype": 3
     },
     {
-      "key": "chainConfig53",
+      "key": "aiConfig10_2",
       "name": "La Sombra",
       "equipment": {
         "mainWeapon": 3,
@@ -912,7 +915,7 @@
       "shipsDestroyed": 30
     },
     {
-      "key": "chainConfig54",
+      "key": "aiConfig11",
       "name": "Murciélago",
       "equipment": {
         "mainWeapon": 3,
@@ -931,7 +934,7 @@
       "shipsDestroyed": 10
     },
     {
-      "key": "chainConfig55",
+      "key": "aiConfig12",
       "name": "Umbría",
       "equipment": {
         "mainWeapon": 3,
@@ -950,7 +953,7 @@
       "shipsDestroyed": 10
     },
     {
-      "key": "chainConfig56",
+      "key": "aiConfig13_2",
       "name": "Abismo",
       "equipment": {
         "mainWeapon": 1,
@@ -965,11 +968,10 @@
         "speed": 1
       },
       "archetype": 2,
-      "shiny": true,
-      "shipsDestroyed": 0
+      "shiny": true
     },
     {
-      "key": "chainConfig57",
+      "key": "aiConfig14",
       "name": "Vacía",
       "equipment": {
         "mainWeapon": 2,
@@ -984,11 +986,10 @@
         "speed": 1
       },
       "archetype": 3,
-      "shiny": true,
-      "shipsDestroyed": 0
+      "shiny": true
     },
     {
-      "key": "chainConfig58",
+      "key": "aiConfig15",
       "name": "Oscuridad",
       "equipment": {
         "mainWeapon": 0,
@@ -1003,11 +1004,10 @@
         "speed": 1
       },
       "archetype": 0,
-      "shiny": true,
-      "shipsDestroyed": 0
+      "shiny": true
     },
     {
-      "key": "chainConfig59",
+      "key": "aiConfig16",
       "name": "Velo",
       "equipment": {
         "mainWeapon": 0,
@@ -1022,11 +1022,10 @@
         "speed": 1
       },
       "archetype": 0,
-      "shiny": true,
-      "shipsDestroyed": 0
+      "shiny": true
     },
     {
-      "key": "chainConfig60",
+      "key": "aiConfig17_2",
       "name": "Umbral",
       "equipment": {
         "mainWeapon": 1,
@@ -1041,8 +1040,83 @@
         "speed": 2
       },
       "archetype": 2,
+      "shiny": true
+    },
+    {
+      "key": "aiConfig61",
+      "name": "Estrella Oscura",
+      "equipment": {
+        "mainWeapon": 2,
+        "armor": 3,
+        "shields": 0,
+        "special": 2
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 1,
+        "hull": 2,
+        "speed": 2
+      },
+      "archetype": 3,
       "shiny": true,
-      "shipsDestroyed": 0
+      "shipsDestroyed": 30
+    },
+    {
+      "key": "aiConfig62",
+      "name": "Silencio",
+      "equipment": {
+        "mainWeapon": 2,
+        "armor": 3,
+        "shields": 0,
+        "special": 0
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 1,
+        "hull": 2,
+        "speed": 2
+      },
+      "archetype": 1,
+      "shiny": true,
+      "shipsDestroyed": 30
+    },
+    {
+      "key": "aiConfig63",
+      "name": "1 Apis Regina",
+      "equipment": {
+        "mainWeapon": 3,
+        "armor": 0,
+        "shields": 3,
+        "special": 3
+      },
+      "traits": {
+        "variant": 2,
+        "accuracy": 2,
+        "hull": 2,
+        "speed": 2
+      },
+      "archetype": 1,
+      "shiny": true,
+      "shipsDestroyed": 100
+    },
+    {
+      "key": "aiConfig64",
+      "name": "Dragón",
+      "equipment": {
+        "mainWeapon": 0,
+        "armor": 0,
+        "shields": 3,
+        "special": 1
+      },
+      "traits": {
+        "variant": 1,
+        "accuracy": 2,
+        "hull": 2,
+        "speed": 2
+      },
+      "archetype": 1,
+      "shiny": true,
+      "shipsDestroyed": 100
     }
   ],
   "maps": [
@@ -4471,7 +4545,7 @@
     },
     {
       "key": "m13",
-      "name": "Trench Run — Sector 13",
+      "name": "Trench Run",
       "mode": "PvE",
       "type": "full",
       "blockedTiles": [

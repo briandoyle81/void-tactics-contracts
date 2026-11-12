@@ -11,7 +11,7 @@ _Written 2026-10-31. Live tracker, replacing `docs/audit-3.md` as the place for 
 | Severity | Count |
 |---|---|
 | High | 0 |
-| Medium | 2 (both fixed) |
+| Medium | 3 (2 fixed, 1 open) |
 | Low | 10 (8 fixed, 2 accepted) |
 | Info | see list |
 
@@ -90,6 +90,30 @@ Any fix that touches Game.sol has to be byte-neutral or byte-negative, or live i
 **Fix:** clamp instead of reverting. Either do it in RoguelikeMatch before the call (`min(stored, current max)`, read from `game.getShipAttributes`), or in Game, where the clamp is roughly byte-neutral. Storing 0 (= full) for a survivor at full HP would also shrink the problem, but that alone doesn't fix it.
 
 ---
+
+### HA7-13 — The New UTC Mint Price Lets Anyone Drain the Lottery Pool's ETH When the New ShipPurchaser Goes Live
+
+**Status: Open, added 2026-11-12. To be addressed at the `ShipPurchaser` redeploy.** `scripts/deployUTCLotteryPool.ts` was fixed the same day to price from `tierPrices`, so a re-run seeds at the new rate. The pool already on chain still has the old price.
+
+**Confidence: Confirmed** (code and live reads; not exploited).
+
+**Files:**
+- `ShipPurchaser.sol` `purchaseUTCWithFlow`: since 2026-11-12 it mints `tierPrices[tier]` UTC (about $1 per UTC) instead of `tierShips[tier] * recycleReward` (about $10 per UTC). The deployed contract still runs the old code.
+- `UTCLotteryHook.sol`: the hook binds to one pool (`poolLocked`). Its header relies on the mint price acting as the pool's price ceiling.
+- `scripts/deployUTCLotteryPool.ts`: set the pool's starting price from the old mint, about 0.0044 ETH per UTC on Base Sepolia.
+
+**Failure scenario:**
+- The live UTC/ETH pool (hook `0x72D0930d6456489F5A2f648924ED6689EF262040` on Base Sepolia) is priced at the old ceiling, about $10 per UTC.
+- Once a `ShipPurchaser` with the new mint is live, anyone mints UTC at about $1 and sells it into the pool. That continues until the pool's price falls to about $1, so the protocol-seeded liquidity loses up to its whole ETH side to whoever acts first. The sells also earn lottery entries.
+- No privilege is needed; it's mint then swap. On Base Sepolia the pool holds about 1 UTC, so the loss there is negligible. Production would lose whatever was seeded.
+
+**Fix (at the redeploy, in this order):**
+1. Remove the protocol's liquidity from the pool.
+2. Move the pool's price to the new ceiling. That's cheap once the pool is empty.
+3. Re-seed liquidity at the new price. Use the same pool, because the hook can't bind to another one.
+4. Only then let the new `ShipPurchaser` mint UTC.
+
+Any later change to `tierPrices`/`flowTierPrices` that lowers the mint price moves the ceiling the same way, so repricing needs the same pull, reprice and re-seed.
 
 ## Low
 

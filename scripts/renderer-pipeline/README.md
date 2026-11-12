@@ -69,7 +69,7 @@ that name. It refuses to run on an `.svg` input, since that would overwrite the
 input itself.
 
 ```
-node scripts/renderer-pipeline/image-to-svg.js <image> [--portrait] [--colors=N] [--simplify=EPSILON] [--brightness=PERCENT] [--merge=DISTANCE]
+node scripts/renderer-pipeline/image-to-svg.js <image> [--portrait] [--remove-bg] [--bg-dim=N] [--bg-blue-tint=N] [--colors=N] [--simplify=EPSILON] [--brightness=PERCENT] [--merge=DISTANCE]
 ```
 
 - **`--portrait`**: the least detail that still reads as the same person
@@ -92,6 +92,20 @@ node scripts/renderer-pipeline/image-to-svg.js <image> [--portrait] [--colors=N]
     background, so removing the background from the source first is the
     biggest further saving.
 
+- **`--remove-bg`** (added 2026-11-09): makes a dark space background
+  transparent before tracing (`lib/background.js`), so the SVG has no
+  full-canvas bottom shape and can sit over other art. It flood-fills from the
+  image border through near-black pixels and dim blue-tinted (nebula) pixels,
+  then clears leftover stars and dim nebula islands. The station's warm-grey
+  shadows and grey smoke are kept. Tuned on `broken-mining-station.png` (FE grid
+  tile art, `--portrait --remove-bg`: 74 KB with the background, 68 KB without).
+  Dark pixels fully enclosed by the art stay opaque. For brighter nebula,
+  raise `--bg-dim` (max channel a blue-tinted pixel may have, default 50) and
+  `--bg-blue-tint` (minimum blue - red, default 4); either one implies
+  `--remove-bg`. `hive.png` (512px, no blue in the art) needed
+  `--bg-dim=255 --bg-blue-tint=15`; don't use that on art with blue lights
+  touching the background. A background that isn't dark or blue needs the
+  other thresholds in `lib/background.js` changed.
 - **Formats:** anything node-canvas `loadImage` reads (PNG, JPEG, GIF's first
   frame, ...). Any image size works, and the SVG's `viewBox` matches the image.
 - **`--colors`** (default 80): the k-means palette ceiling. `lib/palette.js` merges

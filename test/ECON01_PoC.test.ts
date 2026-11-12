@@ -2,6 +2,13 @@ import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { deployShipsFixture } from "./fixtures/deployShipsFixture";
 
+// 2026-11-12: converted to a "this no longer works" regression test, as the
+// note below asks. ShipPurchaser.purchaseUTCWithFlow now mints the pack's
+// UTC price (tierPrices) for its native price (flowTierPrices), so that is
+// the peg. By it, recycling a pack returns ~12% of what it cost, and the 10%
+// self-referral refund doesn't make the cycle profitable. The original
+// write-up follows.
+//
 // Proof-of-concept for docs/tokenomics-audit.md's ECON-01 finding:
 // Ships.purchaseWithFlow's FLOW-denominated self-referral, stacked with
 // shipBreaker recycling, extracts real protocol FLOW revenue as repeatable
@@ -16,14 +23,14 @@ import { deployShipsFixture } from "./fixtures/deployShipsFixture";
 // Every step below reads real on-chain state after each transaction rather
 // than computing expected values in JS and trusting them — the numbers
 // printed are what actually happened on the ephemeral Hardhat network.
-describe("ECON-01 proof of concept: referral + recycle arbitrage", function () {
+describe("ECON-01 regression: referral + recycle arbitrage", function () {
   const TIER = 4; // 60 ships/purchase — fewest transactions to reach the referral thresholds
   const REFERRAL_TIER_1_THRESHOLD = 1000n; // 10% referral kicks in at >= 1000 cumulative referred ships
 
-  it("demonstrates a profitable self-referral + recycle cycle once the 10% referral tier is reached", async function () {
+  it("is unprofitable at the 10% referral tier under the purchaseUTCWithFlow peg", async function () {
     this.timeout(120_000);
 
-    const { ships, user1Ships, user1, universalCredits, publicClient } =
+    const { ships, user1Ships, user1, universalCredits, publicClient, shipPurchaser } =
       await loadFixture(deployShipsFixture);
 
     const attacker = user1;
@@ -36,10 +43,12 @@ describe("ECON-01 proof of concept: referral + recycle arbitrage", function () {
     console.log(`\n--- Setup ---`);
     console.log(`Tier ${TIER}: ${tierShipCount} ships for ${tierPrice} wei`);
     console.log(`recycleReward: ${recycleReward} wei UTC per recycled ship`);
+    const [, pegUtcPrices] = (await shipPurchaser.read.getPurchaseInfo()) as [number[], bigint[]];
+    const [, pegFlowPrices] = (await shipPurchaser.read.getFlowPurchaseInfo()) as [number[], bigint[]];
+    const pegUtc = pegUtcPrices[TIER]!;
+    const pegFlow = pegFlowPrices[TIER]!;
     console.log(
-      `Protocol's own peg (ShipPurchaser.purchaseUTCWithFlow): ${tierShipCount} ships worth of recycling = ${
-        BigInt(tierShipCount) * recycleReward
-      } wei UTC for ${tierPrice} wei FLOW`,
+      `Protocol's own peg (ShipPurchaser.purchaseUTCWithFlow): ${pegUtc} wei UTC for ${pegFlow} wei FLOW`,
     );
 
     // ---- Phase 1: bootstrap referralCount[attacker] past the 1000 threshold ----
@@ -164,33 +173,15 @@ describe("ECON-01 proof of concept: referral + recycle arbitrage", function () {
     expect(utcMinted).to.equal(BigInt(tierShipCount) * recycleReward);
 
     // ---- Final accounting for this one cycle ----
-    // IMPORTANT: UTC and FLOW are NOT 1:1 -- utcMinted's raw wei value (6e18
-    // for tier 4) must NOT be compared directly against FLOW wei. The
-    // protocol's own peg (ShipPurchaser.purchaseUTCWithFlow) defines
-    // "tierShipCount * recycleReward UTC" as worth exactly "tierPrice FLOW"
-    // -- already confirmed above (utcMinted == tierShipCount * recycleReward
-    // exactly), so that peg-defined FLOW-equivalent value is tierPrice
-    // itself, not utcMinted's raw number.
+    // UTC and FLOW are not 1:1; value the recycled UTC at the protocol's own
+    // peg (pegFlow FLOW buys pegUtc UTC).
+    const utcValueInFlow = (utcMinted * pegFlow) / pegUtc;
+    const profitInFlowTerms = utcValueInFlow - netFlowOutThisPurchase;
     console.log(`\n--- Result ---`);
     console.log(`Net FLOW spent this cycle:                        ${netFlowOutThisPurchase} wei`);
-    console.log(
-      `UTC received (raw):                               ${utcMinted} wei UTC`,
-    );
-    console.log(
-      `UTC received, FLOW-equivalent per the protocol's own peg: ${tierPrice} wei ` +
-        `(the peg is NOT 1:1 -- ${tierShipCount} x ${recycleReward} UTC is defined as worth ` +
-        `the full tier price, not its own raw wei amount)`,
-    );
-    const profitInFlowTerms = tierPrice - netFlowOutThisPurchase;
-    console.log(
-      `Profit (peg FLOW-equivalent of UTC received minus real FLOW spent): ${profitInFlowTerms} wei ` +
-        `(== ${(Number(profitInFlowTerms) * 100) / Number(tierPrice)}% of the tier price, ` +
-        `repeatable indefinitely, funded out of Ships.sol's own FLOW balance)`,
-    );
-    // The core claim: paying LESS than tierPrice still nets UTC that the
-    // protocol itself defines as worth the FULL tierPrice -- strictly
-    // profitable, by exactly the referral percentage.
-    expect(profitInFlowTerms > 0n).to.be.true;
-    expect(profitInFlowTerms).to.equal((tierPrice * 10n) / 100n);
+    console.log(`UTC received (raw):                               ${utcMinted} wei UTC`);
+    console.log(`UTC received, FLOW-equivalent per the peg:        ${utcValueInFlow} wei`);
+    console.log(`Profit (negative = loss):                         ${profitInFlowTerms} wei`);
+    expect(profitInFlowTerms < 0n).to.be.true;
   });
 });

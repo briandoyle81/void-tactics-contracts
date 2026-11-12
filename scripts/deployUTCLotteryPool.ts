@@ -452,40 +452,34 @@ async function main() {
     functionName: "flowTierPrices",
     args: [BigInt(REFERENCE_TIER_INDEX)],
   })) as bigint;
-  const tierShipsCount = (await publicClient.readContract({
+  // purchaseUTCWithFlow mints the tier's UTC pack price (tierPrices) for
+  // its native price (2026-11-12; it used to mint tierShips * recycleReward).
+  const [, utcTierPrices] = (await publicClient.readContract({
     address: shipPurchaserAddress,
     abi: shipPurchaserAbi,
-    functionName: "tierShips",
-    args: [BigInt(REFERENCE_TIER_INDEX)],
-  })) as number;
-  const recycleReward = (await publicClient.readContract({
-    address: shipsAddress,
-    abi: shipsAbi,
-    functionName: "recycleReward",
+    functionName: "getPurchaseInfo",
     args: [],
-  })) as bigint;
-  const mintAmountUTC = BigInt(tierShipsCount) * recycleReward;
+  })) as [readonly number[], readonly bigint[]];
+  const mintAmountUTC = utcTierPrices[REFERENCE_TIER_INDEX];
   console.log(
     `Reference rate (tier ${REFERENCE_TIER_INDEX}): ${formatEther(tierPriceWei)} ETH -> ${formatEther(mintAmountUTC)} UTC`,
   );
 
   // Sourcing loop (step 8) buys whichever tier mints the most UTC per
   // purchase, independent of REFERENCE_TIER_INDEX (which only fixes the
-  // pool's initial price) -- with the LP_SEED_TO_SMOKE_TEST_RATIO fix above,
-  // sourcing enough UTC at tier 0's 0.5 UTC/purchase would take ~300
-  // transactions; the largest tier mints ~12x more per purchase.
-  const [allTierShips, allTierPrices] = (await publicClient.readContract({
+  // pool's initial price), so it needs the fewest transactions.
+  const [, allTierPrices] = (await publicClient.readContract({
     address: shipPurchaserAddress,
     abi: shipPurchaserAbi,
     functionName: "getFlowPurchaseInfo",
     args: [],
   })) as [readonly number[], readonly bigint[]];
   let sourcingTierIndex = 0;
-  for (let i = 1; i < allTierShips.length; i++) {
-    if (allTierShips[i] > allTierShips[sourcingTierIndex]) sourcingTierIndex = i;
+  for (let i = 1; i < utcTierPrices.length; i++) {
+    if (utcTierPrices[i] > utcTierPrices[sourcingTierIndex]) sourcingTierIndex = i;
   }
   const sourcingTierPriceWei = allTierPrices[sourcingTierIndex];
-  const sourcingTierMintUTC = BigInt(allTierShips[sourcingTierIndex]) * recycleReward;
+  const sourcingTierMintUTC = utcTierPrices[sourcingTierIndex];
   console.log(
     `Sourcing tier ${sourcingTierIndex}: ${formatEther(sourcingTierPriceWei)} ETH -> ` +
       `${formatEther(sourcingTierMintUTC)} UTC per purchase`,

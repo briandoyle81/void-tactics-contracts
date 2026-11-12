@@ -71,20 +71,26 @@ describe("Seeded AI ship configs", function () {
   const SNIPER_EXCEPTIONS: Record<string, { gun: number; minRange: number }> = {
     v2sniper3: { gun: 2, minRange: 4 }, // intentional, 2026-10-12
   };
-  // Ships outside the level ramp: the shiny variant 1 set (La Sombra,
-  // Murcielago, Umbria, Abismo, Vacia, Oscuridad, Velo, Umbral) made in the
-  // content editor and exported from chain on the 2026-11-04 deploy, which
-  // keyed them chainConfig53-60 (the trailing digit isn't a level). Roguelike
-  // m08 fights most of them (map rlM06). Every other rule still applies.
+  // Ships outside the level ramp: the shiny set made in the content editor
+  // (La Sombra, Murcielago, Umbria, Abismo, Vacia, Oscuridad, Velo, Umbral,
+  // then Estrella Oscura, Silencio, 1 Apis Regina and Dragon). The 2026-11-04
+  // export keyed the first eight chainConfig53-60; they were re-keyed after
+  // their chain ids on 2026-11-10 (aiConfig10_2 is chain config 10). The
+  // trailing digit isn't a level. Roguelike m08, m10 and m15 fight them
+  // (maps rlM06, map70, map72). Every other rule still applies.
   const OFF_LADDER = new Set([
-    "chainConfig53",
-    "chainConfig54",
-    "chainConfig55",
-    "chainConfig56",
-    "chainConfig57",
-    "chainConfig58",
-    "chainConfig59",
-    "chainConfig60",
+    "aiConfig10_2",
+    "aiConfig11",
+    "aiConfig12",
+    "aiConfig13_2",
+    "aiConfig14",
+    "aiConfig15",
+    "aiConfig16",
+    "aiConfig17_2",
+    "aiConfig61",
+    "aiConfig62",
+    "aiConfig63",
+    "aiConfig64",
   ]);
   const levelOf = (key: string) => {
     if (key in LEVEL_OVERRIDES) return LEVEL_OVERRIDES[key];

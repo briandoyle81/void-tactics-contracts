@@ -61,7 +61,18 @@ describe("Lobbies", function () {
       deployed.fleets.address,
       { client: { wallet: joiner } }
     );
+    const payLobbyFee = async (wallet: any) => {
+      await deployed.shipPurchaser.write.purchaseUTCWithFlow(
+        [wallet.account.address, 0n],
+        { value: parseEther("4.99"), account: wallet.account },
+      );
+      await deployed.universalCredits.write.approve(
+        [deployed.lobbies.address, parseEther("1")],
+        { account: wallet.account },
+      );
+    };
     return {
+      payLobbyFee,
       lobbies: deployed.lobbies,
       creatorLobbies,
       joinerLobbies,
@@ -162,7 +173,18 @@ describe("Lobbies", function () {
       generateStartingPositions([6n], false),
     ]);
 
+    const payLobbyFee = async (wallet: any) => {
+      await deployed.shipPurchaser.write.purchaseUTCWithFlow(
+        [wallet.account.address, 0n],
+        { value: parseEther("4.99"), account: wallet.account },
+      );
+      await deployed.universalCredits.write.approve(
+        [deployed.lobbies.address, parseEther("1")],
+        { account: wallet.account },
+      );
+    };
     return {
+      payLobbyFee,
       lobbies: deployed.lobbies,
       creatorLobbies,
       joinerLobbies,
@@ -298,7 +320,7 @@ describe("Lobbies", function () {
     });
 
     it("should succeed when selectedMapId is a PvP or Both map", async function () {
-      const { creatorLobbies, maps, owner } = await loadFixture(
+      const { payLobbyFee, creator, creatorLobbies, maps, owner } = await loadFixture(
         deployLobbiesFixture
       );
       const costLimit = 1000n;
@@ -325,16 +347,16 @@ describe("Lobbies", function () {
         ])
       ).to.not.be.rejected;
 
+      await payLobbyFee(creator);
       await expect(
         creatorLobbies.write.createLobby(
           [costLimit, turnTime, creatorGoesFirst, bothMapId, 100n, zeroAddress],
-          { value: parseEther("1") } // second lobby from this creator requires the fee
         )
       ).to.not.be.rejected;
     });
 
     it("should require fee for additional lobbies", async function () {
-      const { creatorLobbies, creator } = await loadFixture(
+      const { payLobbyFee, creatorLobbies, creator } = await loadFixture(
         deployLobbiesFixture
       );
       const costLimit = 1000n;
@@ -361,15 +383,13 @@ describe("Lobbies", function () {
           100n, // maxScore
           zeroAddress, // reservedJoiner - no reservation
         ])
-      ).to.be.rejectedWith("InsufficientFee");
+      ).to.be.rejectedWith("InsufficientUTC");
 
       // Should work with correct fee
+      await payLobbyFee(creator);
       await expect(
         creatorLobbies.write.createLobby(
           [costLimit, turnTime, creatorGoesFirst, 0n, 100n, zeroAddress], // selectedMapId - no preset map, maxScore, reservedJoiner
-          {
-            value: parseEther("1"),
-          }
         )
       ).to.not.be.rejected;
 
@@ -436,7 +456,7 @@ describe("Lobbies", function () {
     });
 
     it("should prevent creating lobby when in timeout", async function () {
-      const { creatorLobbies, joinerLobbies, creator, joiner, ships, randomManager } =
+      const { payLobbyFee, creatorLobbies, joinerLobbies, creator, joiner, ships, randomManager } =
         await loadFixture(deployLobbiesFixture);
       const costLimit = 1000n;
       const turnTime = 300n;
@@ -478,9 +498,9 @@ describe("Lobbies", function () {
       await creatorLobbies.write.timeoutJoiner([1n]);
 
       // Create new lobby
+      await payLobbyFee(creator);
       await creatorLobbies.write.createLobby(
         [costLimit, turnTime, creatorGoesFirst, 0n, 100n, zeroAddress], // selectedMapId - no preset map, maxScore, reservedJoiner
-        { value: parseEther("1") }
       );
 
       // Try to join while in timeout
@@ -742,7 +762,7 @@ describe("Lobbies", function () {
     });
 
     it("should revert when joining while in timeout", async function () {
-      const { creatorLobbies, joinerLobbies, otherLobbies, creator, ships, randomManager } =
+      const { payLobbyFee, creatorLobbies, joinerLobbies, otherLobbies, creator, ships, randomManager } =
         await loadFixture(deployLobbiesFixture);
       const costLimit = 1000n;
       const turnTime = 300n;
@@ -781,9 +801,9 @@ describe("Lobbies", function () {
       await creatorLobbies.write.timeoutJoiner([1n]);
 
       // Create new lobby
+      await payLobbyFee(creator);
       await creatorLobbies.write.createLobby(
         [costLimit, turnTime, creatorGoesFirst, 0n, 100n, zeroAddress], // selectedMapId - no preset map, maxScore, reservedJoiner
-        { value: parseEther("1") }
       );
 
       // Try to join while in timeout
@@ -813,7 +833,7 @@ describe("Lobbies", function () {
     });
 
     it("should allow player to join multiple lobbies by paying fee", async function () {
-      const {
+      const { payLobbyFee,
         creatorLobbies,
         joinerLobbies,
         otherLobbies,
@@ -847,13 +867,13 @@ describe("Lobbies", function () {
 
       // Try to join second lobby without paying fee (should fail)
       await expect(joinerLobbies.write.joinLobby([2n])).to.be.rejectedWith(
-        "InsufficientFee"
+        "InsufficientUTC"
       );
 
       // Join second lobby with fee (should succeed)
-      const tx = await joinerLobbies.write.joinLobby([2n], {
-        value: parseEther("1"),
-      });
+      await payLobbyFee(joiner);
+      const tx = await joinerLobbies.write.joinLobby([2n]
+      );
       const receipt = await publicClient.getTransactionReceipt({ hash: tx });
       expect(receipt.status).to.equal("success");
 
@@ -1294,7 +1314,7 @@ describe("Lobbies", function () {
       // commits a fleet themselves must not be able to penalize an innocent
       // joiner just for waiting their turn — timeoutJoiner should still
       // reset the lobby to Open, just without the punitive kickCount.
-      const { creatorLobbies, joinerLobbies, joiner } = await loadFixture(
+      const { payLobbyFee, creator, creatorLobbies, joinerLobbies, joiner } = await loadFixture(
         deployLobbiesFixture,
       );
 
@@ -1331,9 +1351,9 @@ describe("Lobbies", function () {
       expect(joinerState.activeLobbiesCount).to.equal(0n);
 
       // The creator is still in lobby 1, so their second lobby needs the fee.
+      await payLobbyFee(creator);
       await creatorLobbies.write.createLobby(
         [1000n, 300n, true, 0n, 100n, zeroAddress],
-        { value: parseEther("1") },
       );
       // must NOT revert PlayerInTimeout, and needs no fee.
       await joinerLobbies.write.joinLobby([2n]);
@@ -1342,7 +1362,7 @@ describe("Lobbies", function () {
 
   describe("Kicked-joiner rejoin ban (HA6-29)", function () {
     it("an address timed out of a lobby can't rejoin that lobby, but can join others", async function () {
-      const { creatorLobbies, joinerLobbies, joiner } = await loadFixture(
+      const { payLobbyFee, creator, creatorLobbies, joinerLobbies, joiner } = await loadFixture(
         deployLobbiesFixture,
       );
       await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
@@ -1359,9 +1379,9 @@ describe("Lobbies", function () {
       );
 
       // Other lobbies are unaffected.
+      await payLobbyFee(creator);
       await creatorLobbies.write.createLobby(
         [1000n, 300n, true, 0n, 100n, zeroAddress],
-        { value: parseEther("1") },
       );
       await joinerLobbies.write.joinLobby([2n]);
     });
@@ -2009,7 +2029,7 @@ describe("Lobbies", function () {
     });
 
     it("lets a player in several lobbies leave any of them, not just the last one recorded (HA6-10)", async function () {
-      const { creatorLobbies, joinerLobbies, joiner } = await loadFixture(
+      const { payLobbyFee, creatorLobbies, joinerLobbies, joiner } = await loadFixture(
         deployLobbiesFixture,
       );
 
@@ -2023,9 +2043,9 @@ describe("Lobbies", function () {
         zeroAddress,
       ]);
       await joinerLobbies.write.joinLobby([1n]);
+      await payLobbyFee(joiner);
       await joinerLobbies.write.createLobby(
         [1000n, 300n, true, 0n, 100n, zeroAddress],
-        { value: parseEther("1") },
       );
 
       // activeLobbyId now points at lobby 2; leaving lobby 1 used to
@@ -2266,7 +2286,7 @@ describe("Lobbies", function () {
         universalCredits.address,
       ]);
 
-      // Give creator some UTC by purchasing directly (tier 1 = 1.1 UTC, enough for 1 UTC reservation)
+      // Give creator some UTC by purchasing directly (tier 1 = 9.99 UTC, enough for 1 UTC reservation)
       await shipPurchaser.write.purchaseUTCWithFlow(
         [creator.account.address, 1n],
         { value: parseEther("9.99"), account: creator.account }

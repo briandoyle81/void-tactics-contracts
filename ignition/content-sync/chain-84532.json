@@ -1,0 +1,35 @@
+{
+  "mapsAddress": "0x3A00B6e69aAF0900B2Fb1271e91dA4b5E4CE1b1A",
+  "maps": {
+    "map68": "62",
+    "pvp01": "63",
+    "pvp02": "64",
+    "pvp03": "65",
+    "pvp04": "66",
+    "pvp05": "67",
+    "pvp06": "68",
+    "map69": "69",
+    "map70": "70",
+    "map71": "71",
+    "map72": "72"
+  },
+  "roguelikeNodes": {},
+  "ignored": {
+    "maps": [],
+    "roguelikeNodes": []
+  },
+  "aiConfigs": {
+    "aiConfig10_2": "10",
+    "aiConfig11": "11",
+    "aiConfig12": "12",
+    "aiConfig13_2": "13",
+    "aiConfig14": "14",
+    "aiConfig15": "15",
+    "aiConfig16": "16",
+    "aiConfig17_2": "17",
+    "aiConfig61": "61",
+    "aiConfig62": "62",
+    "aiConfig63": "63",
+    "aiConfig64": "64"
+  }
+}

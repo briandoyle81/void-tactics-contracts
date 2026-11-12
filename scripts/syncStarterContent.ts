@@ -25,7 +25,7 @@
 // journal (ignition/deployments/<id>/journal.jsonl) -- each Create<Key>Map /
 // CreateRoguelike<Key>Node call's confirmed nonce gives its creation order,
 // so its id. Ids for things this script creates are saved to
-// content-sync.json next to the journal, so reruns find them. AI config
+// ignition/content-sync/<deployment id>.json, so reruns find them. AI config
 // ids are the Read<Key>ConfigId results in the journal. New maps and nodes
 // are only supported appended (their id is read back from chain).
 //
@@ -41,7 +41,8 @@
 //                    AIEncounters and RoguelikeNodeMap after a real deploy).
 //   DEPLOYMENT_ID    Deployment folder to read (default chain-<chainId>).
 //   DEPLOYMENT_DIR   Full path to a deployment folder instead (testing on a
-//                    copy, so content-sync.json isn't written to the real one).
+//                    copy). Its own content-sync.json is used, so the real
+//                    record isn't written.
 //   IMPERSONATE      Local fork testing only: an address to impersonate
 //                    instead of MAP_EDITOR_KEY (hardhat/localhost networks).
 import fs from "fs";
@@ -62,6 +63,7 @@ import {
   WIN_EFFECT_CONTRACTS,
   cap,
   loadDeployment,
+  syncStatePathFor,
   posKey,
   posSet,
   scoringSet,
@@ -92,7 +94,10 @@ async function main() {
     mapIds,
     nodeIds,
     configIds,
-  } = loadDeployment(deployDir);
+  } = loadDeployment(
+    deployDir,
+    process.env.DEPLOYMENT_DIR ? undefined : syncStatePathFor(deploymentId),
+  );
   const saveSyncState = () =>
     fs.writeFileSync(syncStatePath, JSON.stringify(syncState, null, 2) + "\n");
   const contract = async (name: string) => ({
@@ -134,7 +139,7 @@ async function main() {
   // and crashed before recording it, or someone added one in the editor.
   // Creating now could duplicate it (happened once, 2026-10-20: map 67 was
   // created twice, as 67 and 68), so creation is refused until every id is
-  // accounted for -- add the missing ones to content-sync.json by hand.
+  // accounted for -- add the missing ones to the content-sync record by hand.
   // Updates to known ids are still allowed.
   const unknownOnChain =
     chainMapCount > BigInt(knownMapIds.length) ||
@@ -217,7 +222,7 @@ async function main() {
         if (attempt >= 10)
           throw new Error(
             `Created in ${receipt.transactionHash} but couldn't read its id. Record it in ` +
-              `content-sync.json by hand (likely ${before + 1n}) before rerunning.`,
+              `${syncStatePath} by hand (likely ${before + 1n}) before rerunning.`,
           );
         await new Promise((r) => setTimeout(r, 3000));
       }

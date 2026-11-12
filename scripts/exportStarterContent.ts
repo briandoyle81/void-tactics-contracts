@@ -58,6 +58,7 @@ import {
   SEED_FILES,
   WIN_EFFECT_CONTRACTS,
   loadDeployment,
+  syncStatePathFor,
   posSet,
   scoringSet,
   toPositions,
@@ -91,7 +92,6 @@ async function main() {
     const files = [
       "journal.jsonl",
       "deployed_addresses.json",
-      "content-sync.json",
       ...READ_CONTRACTS.map((n) => `artifacts/DeployModule#${n}.json`),
     ];
     fs.mkdirSync(path.join(tmp, "artifacts"));
@@ -103,14 +103,17 @@ async function main() {
         });
         fs.writeFileSync(path.join(tmp, f), data);
       } catch {
-        if (f !== "content-sync.json" && !f.startsWith("artifacts/"))
+        if (!f.startsWith("artifacts/"))
           throw new Error(`No ${deploymentId} deployment in ignition/deployments/ or in git HEAD: nothing to export.`);
       }
     }
     console.log(`No ${deploymentId} folder on disk: reading the copy committed at HEAD.`);
     deployDir = tmp;
   }
-  const d = loadDeployment(deployDir);
+  const d = loadDeployment(
+    deployDir,
+    process.env.DEPLOYMENT_DIR ? undefined : syncStatePathFor(deploymentId),
+  );
   const { sp, rl, pvp, mapIds, nodeIds, configIds, syncState } = d;
 
   const contract = async (name: string) => {

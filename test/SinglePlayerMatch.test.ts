@@ -944,19 +944,19 @@ describe("SinglePlayerMatch", function () {
   });
 
   describe("Deploy-seeded starter maps", function () {
-    it("seeds sixty-eight starter maps scaling from an easy opener (m01) through a matched-difficulty midpoint (m15) to the hardest finale (f06)", async function () {
+    it("seeds seventy-two starter maps scaling from an easy opener (m01) through a matched-difficulty midpoint (m15) to the hardest finale (f06)", async function () {
       const { maps, aiEncounters } = await loadFixture(deploySinglePlayerFixture);
 
-      // 30 campaign maps (ids 1-30), 32 roguelike maps (ids 31-62 — every
+      // 30 campaign maps (ids 1-30), 36 roguelike maps (ids 31-66 — every
       // roguelike Combat node has its own map since the 2026-09-23 pass,
       // not just the first three missions' variant-1 rosters; map67
       // "Repair Facility DS7" added 2026-10-20, chainMap67 exported from
-      // the 2026-10-19 deploy's editor edits 2026-10-26), plus 6 PvP-only
-      // maps (ids 63-68, not attached to any node — pvp06 added
-      // 2026-09-28). Everything below reads campaign maps by id, so the
+      // the 2026-10-19 deploy's editor edits 2026-10-26; map69-map72 added
+      // in the editor, exported 2026-11-10), plus 6 PvP-only maps (ids
+      // 67-72, not attached to any node — pvp06 added 2026-09-28). Everything below reads campaign maps by id, so the
       // rest don't disturb it. Live deploys created some of these with
       // scripts/syncStarterContent.ts, so their ids differ there.
-      expect(await maps.read.mapCount()).to.equal(68n);
+      expect(await maps.read.mapCount()).to.equal(72n);
 
       // Map 1 (m01, id 1): easiest mission — thematically generated "Open
       // Void" terrain (light cover, long sightlines), one contested
@@ -1030,9 +1030,9 @@ describe("SinglePlayerMatch", function () {
       expect(m02Creator.length).to.be.greaterThan(0);
       expect(m02Joiner.length).to.be.greaterThan(0);
 
-      // PvP (ids 63-68 since chainMap67 joined the roguelike list,
-      // 2026-10-26): id 63 is pvp01, the first-ever PvP preset map.
-      expect(await maps.read.mapMode([63n])).to.equal(0); // MapMode.PvP
+      // PvP (ids 67-72 since map69-map72 joined the roguelike list,
+      // 2026-11-10): id 67 is pvp01, the first-ever PvP preset map.
+      expect(await maps.read.mapMode([67n])).to.equal(0); // MapMode.PvP
     });
 
     it("seeds a thirty-node campaign graph — a 15-mission mainline, a 6-mission dead end, and a 3-mission shortcut that reconverges into a 6-mission final stretch", async function () {

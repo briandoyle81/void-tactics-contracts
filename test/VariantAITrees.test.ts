@@ -126,6 +126,7 @@ describe("Per-variant AI behavior trees", function () {
     hp?: number;
     range?: number;
     gunDamage?: number;
+    movement?: number;
   };
   type Scenario = {
     // ai[0] is the ship under test. It must be the ship the AI picks to act
@@ -254,6 +255,9 @@ describe("Per-variant AI behavior trees", function () {
       if (h.gunDamage !== undefined) {
         await setShipStat(f.game.address, gameId, humanIds[i], "gunDamage", h.gunDamage);
       }
+      if (h.movement !== undefined) {
+        await setShipStat(f.game.address, gameId, humanIds[i], "movement", h.movement);
+      }
     }
 
     // The first human ship passes in place, which hands the turn to the AI.
@@ -297,12 +301,17 @@ describe("Per-variant AI behavior trees", function () {
   }
 
   describe("Variant 1 — skirmisher", function () {
+    // Fixed stats for the human in the range-keeping tests below. A purchased
+    // ship's rolls depend on what ran earlier in the suite, and a rolled
+    // range of 1-2 changes where the Grunt stands (2026-11-12).
+    const SET_STATS = { hp: 100, range: 5, gunDamage: 10, movement: 3 };
+
     it("Grunt closes only to its maximum range (not all the way in) before shooting", async function () {
       // Laser range 3, movement 5. Enemy 6 tiles away: a full-speed advance
       // would end adjacent; the skirmisher stops at range 3 -> (5,7).
       const r = await run({
         ai: [{ variant: 1, archetype: GRUNT, at: [5, 10] }],
-        humans: [{ at: [5, 4] }],
+        humans: [{ at: [5, 4], ...SET_STATS }],
       });
       expect(r.action).to.equal(ActionType.Shoot);
       expect(r.target).to.equal(1n);
@@ -312,7 +321,7 @@ describe("Per-variant AI behavior trees", function () {
     it("Grunt backs away to maximum range, then shoots", async function () {
       const r = await run({
         ai: [{ variant: 1, archetype: GRUNT, at: [5, 10] }],
-        humans: [{ at: [5, 9] }],
+        humans: [{ at: [5, 9], ...SET_STATS }],
       });
       expect(r.action).to.equal(ActionType.Shoot);
       expect([r.row, r.col]).to.deep.equal([5, 12]);
@@ -321,7 +330,7 @@ describe("Per-variant AI behavior trees", function () {
     it("Aggressor presses the fight: it never backs off", async function () {
       const r = await run({
         ai: [{ variant: 1, archetype: AGGRESSOR, at: [5, 10] }],
-        humans: [{ at: [5, 9] }],
+        humans: [{ at: [5, 9], ...SET_STATS }],
       });
       expect(r.action).to.equal(ActionType.Shoot);
       expect([r.row, r.col]).to.deep.equal([5, 10]);
@@ -330,7 +339,7 @@ describe("Per-variant AI behavior trees", function () {
     it("Grunt won't abandon a scoring tile to kite, but Sniper will", async function () {
       const grunt = await run({
         ai: [{ variant: 1, archetype: GRUNT, at: [5, 10] }],
-        humans: [{ at: [5, 9] }],
+        humans: [{ at: [5, 9], ...SET_STATS }],
         scoringTiles: [{ row: 5, col: 10 }],
       });
       expect(grunt.action).to.equal(ActionType.Shoot);
@@ -338,7 +347,7 @@ describe("Per-variant AI behavior trees", function () {
 
       const sniper = await run({
         ai: [{ variant: 1, archetype: SNIPER, weapon: GENERIC, at: [5, 10] }],
-        humans: [{ at: [5, 9] }],
+        humans: [{ at: [5, 9], ...SET_STATS }],
         scoringTiles: [{ row: 5, col: 10 }],
       });
       expect(sniper.action).to.equal(ActionType.Shoot);

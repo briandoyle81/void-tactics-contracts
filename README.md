@@ -192,6 +192,31 @@ Retry helper for interrupted Ignition deploys:
 
 Add `--with-lottery-pool` to also run `scripts/deployUTCLotteryPool.ts` (the Uniswap lottery hook and pool) once the Ignition deploy succeeds, with the same retries.
 
+### Keep the content-sync record (map, node and AI config ids)
+
+`ignition/content-sync/chain-84532.json` records the onchain id of every map, roguelike node and AI ship config the deploy journal doesn't account for. These are things created after the deploy (by `scripts/syncStarterContent.ts`, or in the frontend's editors), and seed keys renamed since the deploy. The sync script, the seed export, the frontend's mission seed export and the web2 import read ids from the journal plus this file. Without it, they number the maps from the journal alone. That's off by one for every map after one made outside it (2026-11-10: the six PvP maps came out as 62-67 instead of 63-68), editor-made maps get no id at all, and renamed AI configs are exported again as duplicates.
+
+It lived at `ignition/deployments/chain-84532/content-sync.json` until 2026-11-12. It moved because a redeploy deletes that folder, and the pre-redeploy export needs the record.
+
+- **Commit it** with the seed files whenever it changes. Never delete it.
+- **On a redeploy**, leave it in place. `mapsAddress` ties it to one deployment. Once the new deployment exists, the scripts ignore the old record, and the next sync overwrites it. Then check that every seed key's id matches the chain and record any that don't. Comparing each map's blocked/impassable tile counts on chain with the seed's is a quick check.
+- **New map, node or AI config made in an editor:** add `"<seed key>": "<onchain id>"` under `maps`, `roguelikeNodes` or `aiConfigs`. The seed export's warnings name the key and id to add.
+- **Frontend:** the admin seed export (`AdminSettingsExport.tsx`) and the web2 import (`prisma/importMissionSeeds.ts`) read this file too (`seedDeploymentIds.ts`'s `contentSyncPath`), and ignore it when `mapsAddress` doesn't match the deployment.
+
+Format:
+
+```json
+{
+  "mapsAddress": "0x3A00B6e69aAF0900B2Fb1271e91dA4b5E4CE1b1A",
+  "maps": { "map68": "62", "pvp01": "63" },
+  "roguelikeNodes": {},
+  "aiConfigs": { "aiConfig10_2": "10" },
+  "ignored": { "maps": [], "roguelikeNodes": [] }
+}
+```
+
+`ignored` lists onchain ids no seed entry owns (for example a duplicate left by a failed sync).
+
 ## Repository Structure
 
 - `contracts/` — core game contracts and token/NFT logic
