@@ -101,7 +101,7 @@
  ·····································|································|·································
  |  LiquidityMath                     ·                 0.056 (0.000)  ·                 0.083 (0.000)  │
  ·····································|································|·································
- |  Lobbies                           ·                15.385 (0.000)  ·                15.574 (0.000)  │
+ |  Lobbies                           ·                14.572 (0.000)  ·                14.762 (0.000)  │
  ·····································|································|·································
  |  Lock                              ·                 0.056 (0.000)  ·                 0.083 (0.000)  │
  ·····································|································|·································
@@ -325,7 +325,7 @@
  ·····································|································|·································
  |  ShipGrantWinEffect                ·                 6.713 (0.000)  ·                 6.981 (0.000)  │
  ·····································|································|·································
- |  ShipPurchaser                     ·                 5.608 (0.000)  ·                 6.756 (0.000)  │
+ |  ShipPurchaser                     ·                 5.456 (0.000)  ·                 6.597 (0.000)  │
  ·····································|································|·································
  |  Ships                             ·                23.144 (0.000)  ·                24.296 (0.000)  │
  ·····································|································|·································
@@ -369,69 +369,69 @@
  ·····································|································|·································
  |  UTCLotteryHook                    ·                12.372 (0.000)  ·                13.705 (0.000)  │
  ·····································|································|·································
- |  Variant1AI                        ·                21.753 (0.000)  ·                22.063 (0.000)  │
+ |  Variant1AI                        ·                21.854 (0.000)  ·                22.164 (0.000)  │
  ·····································|································|·································
- |  Variant2AI                        ·                22.788 (0.000)  ·                23.099 (0.000)  │
+ |  Variant2AI                        ·                22.836 (0.000)  ·                23.146 (0.000)  │
  ·····································|································|·································
  |  VariantPurchaseGate               ·                 1.260 (0.000)  ·                 1.416 (0.000)  │
  ·------------------------------------|--------------------------------|--------------------------------·
-[DeployAndConfig] Using cached ETH/USD price: $2256.71 (fetched within the last 24h)
+[DeployAndConfig] Using cached ETH/USD price: $2015.54 (fetched within the last 24h)
 Deployer/LP/trader wallet: 0x19458bee44fcbfc8dd19075b1696c458f853b262
 DRY_RUN_ONLY: false
 Loaded + verified addresses: {
-  ships: '0x57E6800E813EBa31A7bc92E7cf0c95661aFCf85D',
-  universalCredits: '0x258F2406eDc1AE17E7A4cCCe34Fe75A14e0dBEb7',
-  shipPurchaser: '0x6fF2bB2E17B7Ec54ac53d72C7e1b64E9e765985c'
+  ships: '0x2fFCB423C4269dD2ac271972032e45Bf65D1a56A',
+  universalCredits: '0x69531b96061dCDbbBA64782eef9eDfEF3F08d0b3',
+  shipPurchaser: '0x7D93B24AD64E5A4C7Eab226A37C97863e5776661'
 }
 Ships owner: 0x69a5B3aE8598fC5A5419eaa1f2A59Db2D052e346
 MAP_EDITOR_KEY matches Ships.owner() (0x69a5B3aE8598fC5A5419eaa1f2A59Db2D052e346) -- will sign automatically.
-Reference rate (tier 0): 0.002211183537096038 ETH -> 0.5 UTC
-Sourcing tier 4: 0.022151716436759707 ETH -> 6 UTC per purchase
-sqrtPriceX96: 1191385169864218363428160165006
+Reference rate (tier 0): 0.002475763319011282 ETH -> 4.99 UTC
+Sourcing tier 4: 0.024802286235946696 ETH -> 49.99 UTC per purchase
+sqrtPriceX96: 3556929804162751855226162576531
 MAP_EDITOR_KEY matches the hook's owner (0x69a5B3aE8598fC5A5419eaa1f2A59Db2D052e346) -- will sign automatically.
-Mined hook address: 0x72D0930d6456489F5A2f648924ED6689EF262040 salt: 0x00000000000000000000000000000000000000000000000000000000000006af
-Hook deploy gas estimate: 3091034 maxFeePerGas: 7000000
-Hook deploy tx: 0xd5069e365706d60a707755f1341bf85a9a89a6aa29c262d8e7a7c2a68174ed2a
-Hook deployed and verified: 0x72D0930d6456489F5A2f648924ED6689EF262040
+Mined hook address: 0x9ffB4b06C5705Eab64D04E145fD7c1ED0223E040 salt: 0x0000000000000000000000000000000000000000000000000000000000002b9b
+Hook deploy gas estimate: 3091034 maxFeePerGas: 7322480
+Hook deploy tx: 0xb1700ec61a47447ba815dfa7e1cb379c9f5c0a743178b78b72be8c0942b7bf10
+Hook deployed and verified: 0x9ffB4b06C5705Eab64D04E145fD7c1ED0223E040
 Wrote hook address + ABI + poolId + poolKey to /Users/briandoyle/void-tactics-contracts-eth-online-2026/uniswap-lottery-hook.json
-minEntryThresholdWei: 0.01 ETH -- smoke-test sell sized to 6.783697394789579271 UTC
-[DeployAndConfig] Using cached ETH/USD price: $2256.71 (fetched within the last 24h)
-No LP_SEED_UTC_AMOUNT set -- defaulting to ~$10 of UTC at $2256.71/ETH: 1.002004008016032248 UTC (SKIP_SMOKE_TEST set, so not sizing against the smoke-test sell).
-Liquidity math: amount0 (ETH) = 0.004431229533258593, amount1 (UTC) = 1.002004008016032248, liquidityDelta = 66634148548354101
+minEntryThresholdWei: 0.01 ETH -- smoke-test sell sized to 60.466200000000008211 UTC
+[DeployAndConfig] Using cached ETH/USD price: $2015.54 (fetched within the last 24h)
+No LP_SEED_UTC_AMOUNT set -- defaulting to ~$10 of UTC at $2015.54/ETH: 10.000000000000000977 UTC (SKIP_SMOKE_TEST set, so not sizing against the smoke-test sell).
+Liquidity math: amount0 (ETH) = 0.004961449537096757, amount1 (UTC) = 10.000000000000000977, liquidityDelta = 222743115204415611
 Current UTC balance: 0
-Sourcing more UTC via purchaseUTCWithFlow(tier 4, +6 UTC)...
-UTC sourced. Balance now: 6
+Sourcing more UTC via purchaseUTCWithFlow(tier 4, +49.99 UTC)...
+UTC sourced. Balance now: 49.99
 PoolKey: {
   currency0: '0x0000000000000000000000000000000000000000',
-  currency1: '0x258F2406eDc1AE17E7A4cCCe34Fe75A14e0dBEb7',
+  currency1: '0x69531b96061dCDbbBA64782eef9eDfEF3F08d0b3',
   fee: 3000,
   tickSpacing: 60,
-  hooks: '0x72D0930d6456489F5A2f648924ED6689EF262040'
-} sqrtPriceX96: 1191385169864218363428160165006
-Simulated pool initialize OK. Resulting tick: 54213
-Pool initialize tx: 0xde7317757adcdb4cf6fa838cb36e3b286dbe693ade9f8bf415ea395d1f8df9a1
+  hooks: '0x9ffB4b06C5705Eab64D04E145fD7c1ED0223E040'
+} sqrtPriceX96: 3556929804162751855226162576531
+Simulated pool initialize OK. Resulting tick: 76090
+Pool initialize tx: 0xe492025e36833714bb10539fa9daef1830c1c749639d4dd01aab903e8c2fd3ff
 Pool initialized and hook locked to it.
-Add-liquidity tx: 0x088821ae547359d6143162e98c7feed20a04877944c8016329bbcad4f75dd0ab
+Add-liquidity tx: 0x1b097e74ec04d0c88b1b68c3e2f22a7adf6aec2e0f09019c26c4e19e2b93e10e
 Liquidity added.
-Grant tx: 0x1a056876264b7de1280df0863950938906c7ebd70440b8917e303def0454ee1c
+Grant tx: 0x95ea55ab5599c5ebbe67ea9e59d98133595c884771f9d8253c69299d2f431010
 Hook granted ship-minting rights.
 MAP_EDITOR_KEY matches VariantPurchaseGate.owner() (0x69a5B3aE8598fC5A5419eaa1f2A59Db2D052e346) -- will sign automatically.
-Gate exemption tx: 0xee4a56621866c8264edf0d5319438249b80296a0f95fbbe78d05fb1309408269
+Gate exemption tx: 0xa888a9e7711e22ccf852fbe496bf77c35bb827d90bd5e9b84f4e3aecbc9a9fc5
 Hook exempted from VariantPurchaseGate.
-setRandomManager tx: 0xc1ce19a616d796da5c83507abae37dcb3756bc1f55b1b74996883cb9c3adead8
+setRandomManager tx: 0xe89cf6cc1cdf844f1a5d5d9c67175a3215ef75bfc0d7d4eaa2133467e131d311
 Hook now captures ship randomness on swaps.
 SKIP_SMOKE_TEST set -- skipping the smoke-test swap.
 
 === Deploy summary ===
-Hook address:       0x72D0930d6456489F5A2f648924ED6689EF262040
-CREATE2 salt:       0x00000000000000000000000000000000000000000000000000000000000006af
+Hook address:       0x9ffB4b06C5705Eab64D04E145fD7c1ED0223E040
+CREATE2 salt:       0x0000000000000000000000000000000000000000000000000000000000002b9b
 PoolKey:            {
   currency0: '0x0000000000000000000000000000000000000000',
-  currency1: '0x258F2406eDc1AE17E7A4cCCe34Fe75A14e0dBEb7',
+  currency1: '0x69531b96061dCDbbBA64782eef9eDfEF3F08d0b3',
   fee: 3000,
   tickSpacing: 60,
-  hooks: '0x72D0930d6456489F5A2f648924ED6689EF262040'
+  hooks: '0x9ffB4b06C5705Eab64D04E145fD7c1ED0223E040'
 }
-sqrtPriceX96:       1191385169864218363428160165006
+sqrtPriceX96:       3556929804162751855226162576531
 Smoke-test swap tx: (skipped -- SKIP_SMOKE_TEST was set)
 Hook address + ABI + poolId + poolKey written to /Users/briandoyle/void-tactics-contracts-eth-online-2026/uniswap-lottery-hook.json (step 7). CREATE2 salt/sqrtPriceX96 above aren't in that file -- copy them into a doc yourself if you want a durable record of those too.
