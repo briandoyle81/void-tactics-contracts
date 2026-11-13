@@ -18,18 +18,11 @@ fn roll(base: u64, n: u64) -> u64 {
     mod_u256(&keccak256(&[&base.to_be_bytes()]), n)
 }
 
-/// Variant-1 ship names come from an external OnchainRandomShipNames contract
-/// whose source isn't in this repo yet; callers pass the generator.
+/// Variant-1 ship names (Solidity: the external OnchainRandomShipNames
+/// contract). Production uses `crate::ship_names::OnchainShipNames`; tests can
+/// pass a mock, as the Hardhat suite does.
 pub trait ShipNamer {
     fn ship_name(&self, seed: &[u8; 32]) -> String;
-}
-
-/// Placeholder until OnchainRandomShipNames is ported.
-pub struct StubShipNamer;
-impl ShipNamer for StubShipNamer {
-    fn ship_name(&self, seed: &[u8; 32]) -> String {
-        format!("Vessel {:02X}{:02X}{:02X}", seed[0], seed[1], seed[2])
-    }
 }
 
 /// GenerateNewShip.generateShip. `max_special_slot` is Game.maxSpecialSlot for
@@ -159,8 +152,8 @@ mod tests {
     #[test]
     fn generation_is_deterministic_and_in_range() {
         for base in [0u64, 1, 12345, u64::MAX - 3] {
-            let a = generate_ship(1, 9, base, 1, 3, &StubShipNamer);
-            let b = generate_ship(1, 9, base, 1, 3, &StubShipNamer);
+            let a = generate_ship(1, 9, base, 1, 3, &crate::ship_names::OnchainShipNames);
+            let b = generate_ship(1, 9, base, 1, 3, &crate::ship_names::OnchainShipNames);
             assert_eq!(a, b);
             assert!(a.traits.colors.h1 < 360 && a.traits.colors.s1 < 100);
             assert!(a.traits.accuracy <= 2 && a.traits.hull <= 2 && a.traits.speed <= 2);
@@ -172,7 +165,7 @@ mod tests {
 
     #[test]
     fn drone_names_have_expected_shape() {
-        let g = generate_ship(1, 1, 42, 2, 3, &StubShipNamer);
+        let g = generate_ship(1, 1, 42, 2, 3, &crate::ship_names::OnchainShipNames);
         let (code, word) = g.name.split_once(' ').unwrap();
         assert!(code.contains('-'));
         assert!(!word.is_empty());

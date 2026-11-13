@@ -1,1 +1,3 @@
 /target
+# Cached NEAR/USD price for deploy pricing (machine/time-specific)
+/.near-price-cache.json

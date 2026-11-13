@@ -17,6 +17,8 @@ use near_workspaces::types::Gas;
 use near_workspaces::{Account, Contract};
 use serde_json::{json, Value};
 
+use crate::pricing::{price_tiers, NearUsd};
+
 const BATCH: usize = 20;
 
 pub fn repo_path(rel: &str) -> String {
@@ -77,14 +79,25 @@ async fn send_batched(owner: &Account, contract: &Contract, calls: Vec<(&'static
     Ok(())
 }
 
+pub const ONE_NEAR: u128 = 1_000_000_000_000_000_000_000_000;
+
 pub struct SeedSummary {
     pub map_ids: HashMap<String, u64>,
+    pub config_ids: HashMap<String, u64>,
     pub node_ids: HashMap<String, u64>,
     pub campaign_id: u64,
 }
 
-/// Publishes rules from near/seed/config.json.
+/// Publishes rules from near/seed/config.json, with ship packs priced at the
+/// fixed test NEAR/USD price.
 pub async fn seed_rules(owner: &Account, contract: &Contract) -> Result<()> {
+    seed_rules_priced(owner, contract, NearUsd::Test).await
+}
+
+/// `seed_rules` with an explicit NEAR/USD source (`NearUsd::Live` for a real
+/// deploy, like the EVM deploy module's getEthUsdPrice).
+pub async fn seed_rules_priced(owner: &Account, contract: &Contract, near_usd: NearUsd) -> Result<()> {
+    let tiers = price_tiers(near_usd.resolve()?)?;
     let cfg = read_json("near/seed/config.json")?;
     let mut calls: Vec<(&'static str, Value)> = Vec::new();
     for (variant, v) in cfg["variants"].as_object().unwrap() {
@@ -109,12 +122,17 @@ pub async fn seed_rules(owner: &Account, contract: &Contract) -> Result<()> {
         calls.push(("set_reward_token", json!({"variant": variant.parse::<u16>()?, "token": token})));
     }
     calls.push(("set_heal_cap_percent", json!({"percent": cfg["healCapPercent"]})));
+    // DeployAndConfig: aiEncounters.setMaxPlacementsPerMap(14).
+    calls.push(("set_max_placements_per_map", json!({"max": 14})));
     calls.push(("set_faction_kill_reward", json!({"amount": cfg["factionKillReward"]})));
     calls.push(("set_max_variant", json!({"max_variant": cfg["maxVariant"]})));
     calls.push(("set_claim_config", json!({"cooldown_s": cfg["claimCooldownSeconds"], "base_ships": 10})));
     for t in cfg["storefrontTiers"].as_array().unwrap() {
         calls.push(("add_storefront_tier", json!({"core_cost": t})));
     }
+    calls.push(("set_price_tiers", json!({"tiers": tiers})));
+    // VariantPurchaseGate: variant 2 requires the Shattered Hive medal.
+    calls.push(("set_variant_gated", json!({"variant": 2, "requires_medal": true})));
     send_batched(owner, contract, calls).await
 }
 
@@ -148,16 +166,13 @@ pub async fn seed_single_player(owner: &Account, contract: &Contract, max_nodes:
         }
     }
 
-    // AI ship configs (ids 1..), only those placed on wanted maps.
+    // AI ship configs: ALL of them, in file order, so config ids match the
+    // Solidity deploy's (ids 1..64), whether or not a seeded map uses them.
     let placements: Vec<&Value> =
         content["mapPlacements"].as_array().unwrap().iter().filter(|p| map_ids.contains_key(p["mapKey"].as_str().unwrap())).collect();
     let mut config_ids: HashMap<String, u64> = HashMap::new();
     for c in content["aiShipConfigs"].as_array().unwrap() {
         let key = c["key"].as_str().unwrap();
-        let used = placements.iter().any(|p| p["configKeys"].as_array().unwrap().iter().any(|k| k == key));
-        if !used {
-            continue;
-        }
         config_ids.insert(key.to_string(), config_ids.len() as u64 + 1);
         let e = &c["equipment"];
         let t = &c["traits"];
@@ -205,5 +220,230 @@ pub async fn seed_single_player(owner: &Account, contract: &Contract, max_nodes:
         ));
     }
     send_batched(owner, contract, calls).await?;
-    Ok(SeedSummary { map_ids, node_ids, campaign_id })
+    Ok(SeedSummary { map_ids, config_ids, node_ids, campaign_id })
+}
+
+/// Placeholder win-effect values from the deploy module (DECBonusWinEffect
+/// bonusAmount, HealAboveFloorWinEffect healToPercent).
+pub const DEC_BONUS_AMOUNT: u64 = 20;
+pub const HEAL_TO_PERCENT: u8 = 100;
+
+async fn view_u64(contract: &Contract, method: &str) -> Result<u64> {
+    let s: String = contract.view(method).args_json(json!({})).await?.json()?;
+    Ok(s.parse()?)
+}
+
+/// Seeds the roguelike campaign from ignition/data/roguelikeStarterContent.json
+/// (its AI ship configs come from the single-player content, by key). Like the
+/// deploy module, maps and AI configs share one namespace with single-player:
+/// pass the single-player seed so shared keys (e.g. a roguelike node on a
+/// campaign map) reuse those ids. Returns the campaign id.
+pub async fn seed_roguelike(owner: &Account, contract: &Contract, sp_seed: Option<&SeedSummary>) -> Result<u64> {
+    let rl = read_json("ignition/data/roguelikeStarterContent.json")?;
+    let sp = read_json("ignition/data/singlePlayerStarterContent.json")?;
+    let map_base = view_u64(contract, "get_map_count").await?;
+    let config_base = view_u64(contract, "get_ai_config_count").await?;
+    let colors = &sp["aiShipColors"];
+    let mut calls: Vec<(&'static str, Value)> = Vec::new();
+
+    let mut map_ids: HashMap<String, u64> = sp_seed.map(|s| s.map_ids.clone()).unwrap_or_default();
+    let mut created_maps = 0u64;
+    for m in rl["maps"].as_array().unwrap() {
+        created_maps += 1;
+        let id = map_base + created_maps;
+        map_ids.insert(m["key"].as_str().unwrap().to_string(), id);
+        let scoring: Vec<Value> = m["scoringTiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| json!({"row": s["row"], "col": s["col"], "points": s["points"], "only_once": s["onlyOnce"]}))
+            .collect();
+        calls.push((
+            "create_preset_map",
+            json!({"blocked": positions(&m["blockedTiles"]), "impassable": positions(&m["impassableTiles"]), "scoring": scoring, "mode": m["mode"]}),
+        ));
+        let (cz, jz) = (&m["creatorZone"], &m["joinerZone"]);
+        if !cz.as_array().unwrap().is_empty() || !jz.as_array().unwrap().is_empty() {
+            calls.push(("set_deployment_zones", json!({"map_id": id.to_string(), "creator_zone": positions(cz), "joiner_zone": positions(jz)})));
+        }
+    }
+
+    let needed: Vec<String> = rl["mapPlacements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|p| p["configKeys"].as_array().unwrap().iter().map(|k| k.as_str().unwrap().to_string()))
+        .collect();
+    let mut config_ids: HashMap<String, u64> = sp_seed.map(|s| s.config_ids.clone()).unwrap_or_default();
+    let mut created_configs = 0u64;
+    for c in sp["aiShipConfigs"].as_array().unwrap() {
+        let key = c["key"].as_str().unwrap();
+        if !needed.iter().any(|k| k == key) || config_ids.contains_key(key) {
+            continue;
+        }
+        created_configs += 1;
+        config_ids.insert(key.to_string(), config_base + created_configs);
+        let e = &c["equipment"];
+        let t = &c["traits"];
+        calls.push((
+            "create_ai_ship_config",
+            json!({"config": {
+                "name": c["name"],
+                "equipment": {
+                    "main_weapon": MAIN_WEAPON[u(&e["mainWeapon"]) as usize], "armor": ARMOR[u(&e["armor"]) as usize],
+                    "shields": ARMOR[u(&e["shields"]) as usize], "special": SPECIAL[u(&e["special"]) as usize],
+                },
+                "traits": {
+                    "serial_number": 0,
+                    "colors": {"h1": colors["h1"], "s1": colors["s1"], "l1": colors["l1"], "h2": colors["h2"], "s2": colors["s2"], "l2": colors["l2"]},
+                    "variant": t["variant"], "accuracy": t["accuracy"], "hull": t["hull"], "speed": t["speed"],
+                },
+                "archetype": ARCHETYPE[u(&c["archetype"]) as usize],
+                "shiny": c.get("shiny").cloned().unwrap_or(json!(false)),
+                "ships_destroyed": c.get("shipsDestroyed").cloned().unwrap_or(json!(0)),
+            }}),
+        ));
+    }
+    for p in rl["mapPlacements"].as_array().unwrap() {
+        let ids: Vec<String> = p["configKeys"].as_array().unwrap().iter().map(|k| config_ids[k.as_str().unwrap()].to_string()).collect();
+        calls.push((
+            "set_map_placements",
+            json!({"map_id": map_ids[p["mapKey"].as_str().unwrap()].to_string(), "positions": positions(&p["positions"]), "config_ids": ids}),
+        ));
+    }
+    send_batched(owner, contract, std::mem::take(&mut calls)).await?;
+
+    // Campaign graph.
+    let campaign: String = owner.call(contract.id(), "create_rl_campaign").transact().await?.into_result()?.json()?;
+    let node_base = {
+        let mut n = 0u64;
+        while contract.view("get_rl_node").args_json(json!({"node_id": (n + 1).to_string()})).await?.json::<Option<Value>>()?.is_some() {
+            n += 1;
+        }
+        n
+    };
+    let mut node_ids = HashMap::new();
+    for n in rl["nodes"].as_array().unwrap() {
+        let id = node_base + node_ids.len() as u64 + 1;
+        node_ids.insert(n["key"].as_str().unwrap().to_string(), id);
+        // DeployAndConfig: combat nodes get map/turnTime/maxScore; resupply
+        // nodes get 0s.
+        let is_combat = n["kind"] == "Combat";
+        let map = if is_combat {
+            let k = n["mapKey"].as_str().unwrap();
+            *map_ids.get(k).unwrap_or_else(|| panic!("roguelike node map {k} not seeded (seed single-player first and pass its summary)"))
+        } else {
+            0
+        };
+        calls.push((
+            "create_rl_node",
+            json!({"campaign_id": campaign, "kind": n["kind"], "map_id": map.to_string(),
+                   // Resupply nodes omit the combat-only fields.
+                   "turn_time": if is_combat { n["turnTime"].clone() } else { json!(0) },
+                   "max_score": if is_combat { n["maxScore"].clone() } else { json!(0) },
+                   "creator_goes_first": n.get("creatorGoesFirst").cloned().unwrap_or(json!(false)),
+                   "cost_cap_override": if is_combat { json!(0) } else { n["costCapOverride"].clone() }}),
+        ));
+    }
+    for e in rl["edges"].as_array().unwrap() {
+        calls.push((
+            "add_rl_child",
+            json!({"parent_id": node_ids[e["from"].as_str().unwrap()].to_string(), "child_id": node_ids[e["to"].as_str().unwrap()].to_string()}),
+        ));
+    }
+    let c = &rl["campaign"];
+    calls.push((
+        "set_rl_campaign",
+        json!({"campaign_id": campaign, "root_node": node_ids[rl["root"].as_str().unwrap()].to_string(),
+               "auto_heal_percent": c["autoHealPercent"], "required_variant": c["requiredVariant"], "initial_cost_cap": c["initialCostCap"]}),
+    ));
+    for n in rl["nodes"].as_array().unwrap() {
+        let keys: Vec<&str> = n.get("winEffects").and_then(|w| w.as_array()).map(|a| a.iter().filter_map(|k| k.as_str()).collect()).unwrap_or_default();
+        let effects: Vec<Value> = keys
+            .iter()
+            .filter_map(|k| match *k {
+                "DEC_BONUS_WIN_EFFECT" => Some(json!({"DecBonus": {"amount": DEC_BONUS_AMOUNT.to_string()}})),
+                "HEAL_ABOVE_FLOOR_WIN_EFFECT" => Some(json!({"HealAboveFloor": {"percent": HEAL_TO_PERCENT}})),
+                "SHIP_GRANT_WIN_EFFECT" => n.get("shipGrant").map(|g| {
+                    let e = &g["equipment"];
+                    json!({"ShipGrant": {
+                        "name": g["name"],
+                        "equipment": {"main_weapon": MAIN_WEAPON[u(&e["mainWeapon"]) as usize], "armor": ARMOR[u(&e["armor"]) as usize],
+                                      "shields": ARMOR[u(&e["shields"]) as usize], "special": SPECIAL[u(&e["special"]) as usize]},
+                        "colors": g["colors"], "variant": g["variant"], "accuracy": g["accuracy"], "hull": g["hull"], "speed": g["speed"],
+                        "ships_destroyed": g["shipsDestroyed"], "shiny": g["shiny"], "is_free_ship": g["isFreeShip"], "once_per_address": g["oncePerAddress"],
+                    }})
+                }),
+                other => panic!("unknown win effect {other}"),
+            })
+            .collect();
+        if !effects.is_empty() {
+            calls.push(("set_rl_node_win_effects", json!({"node_id": node_ids[n["key"].as_str().unwrap()].to_string(), "effects": effects})));
+        }
+    }
+    send_batched(owner, contract, calls).await?;
+    Ok(campaign.parse()?)
+}
+
+/// Sets the renderer's equipment display names from near/seed/config.json
+/// (RenderMetadata's names in the Solidity deploy).
+pub async fn seed_renderer(owner: &Account, renderer: &Contract) -> Result<()> {
+    let cfg = read_json("near/seed/config.json")?;
+    owner
+        .call(renderer.id(), "set_names")
+        .args_json(json!({"entries": cfg["rendererNames"]}))
+        .gas(Gas::from_tgas(100))
+        .transact()
+        .await?
+        .into_result()?;
+    Ok(())
+}
+
+/// Seeds the PvP maps from ignition/data/pvpStarterContent.json (ids continue
+/// after existing maps). Returns key -> map id.
+pub async fn seed_pvp_maps(owner: &Account, contract: &Contract) -> Result<HashMap<String, u64>> {
+    let pvp = read_json("ignition/data/pvpStarterContent.json")?;
+    let base = view_u64(contract, "get_map_count").await?;
+    let mut ids = HashMap::new();
+    let mut calls: Vec<(&'static str, Value)> = Vec::new();
+    for (i, m) in pvp["maps"].as_array().unwrap().iter().enumerate() {
+        let id = base + i as u64 + 1;
+        ids.insert(m["key"].as_str().unwrap().to_string(), id);
+        let scoring: Vec<Value> = m["scoringTiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| json!({"row": s["row"], "col": s["col"], "points": s["points"], "only_once": s["onlyOnce"]}))
+            .collect();
+        calls.push((
+            "create_preset_map",
+            json!({"blocked": positions(&m["blockedTiles"]), "impassable": positions(&m["impassableTiles"]), "scoring": scoring, "mode": m["mode"]}),
+        ));
+        let (cz, jz) = (&m["creatorZone"], &m["joinerZone"]);
+        if !cz.as_array().unwrap().is_empty() || !jz.as_array().unwrap().is_empty() {
+            calls.push(("set_deployment_zones", json!({"map_id": id.to_string(), "creator_zone": positions(cz), "joiner_zone": positions(jz)})));
+        }
+    }
+    send_batched(owner, contract, calls).await?;
+    Ok(ids)
+}
+
+pub struct FullSeed {
+    pub single_player: SeedSummary,
+    pub roguelike_campaign: u64,
+    pub pvp_maps: HashMap<String, u64>,
+}
+
+/// Everything the Solidity deploy module seeds: rules (priced from
+/// `near_usd`), the single-player campaign (all nodes), the roguelike
+/// campaign, the PvP maps, and (if given) the renderer's names.
+pub async fn seed_all(owner: &Account, contract: &Contract, renderer: Option<&Contract>, near_usd: NearUsd) -> Result<FullSeed> {
+    seed_rules_priced(owner, contract, near_usd).await?;
+    let single_player = seed_single_player(owner, contract, usize::MAX).await?;
+    let roguelike_campaign = seed_roguelike(owner, contract, Some(&single_player)).await?;
+    let pvp_maps = seed_pvp_maps(owner, contract).await?;
+    if let Some(r) = renderer {
+        seed_renderer(owner, r).await?;
+    }
+    Ok(FullSeed { single_player, roguelike_campaign, pvp_maps })
 }

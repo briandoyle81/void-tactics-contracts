@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "crates/vt-core",
     "contracts/void-tactics",
+    "contracts/test-receiver",
+    "contracts/void-renderer",
     "tests",
 ]
 

@@ -65,16 +65,25 @@ impl Rules for LocalRules {
     }
 }
 
-fn legal(g: &GameState, rules: &LocalRules, m: &MoveInput) -> bool {
-    g.clone().move_ship(Side::Creator, m, rules, 0).is_ok()
+/// The scripted human playing the creator side (single-player).
+pub fn choose_human_move(g: &GameState, rules: &LocalRules) -> Option<MoveInput> {
+    choose_move(g, rules, Side::Creator)
 }
 
 /// Ram downed enemies, else shoot, else advance-and-shoot, else advance,
-/// else pass. Returns None if the human has no ship that can act.
-pub fn choose_human_move(g: &GameState, rules: &LocalRules) -> Option<MoveInput> {
-    let me = g.creator_active.iter().copied().find(|&id| g.ship(id).hull_points > 0 && !g.has_moved(id))?;
+/// else pass, for `side`. Returns None if that side has no ship that can act.
+pub fn choose_move(g: &GameState, rules: &LocalRules, side: Side) -> Option<MoveInput> {
+    let legal = |g: &GameState, _r: &LocalRules, m: &MoveInput| g.clone().move_ship(side, m, rules, 0).is_ok();
+    let Some(me) = g.active(side).iter().copied().find(|&id| g.ship(id).hull_points > 0 && !g.has_moved(id)) else {
+        // Only disabled (0 HP) ships left to act with: the one legal move is
+        // to retreat one (the engine, like Game.sol, doesn't end the game
+        // until a ship is actually removed).
+        let disabled = g.active(side).iter().copied().find(|&id| g.ship(id).hull_points == 0)?;
+        let b = g.ship(disabled);
+        return Some(MoveInput { ship_id: disabled, new_row: b.row, new_col: b.col, action: ActionType::Retreat, target_ship_id: 0 });
+    };
     let b = g.ship(me);
-    let mut enemies: Vec<u64> = g.joiner_active.clone();
+    let mut enemies: Vec<u64> = g.active(side.other()).clone();
     enemies.sort_by_key(|&e| g.ship(e).hull_points);
     let mv = |row: i16, col: i16, action: ActionType, target: u64| MoveInput { ship_id: me, new_row: row, new_col: col, action, target_ship_id: target };
 

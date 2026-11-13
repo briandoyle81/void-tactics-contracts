@@ -12,6 +12,8 @@ crate-type = ["cdylib", "rlib"]
 # Exposes test-only entrypoints (e.g. raw randomness requests). Never enable for
 # a real deploy; sandbox tests build with it.
 test-hooks = []
+# Adds a probe view so the sandbox upgrade drill can tell new code from old.
+upgrade-probe = []
 
 [dependencies]
 near-sdk.workspace = true

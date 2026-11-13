@@ -109,7 +109,28 @@ impl Contract {
     /// owner with `construct_ship`.
     fn on_random_resolved(&mut self, id: u64, req: &RandomRequest) -> Option<(u64, Result<(), &'static str>)> {
         let ship_id = *self.random_to_ship.get(&id)?;
-        Some((ship_id, self.try_construct(ship_id, req.value, true)))
+        // Drop the spent request first and refund its bytes to whoever paid
+        // for it: they (~190 bytes) cover the ship's growth on construction
+        // (its generated name), so construction never fails for storage just
+        // because the payer had no spare balance (e.g. a NEAR-bought pack,
+        // which prepays exactly its mint-time bytes).
+        self.flush_all();
+        let before = env::storage_usage();
+        self.random_requests.remove(&id);
+        self.random_to_ship.remove(&id);
+        self.flush_all();
+        let freed = before - env::storage_usage();
+        self.adjust_used_bytes(&req.owner, -(freed as i64));
+
+        let result = self.try_construct(ship_id, req.value, true);
+        if result.is_err() {
+            // Keep the resolved value for a later `construct_ship`: restore
+            // the request (same bytes the payer just got back).
+            self.random_requests.insert(id, req.clone());
+            self.random_to_ship.insert(id, ship_id);
+            self.adjust_used_bytes(&req.owner, freed as i64);
+        }
+        Some((ship_id, result))
     }
 }
 
@@ -133,6 +154,7 @@ impl Contract {
             self.random_nonce += 1;
             req.resolved_at_height = height;
             self.random_requests.insert(id, req.clone());
+            // (removed again below if its ship gets constructed)
             resolved.push(U64(id));
             match self.on_random_resolved(id, &req) {
                 Some((ship, Ok(()))) => constructed.push(U64(ship)),

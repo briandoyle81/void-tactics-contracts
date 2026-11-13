@@ -29,7 +29,9 @@ impl Contract {
         let caller = env::predecessor_account_id();
         let mut acct = self.account(&caller);
         let now = Self::now_s();
-        // TODO(Phase 2): eligibility provider (Selfie verification) gate.
+        if self.config.free_claim_requires_verification {
+            require!(self.is_verified(&caller), "NotEligible");
+        }
         require!(
             acct.last_free_claim_s == 0 || now >= acct.last_free_claim_s + self.config.claim_cooldown_s,
             "ClaimCooldownNotPassed"
@@ -39,8 +41,7 @@ impl Contract {
         self.put_account(&caller, acct);
 
         let initial = env::storage_usage();
-        let random_ids = self.internal_request_randomness(&caller, amount as usize);
-        let ship_ids: Vec<u64> = random_ids.iter().map(|&r| self.internal_mint_ship(&caller, variant, 0, true, r)).collect();
+        let (ship_ids, random_ids) = self.internal_create_ships(&caller, amount, variant, 0, true);
         self.charge_storage_since(&caller, initial);
         Self::schedule_resolution(random_ids).detach();
 

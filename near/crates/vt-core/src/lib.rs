@@ -19,6 +19,8 @@ pub mod generation;
 pub mod grid;
 pub mod maps;
 pub mod random;
+pub mod ship_names;
+mod ship_names_data;
 pub mod types;
 
 pub use error::{Error, Result};

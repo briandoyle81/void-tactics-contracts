@@ -1,0 +1,19 @@
+[package]
+name = "void-renderer"
+description = "Void Tactics on-chain ship art and NFT metadata (view-only renderer)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk.workspace = true
+vt-core.workspace = true
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
+serde_json = "1"
+sha2 = "0.10"

@@ -1438,6 +1438,7 @@ name = "integration-tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "near-workspaces",
  "serde_json",
  "tokio",
@@ -3616,6 +3617,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-receiver"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4030,6 +4038,17 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "void-renderer"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "near-sdk",
+ "serde_json",
+ "sha2 0.10.9",
+ "vt-core",
+]
 
 [[package]]
 name = "void-tactics"

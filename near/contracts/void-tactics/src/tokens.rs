@@ -15,6 +15,8 @@ use crate::{Contract, ContractExt};
 
 pub const UTC: &str = "utc";
 pub const DEC: &str = "dec";
+/// Soulbound Shattered Hive campaign medal (balance 0 or 1, not transferable).
+pub const HIVE_MEDAL: &str = "hive_medal";
 
 impl TokenKind {
     pub fn id(self) -> &'static str {
@@ -27,6 +29,7 @@ impl TokenKind {
         match token_id {
             UTC => TokenKind::Utc,
             DEC => TokenKind::Dec,
+            HIVE_MEDAL => env::panic_str("Soulbound"),
             _ => env::panic_str("UnknownToken"),
         }
     }
@@ -134,6 +137,9 @@ impl Contract {
     }
 
     pub fn mt_balance_of(&self, account_id: AccountId, token_id: String) -> U128 {
+        if token_id == HIVE_MEDAL {
+            return U128(self.accounts.get(&account_id).is_some_and(|a| a.hive_medal) as u128);
+        }
         let kind = TokenKind::parse(&token_id);
         U128(self.accounts.get(&account_id).map_or(0, |a| match kind {
             TokenKind::Utc => a.utc,
@@ -146,6 +152,9 @@ impl Contract {
     }
 
     pub fn mt_supply(&self, token_id: String) -> Option<U128> {
+        if token_id == HIVE_MEDAL {
+            return Some(U128(self.config.medal_supply as u128));
+        }
         Some(U128(self.token_supply[TokenKind::parse(&token_id) as usize]))
     }
 

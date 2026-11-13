@@ -192,3 +192,55 @@ pub fn tier_of_trait(roll: u64) -> u8 {
         2
     }
 }
+
+/// Ships._calculateModifications / DroneYard._calculateNewModifications:
+/// +1 per changed equipment slot, + total absolute trait-tier change,
+/// +3 for a shiny change, +3 for a variant change.
+pub fn count_modifications(current: &Ship, new: &Ship) -> u32 {
+    let (c, n) = (&current.equipment, &new.equipment);
+    let mut m = (c.main_weapon != n.main_weapon) as u32
+        + (c.armor != n.armor) as u32
+        + (c.shields != n.shields) as u32
+        + (c.special != n.special) as u32;
+    let diff = |a: u8, b: u8| (a as i32 - b as i32).unsigned_abs();
+    m += diff(current.traits.accuracy, new.traits.accuracy)
+        + diff(current.traits.hull, new.traits.hull)
+        + diff(current.traits.speed, new.traits.speed);
+    if current.ship_data.shiny != new.ship_data.shiny {
+        m += 3;
+    }
+    if current.traits.variant != new.traits.variant {
+        m += 3;
+    }
+    m
+}
+
+/// DroneYard._calculateCostToModify: base * 2^(already modified + new), or
+/// base for a no-op. None on overflow (Solidity reverts).
+pub fn modification_cost(base: u128, already_modified: u16, new_mods: u32) -> Option<u128> {
+    let total = already_modified as u32 + new_mods;
+    if total == 0 {
+        return Some(base);
+    }
+    let mult = 1u128.checked_shl(total)?;
+    if total >= 128 {
+        return None;
+    }
+    base.checked_mul(mult)
+}
+
+/// Referral payout percent for both purchase paths (native NEAR and UTC):
+/// 10/20/35/50% once the referrer has sold 1k/10k/50k/100k ships.
+///
+/// Solidity's ShipPurchaser (UTC path) had its percentage array offset from
+/// its stage array, paying 0/10/20/35%; the intended table is this one
+/// (Ships.sol's). Fixed here 2026-11-13; still to fix on the EVM side.
+pub fn referral_pct(total_referred: u64) -> u128 {
+    match total_referred {
+        n if n >= 100_000 => 50,
+        n if n >= 50_000 => 35,
+        n if n >= 10_000 => 20,
+        n if n >= 1_000 => 10,
+        _ => 0,
+    }
+}

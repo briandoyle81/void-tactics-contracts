@@ -1,0 +1,6457 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "name": "void-tactics",
+    "version": "0.1.0"
+  },
+  "body": {
+    "functions": [
+      {
+        "name": "accept_game",
+        "doc": " Lobbies.acceptGame: the reserved opponent takes the seat (no fee).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "add_rl_child",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "parent_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "child_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "add_storefront_tier",
+        "doc": " DroneStorefront.addTier (append-only).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "core_cost",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "burn_collected_utc",
+        "doc": " ECON-07 sink: burn collected UTC.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "buy_utc_with_near",
+        "doc": " ShipPurchaser.purchaseUTCWithFlow: pay the tier's NEAR peg price, get\n exactly the tier's UTC price.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "tier",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "claim_free_ships",
+        "doc": " FreeShipClaim.claimFreeShips: `free_claim_base + drone_core_tier` free\n ships every cooldown. Free ships can't be recycled, and destroying one\n pays no reward. Storage is charged to the caller (a Sybil swarm pays for\n its own bytes).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "claim_medal",
+        "doc": " ShatteredHiveMedal.claimMedal: soulbound, one per account, for\n completing the campaign's final node. Gates variant-2 mints.",
+        "kind": "call"
+      },
+      {
+        "name": "complete_tutorial",
+        "doc": " TutorialClaim.completeTutorialWinPath / LossPath: one-time template\n ships (2 on a win, 3 on a loss) plus a win/loss on the record.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "win_path",
+              "type_schema": {
+                "type": "boolean"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "construct_ship",
+        "doc": " Builds an unconstructed ship whose randomness is resolved but whose\n callback couldn't finish (see module docs). Owner only.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ship_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "contract_source_metadata",
+        "kind": "view"
+      },
+      {
+        "name": "create_ai_ship_config",
+        "doc": " AIEncounters.createAIShipConfig.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "config",
+              "type_schema": {
+                "$ref": "#/definitions/AiShipConfig"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "create_campaign",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "required_variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "create_lobby",
+        "doc": " Lobbies.createLobby. The first concurrent lobby is free; more cost\n `additional_lobby_fee` UTC; a lobby reserved for a named opponent costs\n `reserved_lobby_fee` UTC.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "cost_limit",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "turn_time",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "creator_goes_first",
+              "type_schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "map_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "max_score",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "reserved_joiner",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "create_lobby_fleet",
+        "doc": " Lobbies.createFleet: submit a fleet; whoever commits first moves first.\n When both fleets are in, the game starts (paid for by this caller).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "ship_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "name": "positions",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Position"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      {
+        "name": "create_lobby_for_addresses",
+        "doc": " Lobbies.createLobbyForAddresses (owner): a lobby already seated with\n both players (e.g. organized matches). Both must be registered; the\n creator's storage pays for the lobby.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "creator",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "joiner",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "cost_limit",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "turn_time",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "map_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "max_score",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "create_node",
+        "doc": " NodeMap.createNode.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node",
+              "type_schema": {
+                "$ref": "#/definitions/CampaignNode"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "create_preset_map",
+        "doc": " Maps.createFullPresetMap.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "blocked",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Position"
+                }
+              }
+            },
+            {
+              "name": "impassable",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Position"
+                }
+              }
+            },
+            {
+              "name": "scoring",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/ScoringPosition"
+                }
+              }
+            },
+            {
+              "name": "mode",
+              "type_schema": {
+                "$ref": "#/definitions/MapMode"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "create_rl_campaign",
+        "kind": "call",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "create_rl_node",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "kind",
+              "type_schema": {
+                "$ref": "#/definitions/RlNodeKind"
+              }
+            },
+            {
+              "name": "map_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "turn_time",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "max_score",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "creator_goes_first",
+              "type_schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "cost_cap_override",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "end_game_on_timeout",
+        "doc": " PvPMatch.endGameOnTimeout: the waiting player wins once the player to\n move has exceeded the turn time.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "enter_combat_node",
+        "doc": " RoguelikeMatch.enterCombatNode: advance (or stay) and fight with the\n whole roster, at its carried HP.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "positions",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Position"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "enter_resupply_node",
+        "doc": " RoguelikeMatch.enterResupplyNode (applies the node's cost-cap change).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "flee",
+        "doc": " PvPMatch.flee: concede; the opponent wins.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "forfeit",
+        "doc": " SinglePlayerMatch.forfeit.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "fund_sponsor_pool",
+        "doc": " Owner funds the pool the SPONSOR role draws from.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ]
+      },
+      {
+        "name": "get_active_runs_at_node",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "get_ai_config_count",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "get_ai_ship_config",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "config_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AiShipConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_blob",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "player",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_campaign",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Campaign"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_claim_status",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ClaimStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_costs",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Costs"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_current_attributes_version",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "get_faction_resolver",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Resolver"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_game",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/GameState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_game_result",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/GameResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_lobby",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Lobby"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_lobby_fleet",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "is_creator",
+              "type_schema": {
+                "type": "boolean"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/PvpFleet"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_map_count",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "get_map_placements",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "map_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": [
+                {
+                  "$ref": "#/definitions/Position"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
+        }
+      },
+      {
+        "name": "get_max_special_slot",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "get_modification_cost",
+        "doc": " DroneYard.calculateCostToModify (view).",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ship_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "equipment",
+              "type_schema": {
+                "$ref": "#/definitions/Equipment"
+              }
+            },
+            {
+              "name": "accuracy",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "hull",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "speed",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "shiny",
+              "type_schema": {
+                "type": "boolean"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "get_node",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/CampaignNode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_open_lobbies",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_open_lobby_count",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "get_player_lobbies",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_player_lobby_state",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/PlayerLobbyState"
+          }
+        }
+      },
+      {
+        "name": "get_player_stats",
+        "doc": " GameResults.getPlayerStats (PvP + tutorial).",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": true
+        }
+      },
+      {
+        "name": "get_preset_map",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "map_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/PresetMap"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_price_tiers",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/PriceTier"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_pvp_game",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/PvpGame"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_random_request",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/RandomRequestView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_renderer",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_rl_campaign",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/RlCampaign"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_rl_match",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/RlMatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_rl_node",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/RlNode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_roles",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "get_run",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Run"
+          }
+        }
+      },
+      {
+        "name": "get_run_ship_hp",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "ship_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "get_ship",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ship_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ShipView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_ships_for_owner",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/ShipView"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_sp_match",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SpMatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_special_resolver",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "slot",
+              "type_schema": {
+                "$ref": "#/definitions/Special"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Resolver"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_storefront_tiers",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      {
+        "name": "get_treasury",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": true
+        }
+      },
+      {
+        "name": "get_variant_attributes",
+        "doc": " version 0 = the variant's current version.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "version",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/VariantAttributeData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "is_eligible",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "is_lobby_open",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "is_node_completed",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "is_node_unlocked",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "is_rl_node_defeated",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "is_rl_node_locked",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "join_lobby",
+        "doc": " Lobbies.joinLobby.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "leave_lobby",
+        "doc": " Lobbies.leaveLobby. A leaving creator hands the lobby to the joiner if\n there is one (it reopens), else abandons it.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "mark_verified",
+        "doc": " SelfieCheckEligibilityProvider.markVerified (VERIFIER backend only).\n With the nullifier check on, one verified human (nullifier) is bound to\n one account forever; that account can renew.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "nullifier_hash",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "migrate",
+        "doc": " State migration hook, run by `upgrade`. Today's layout is unchanged,\n so it re-reads the state as-is. A layout change adds a versioned old\n struct here and converts it (see docs/near-pre-audit.md).",
+        "kind": "call",
+        "modifiers": [
+          "init",
+          "private"
+        ]
+      },
+      {
+        "name": "modify_ship",
+        "doc": " DroneYard.modifyShip: re-equip / re-tier a ship for UTC. Name, colors,\n kills and free status are preserved; the price doubles per lifetime\n modification.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ship_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "equipment",
+              "type_schema": {
+                "$ref": "#/definitions/Equipment"
+              }
+            },
+            {
+              "name": "accuracy",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "hull",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "speed",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "shiny",
+              "type_schema": {
+                "type": "boolean"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "move_ship",
+        "doc": " Game.moveShip: the human (creator) side of a single-player match, or\n either player of a PvP game.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "ship_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "new_row",
+              "type_schema": {
+                "type": "integer",
+                "format": "int16"
+              }
+            },
+            {
+              "name": "new_col",
+              "type_schema": {
+                "type": "integer",
+                "format": "int16"
+              }
+            },
+            {
+              "name": "action",
+              "type_schema": {
+                "$ref": "#/definitions/ActionType"
+              }
+            },
+            {
+              "name": "target_ship_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "mt_balance_of",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "mt_batch_balance_of",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "mt_batch_supply",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "token_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "name": "mt_batch_transfer",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "receiver_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "name": "amounts",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "name": "approvals",
+              "type_schema": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": [
+                    {
+                      "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer",
+                      "format": "uint64",
+                      "minimum": 0.0
+                    }
+                  ],
+                  "maxItems": 2,
+                  "minItems": 2
+                }
+              }
+            },
+            {
+              "name": "memo",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "mt_supply",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      {
+        "name": "mt_transfer",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "receiver_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "approval",
+              "type_schema": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": [
+                  {
+                    "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            {
+              "name": "memo",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "new",
+        "kind": "call",
+        "modifiers": [
+          "init"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "owner_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "next_random_id",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "nft_metadata",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/NFTContractMetadata"
+          }
+        }
+      },
+      {
+        "name": "nft_resolve_transfer",
+        "doc": " Returns true if the ship stays with the receiver. Never panics.",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "previous_owner_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "receiver_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "nft_supply_for_owner",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "nft_token",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Token"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "nft_tokens",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Token"
+            }
+          }
+        }
+      },
+      {
+        "name": "nft_tokens_for_owner",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Token"
+            }
+          }
+        }
+      },
+      {
+        "name": "nft_total_supply",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "nft_transfer",
+        "doc": " Ship transfer. Ships in a fleet or destroyed can't move, and both sides\n need >= 10 purchased ships (Ships._update). Approvals (NEP-178) are not\n supported. The receiver must be registered; the sender pays for the\n moved bytes (see internal_transfer_ship).",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "receiver_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "approval_id",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "memo",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "nft_transfer_call",
+        "doc": " NEP-171 transfer_call: the receiver's `nft_on_transfer` may ask for the\n ship back (returns true); `nft_resolve_transfer` then returns it if it\n still can. A hostile receiver (panics, burns gas, returns junk) leaves\n the ship with the receiver, never lost or duplicated.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "receiver_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "approval_id",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "memo",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "msg",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/PromiseOrValueBoolean"
+          }
+        }
+      },
+      {
+        "name": "owner_id",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "owner_mint_medal",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "prune_stale_lobby",
+        "doc": " Lobbies.pruneStaleLobby: anyone may drop a lobby that has sat open past\n the threshold from the open list. The freed bytes go back to the\n lobby's creator, never to the pruner.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "publish_variant_attributes",
+        "doc": " ShipAttributes.setVariantAttributes: publishes latest + 1 and makes it\n live. Published versions are immutable (games pin them).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "data",
+              "type_schema": {
+                "$ref": "#/definitions/VariantAttributeData"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "purchase_ships_with_near",
+        "doc": " Ships.purchaseWithFlow with NEAR. The pack pays for its own storage out\n of the price (registering the buyer if needed), so a paid pack never\n fails for lack of prepaid storage. Referral pays NEAR.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "tier",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "referral",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "purchase_ships_with_utc",
+        "doc": " ShipPurchaser.purchaseWithUTC. Storage comes from the buyer's prepaid\n balance. Referral pays UTC from the collected price on ShipPurchaser's\n same ladder as NEAR purchases (referrer must be registered).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "tier",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "referral",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "quit_with_penalty",
+        "doc": " Lobbies.quitWithPenalty: a joiner whose fleet has waited a full turn\n time for the creator's can leave; the creator takes a kick.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "record_blob",
+        "doc": " GameBlobRegistry.record: a participant (or the BLOB_WRITER backend)\n stores a replay blob id for a finished game. Storage: the caller.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "player",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "blob_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "recycle_ships",
+        "doc": " Ships.shipBreaker: burn owned, unlocked, non-free ships for UTC\n (half for an already-destroyed ship). Storage is refunded.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ship_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "reject_game",
+        "doc": " Lobbies.rejectGame: the reserved opponent declines; the lobby stays\n open to anyone.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "release_nullifier",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "nullifier_hash",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "remove_rl_child",
+        "doc": " Refuses to remove a node's last child while runs sit on it\n (WouldStrandActiveRun).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "parent_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "child_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "reset_rl_grant_claim",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "resolve_randomness",
+        "doc": " Self-callback only. Idempotent: unknown or already-resolved ids are\n skipped, never panic.",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "resupply_modify_roster",
+        "doc": " RoguelikeResupply.resupplyModifyRoster: drop and add ships (adds must\n be owned, unlocked, of the run's variant and current-priced), then\n re-reserve under the cost cap.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "add",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "name": "remove",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "resupply_repair",
+        "doc": " RoguelikeResupply.resupplyRepair: restore listed roster ships to full\n for `repair_cost_per_hp` UTC per missing HP.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ship_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "retreat_run",
+        "doc": " RoguelikeMatch.retreatRun: with a game id, concede that game (which\n ends the run); with 0, abandon the run between fights.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "retry_resolve",
+        "doc": " Permissionless recovery if a resolution receipt failed (e.g. ran out of\n gas). Schedules a NEW self-callback, so the seed still comes from a later\n block the caller can't predict. Ids that are unknown, already resolved,\n or requested in this same block are silently dropped (a griefer racing\n this call can't make it revert). Returns how many ids were scheduled.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "set_claim_config",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "cooldown_s",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "base_ships",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_costs",
+        "doc": " ShipAttributes.setCosts: version is always previous + 1.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "costs",
+              "type_schema": {
+                "$ref": "#/definitions/Costs"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "set_current_attributes_version",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "version",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_deployment_zones",
+        "doc": " Maps.setCreatorZone / setJoinerZone (empty = default column band).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "map_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "creator_zone",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Position"
+                }
+              }
+            },
+            {
+              "name": "joiner_zone",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Position"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_faction_kill_reward",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_faction_resolver",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "resolver",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/Resolver"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_heal_cap_percent",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "percent",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_lobbies_paused",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "paused",
+              "type_schema": {
+                "type": "boolean"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_lobby_config",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "free_games_per_address",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "additional_lobby_fee",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "reserved_lobby_fee",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "max_fleet_cost_limit",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "stale_threshold_s",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_map_placements",
+        "doc": " AIEncounters.setMapPlacements (full replace).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "map_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "positions",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Position"
+                }
+              }
+            },
+            {
+              "name": "config_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_max_placements_per_map",
+        "doc": " AIEncounters.setMaxPlacementsPerMap.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "max",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_max_special_slot",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "slot",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_max_variant",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "max_variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_medal_final_node",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_mint_paused",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "paused",
+              "type_schema": {
+                "type": "boolean"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_price_tiers",
+        "doc": " Ships.setPurchaseInfo + ShipPurchaser.setPurchaseInfo/setFlowTierPrices\n in one call (full replace).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "tiers",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/PriceTier"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_recycle_reward",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_render_config",
+        "doc": " The void-renderer contract clients call for ship art/metadata, and the\n NEP-177 base_uri (a gateway serving `<base_uri>/<token_id>` by calling\n `nft_token` here and `token_uri` on the renderer).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "renderer",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "nft_base_uri",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_repair_cost_per_hp",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "cost",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_reward_token",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "token",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/TokenKind"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_rl_campaign",
+        "doc": " Root, auto-heal floor (%), required variant (0 = any), initial cost cap.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "root_node",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "auto_heal_percent",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "required_variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "initial_cost_cap",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_rl_node_win_effects",
+        "doc": " Win effects mint ships/DEC, so they're owner-only (as the effect\n contracts' own config was).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "effects",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/WinEffect"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_role",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "role_bits",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_special_resolver",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "slot",
+              "type_schema": {
+                "$ref": "#/definitions/Special"
+              }
+            },
+            {
+              "name": "resolver",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/Resolver"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_sponsor_cap_per_account",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_variant_gated",
+        "doc": " VariantPurchaseGate.setRequiredNft (the only gate NFT is the medal).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "requires_medal",
+              "type_schema": {
+                "type": "boolean"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_verification_requirements",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "free_claim",
+              "type_schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "tutorial",
+              "type_schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "nullifier_check",
+              "type_schema": {
+                "type": "boolean"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "sponsor_storage",
+        "doc": " SPONSOR (backend, after verification/onboarding) credits storage to an\n account, registering it if needed. Capped per account; sponsored NEAR\n can only be spent on storage, never withdrawn (see storage_withdraw),\n so the drain is bounded by human verification, not account count.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "start_node_match",
+        "doc": " SinglePlayerMatch.startNodeMatch.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "node_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "ship_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "name": "positions",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Position"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "start_run",
+        "doc": " RoguelikeMatch.startRun: reserve a roster under the campaign's initial\n cost cap and stand on the root node.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "campaign_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "ship_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "storage_balance_bounds",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/StorageBalanceBounds"
+          }
+        }
+      },
+      {
+        "name": "storage_balance_of",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/StorageBalance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "storage_deposit",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "registration_only",
+              "type_schema": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/StorageBalance"
+          }
+        }
+      },
+      {
+        "name": "storage_unregister",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "force",
+              "type_schema": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "storage_used_bytes",
+        "doc": " Bytes currently attributed to `account_id` (for tests and the frontend).",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "storage_withdraw",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/StorageBalance"
+          }
+        }
+      },
+      {
+        "name": "take_ai_turns",
+        "doc": " SinglePlayerMatch.takeAITurns: permissionless (anyone may advance the\n AI). The AI is deterministic, so a caller can't steer it; storage growth\n is charged to the match's human (their game, their bytes).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "game_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "max_moves",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "timeout_joiner",
+        "doc": " Lobbies.timeoutJoiner: the creator kicks a joiner who hasn't submitted\n a fleet within one turn time (a kick penalty applies if the creator had\n already committed theirs).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lobby_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "turn_in_cores",
+        "doc": " DroneStorefront.turnInCores: burn exactly the next tier's DEC cost for\n +1 permanent free ship per claim.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "upgrade",
+        "doc": " Owner-only code upgrade. The new WASM is the raw call input (not\n JSON). After a real deploy the account's full-access keys are deleted,\n so this is the only way to change the code. Deploys, then runs\n `migrate` in the same follow-up receipt; if migrate fails, the deploy\n action fails with it and the old code stays.",
+        "kind": "call",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Promise"
+          }
+        }
+      },
+      {
+        "name": "withdraw_near",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "to",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Promise"
+          }
+        }
+      },
+      {
+        "name": "withdraw_utc",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "to",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "root_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string",
+      "definitions": {
+        "ActionType": {
+          "type": "string",
+          "enum": [
+            "Pass",
+            "Shoot",
+            "Retreat",
+            "Assist",
+            "Special",
+            "FactionAbility"
+          ]
+        },
+        "AiShipConfig": {
+          "type": "object",
+          "required": [
+            "archetype",
+            "equipment",
+            "name",
+            "shiny",
+            "ships_destroyed",
+            "traits"
+          ],
+          "properties": {
+            "archetype": {
+              "$ref": "#/definitions/Archetype"
+            },
+            "equipment": {
+              "$ref": "#/definitions/Equipment"
+            },
+            "name": {
+              "type": "string"
+            },
+            "shiny": {
+              "type": "boolean"
+            },
+            "ships_destroyed": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "traits": {
+              "$ref": "#/definitions/Traits"
+            }
+          }
+        },
+        "AiShipInfo": {
+          "description": "Per-AI-ship info kept by the orchestrator (SinglePlayerMatch.AIShipInfo).",
+          "type": "object",
+          "required": [
+            "archetype",
+            "special",
+            "variant"
+          ],
+          "properties": {
+            "archetype": {
+              "$ref": "#/definitions/Archetype"
+            },
+            "special": {
+              "$ref": "#/definitions/Special"
+            },
+            "variant": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          }
+        },
+        "Archetype": {
+          "type": "string",
+          "enum": [
+            "Grunt",
+            "Aggressor",
+            "Sniper",
+            "Support",
+            "Turtle",
+            "Rammer",
+            "Runner",
+            "Hunter"
+          ]
+        },
+        "Armor": {
+          "type": "string",
+          "enum": [
+            "None",
+            "Light",
+            "Medium",
+            "Heavy",
+            "Future1",
+            "Future2",
+            "Future3",
+            "Future4"
+          ]
+        },
+        "ArmorData": {
+          "type": "object",
+          "required": [
+            "damage_reduction",
+            "movement"
+          ],
+          "properties": {
+            "damage_reduction": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "movement": {
+              "type": "integer",
+              "format": "int8"
+            }
+          }
+        },
+        "Base64VecU8": {
+          "description": "Helper class to serialize/deserialize `Vec<u8>` to base64 string.\n\n# Example ```rust use near_sdk::{json_types::Base64VecU8, near};\n\n#[near(serializers=[json])] struct NewStruct { field: Base64VecU8, } ```",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        },
+        "Bitmap": {
+          "description": "192-bit cell set; limb 0 holds bits 0..63.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "Campaign": {
+          "type": "object",
+          "required": [
+            "node_ids",
+            "required_variant"
+          ],
+          "properties": {
+            "node_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "required_variant": {
+              "description": "0 = any variant.",
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          }
+        },
+        "CampaignNode": {
+          "type": "object",
+          "required": [
+            "campaign_id",
+            "cost_limit",
+            "creator_goes_first",
+            "map_id",
+            "max_score",
+            "prerequisites",
+            "turn_time"
+          ],
+          "properties": {
+            "campaign_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "cost_limit": {
+              "description": "Human fleet cost cap.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "creator_goes_first": {
+              "type": "boolean"
+            },
+            "map_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "max_score": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "prerequisites": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "turn_time": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "ClaimStatus": {
+          "type": "object",
+          "required": [
+            "drone_core_tier",
+            "next_claim_at_s",
+            "ships_per_claim"
+          ],
+          "properties": {
+            "drone_core_tier": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "next_claim_at_s": {
+              "type": "string"
+            },
+            "next_tier_cost": {
+              "description": "Cores needed for the next tier (None at max tier).",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "ships_per_claim": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          }
+        },
+        "Colors": {
+          "description": "HSL colors rolled at mint. h2/s2/l2 have no reader yet but are reserved for a planned feature: keep rolling them.",
+          "type": "object",
+          "required": [
+            "h1",
+            "h2",
+            "l1",
+            "l2",
+            "s1",
+            "s2"
+          ],
+          "properties": {
+            "h1": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "h2": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "l1": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "l2": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "s1": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "s2": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            }
+          }
+        },
+        "Costs": {
+          "description": "accuracy/hull/speed indexed by trait tier (len 3); equipment arrays by enum value (len 8).",
+          "type": "object",
+          "required": [
+            "accuracy",
+            "armor",
+            "base_cost",
+            "hull",
+            "main_weapon",
+            "shields",
+            "special",
+            "speed",
+            "version"
+          ],
+          "properties": {
+            "accuracy": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "armor": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "base_cost": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "hull": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "main_weapon": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "shields": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "special": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "speed": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "version": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          }
+        },
+        "Equipment": {
+          "type": "object",
+          "required": [
+            "armor",
+            "main_weapon",
+            "shields",
+            "special"
+          ],
+          "properties": {
+            "armor": {
+              "$ref": "#/definitions/Armor"
+            },
+            "main_weapon": {
+              "$ref": "#/definitions/MainWeapon"
+            },
+            "shields": {
+              "$ref": "#/definitions/Shields"
+            },
+            "special": {
+              "$ref": "#/definitions/Special"
+            }
+          }
+        },
+        "GameMap": {
+          "description": "Per-game terrain and scoring, copied from a preset at game start.",
+          "type": "object",
+          "required": [
+            "blocked",
+            "impassable",
+            "scoring"
+          ],
+          "properties": {
+            "blocked": {
+              "$ref": "#/definitions/Bitmap"
+            },
+            "impassable": {
+              "$ref": "#/definitions/Bitmap"
+            },
+            "scoring": {
+              "description": "Maps.gameScoring: entries keep their slot when points drop to 0.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ScoringPosition"
+              }
+            }
+          }
+        },
+        "GameResult": {
+          "type": "object",
+          "required": [
+            "game_id",
+            "loser",
+            "timestamp",
+            "winner"
+          ],
+          "properties": {
+            "game_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "loser": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "timestamp": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "winner": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            }
+          }
+        },
+        "GameState": {
+          "type": "object",
+          "required": [
+            "board",
+            "creator_active",
+            "creator_goes_first",
+            "creator_score",
+            "current_round",
+            "current_turn",
+            "ended",
+            "game_id",
+            "gone_ship_ids",
+            "heal_cap_percent_at_start",
+            "joiner_active",
+            "joiner_score",
+            "live",
+            "map",
+            "max_score",
+            "moved_at_round_start",
+            "moved_total",
+            "occupied",
+            "removed_at_round_start",
+            "ships_removed_total",
+            "ships_with_zero_hp",
+            "started_at",
+            "total_active_at_round_start",
+            "turn_start_time",
+            "turn_time"
+          ],
+          "properties": {
+            "board": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/definitions/ShipBoard"
+              }
+            },
+            "creator_active": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "creator_goes_first": {
+              "type": "boolean"
+            },
+            "creator_score": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "current_round": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "current_turn": {
+              "$ref": "#/definitions/Side"
+            },
+            "ended": {
+              "type": "boolean"
+            },
+            "game_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "gone_ship_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "heal_cap_percent_at_start": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "joiner_active": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "joiner_score": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "last_move": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/LastMove"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "live": {
+              "description": "Per side: cells holding an on-board ship with HP > 0.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Bitmap"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "map": {
+              "$ref": "#/definitions/GameMap"
+            },
+            "max_score": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "moved_at_round_start": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "moved_total": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "occupied": {
+              "$ref": "#/definitions/Bitmap"
+            },
+            "removed_at_round_start": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "ships_removed_total": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "ships_with_zero_hp": {
+              "description": "OpenZeppelin EnumerableSet semantics (append; swap-remove).",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "started_at": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "total_active_at_round_start": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "turn_start_time": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "turn_time": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "winner": {
+              "description": "None while running or on a draw; `ended` disambiguates.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Side"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "GunData": {
+          "type": "object",
+          "required": [
+            "damage",
+            "movement",
+            "range"
+          ],
+          "properties": {
+            "damage": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "movement": {
+              "type": "integer",
+              "format": "int8"
+            },
+            "range": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            }
+          }
+        },
+        "LastMove": {
+          "type": "object",
+          "required": [
+            "action_type",
+            "new_col",
+            "new_row",
+            "old_col",
+            "old_row",
+            "ship_id",
+            "target_ship_id",
+            "timestamp"
+          ],
+          "properties": {
+            "action_type": {
+              "$ref": "#/definitions/ActionType"
+            },
+            "new_col": {
+              "type": "integer",
+              "format": "int16"
+            },
+            "new_row": {
+              "type": "integer",
+              "format": "int16"
+            },
+            "old_col": {
+              "type": "integer",
+              "format": "int16"
+            },
+            "old_row": {
+              "type": "integer",
+              "format": "int16"
+            },
+            "ship_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "target_ship_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "timestamp": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "Lobby": {
+          "type": "object",
+          "required": [
+            "cost_limit",
+            "created_at",
+            "creator",
+            "creator_fleet",
+            "creator_goes_first",
+            "game_id",
+            "game_started_at",
+            "id",
+            "joined_at",
+            "joiner_fleet",
+            "joiner_fleet_set_at",
+            "map_id",
+            "max_score",
+            "opened_at",
+            "status",
+            "turn_time"
+          ],
+          "properties": {
+            "cost_limit": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "created_at": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "creator": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "creator_fleet": {
+              "type": "boolean"
+            },
+            "creator_goes_first": {
+              "type": "boolean"
+            },
+            "game_id": {
+              "description": "Engine game id once started (0 before).",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "game_started_at": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "joined_at": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "joiner": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "joiner_fleet": {
+              "type": "boolean"
+            },
+            "joiner_fleet_set_at": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "map_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "max_score": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "opened_at": {
+              "description": "Lobbies.lobbyOpenedAt.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "reserved_joiner": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "$ref": "#/definitions/LobbyStatus"
+            },
+            "turn_time": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "LobbyStatus": {
+          "type": "string",
+          "enum": [
+            "Open",
+            "FleetSelection",
+            "InGame"
+          ]
+        },
+        "MainWeapon": {
+          "type": "string",
+          "enum": [
+            "Generic",
+            "Sniper",
+            "Missile",
+            "Close",
+            "Future1",
+            "Future2",
+            "Future3",
+            "Future4"
+          ]
+        },
+        "MapMode": {
+          "type": "string",
+          "enum": [
+            "PvP",
+            "PvE",
+            "Both"
+          ]
+        },
+        "NFTContractMetadata": {
+          "description": "Metadata for the NFT contract itself.",
+          "type": "object",
+          "required": [
+            "name",
+            "spec",
+            "symbol"
+          ],
+          "properties": {
+            "base_uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "icon": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "reference": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reference_hash": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Base64VecU8"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "spec": {
+              "type": "string"
+            },
+            "symbol": {
+              "type": "string"
+            }
+          }
+        },
+        "PlayerLobbyState": {
+          "type": "object",
+          "required": [
+            "active_lobbies_count",
+            "active_lobby_id",
+            "has_active_lobby",
+            "kick_count",
+            "last_kick_time_s",
+            "timeout_end_s"
+          ],
+          "properties": {
+            "active_lobbies_count": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "active_lobby_id": {
+              "type": "string"
+            },
+            "has_active_lobby": {
+              "type": "boolean"
+            },
+            "kick_count": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "last_kick_time_s": {
+              "type": "string"
+            },
+            "timeout_end_s": {
+              "type": "string"
+            }
+          }
+        },
+        "Position": {
+          "type": "object",
+          "required": [
+            "col",
+            "row"
+          ],
+          "properties": {
+            "col": {
+              "type": "integer",
+              "format": "int16"
+            },
+            "row": {
+              "type": "integer",
+              "format": "int16"
+            }
+          }
+        },
+        "PresetMap": {
+          "description": "A preset map as created by a map editor.",
+          "type": "object",
+          "required": [
+            "blocked",
+            "creator_zone",
+            "impassable",
+            "joiner_zone",
+            "mode",
+            "scoring"
+          ],
+          "properties": {
+            "blocked": {
+              "description": "LOS-blocking (\"blocked\") cells.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Bitmap"
+                }
+              ]
+            },
+            "creator_zone": {
+              "description": "Empty = default column band.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Bitmap"
+                }
+              ]
+            },
+            "impassable": {
+              "description": "Movement-blocking cells.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Bitmap"
+                }
+              ]
+            },
+            "joiner_zone": {
+              "$ref": "#/definitions/Bitmap"
+            },
+            "mode": {
+              "$ref": "#/definitions/MapMode"
+            },
+            "scoring": {
+              "description": "Scoring tiles in first-insertion order (EnumerableSet order); a repeated cell overwrites points/onlyOnce in place.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ScoringPosition"
+              }
+            }
+          }
+        },
+        "PriceTier": {
+          "description": "One purchase tier. The three prices are DIFFERENT currencies and must never share a field (the 2026-10-23 exploit: one array served both).",
+          "type": "object",
+          "required": [
+            "near_ship_price",
+            "near_utc_price",
+            "ships",
+            "utc_price"
+          ],
+          "properties": {
+            "near_ship_price": {
+              "description": "Ships.tierPrices: yoctoNEAR for a pack bought directly.",
+              "type": "string"
+            },
+            "near_utc_price": {
+              "description": "ShipPurchaser.flowTierPrices: yoctoNEAR to buy `utc_price` UTC.",
+              "type": "string"
+            },
+            "ships": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "utc_price": {
+              "description": "ShipPurchaser.tierPrices: UTC (18 dec) for a pack.",
+              "type": "string"
+            }
+          }
+        },
+        "Promise": true,
+        "PromiseOrValueBoolean": {
+          "type": "boolean"
+        },
+        "PvpFleet": {
+          "type": "object",
+          "required": [
+            "owner",
+            "positions",
+            "ship_ids",
+            "total_cost"
+          ],
+          "properties": {
+            "owner": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "positions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Position"
+              }
+            },
+            "ship_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "total_cost": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "PvpGame": {
+          "type": "object",
+          "required": [
+            "creator",
+            "ended",
+            "joiner",
+            "lobby_id"
+          ],
+          "properties": {
+            "creator": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "ended": {
+              "type": "boolean"
+            },
+            "joiner": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "lobby_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "RandomRequestView": {
+          "type": "object",
+          "required": [
+            "id",
+            "owner",
+            "requested_at_height"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "owner": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "requested_at_height": {
+              "type": "string"
+            },
+            "resolved_at_height": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "Resolver": {
+          "description": "Which resolver a (variant) faction ability or (variant, slot) special uses. `slot` is the special-data slot read from ShipAttributes for range/strength.",
+          "oneOf": [
+            {
+              "description": "Faction 1: destroy-adjacent-0HP-enemy ram (own range/strength config).",
+              "type": "object",
+              "required": [
+                "Ram"
+              ],
+              "properties": {
+                "Ram": {
+                  "type": "object",
+                  "required": [
+                    "range"
+                  ],
+                  "properties": {
+                    "range": {
+                      "type": "integer",
+                      "format": "uint8",
+                      "minimum": 0.0
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "description": "Faction 2: heal a friendly ship.",
+              "type": "object",
+              "required": [
+                "Repair"
+              ],
+              "properties": {
+                "Repair": {
+                  "type": "object",
+                  "required": [
+                    "range",
+                    "strength"
+                  ],
+                  "properties": {
+                    "range": {
+                      "type": "integer",
+                      "format": "uint8",
+                      "minimum": 0.0
+                    },
+                    "strength": {
+                      "type": "integer",
+                      "format": "uint8",
+                      "minimum": 0.0
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "Emp"
+              ],
+              "properties": {
+                "Emp": {
+                  "type": "object",
+                  "required": [
+                    "slot"
+                  ],
+                  "properties": {
+                    "slot": {
+                      "$ref": "#/definitions/Special"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "RepairDrones"
+              ],
+              "properties": {
+                "RepairDrones": {
+                  "type": "object",
+                  "required": [
+                    "slot"
+                  ],
+                  "properties": {
+                    "slot": {
+                      "$ref": "#/definitions/Special"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "FlakArray"
+              ],
+              "properties": {
+                "FlakArray": {
+                  "type": "object",
+                  "required": [
+                    "slot"
+                  ],
+                  "properties": {
+                    "slot": {
+                      "$ref": "#/definitions/Special"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "ElectricStorm"
+              ],
+              "properties": {
+                "ElectricStorm": {
+                  "type": "object",
+                  "required": [
+                    "slot"
+                  ],
+                  "properties": {
+                    "slot": {
+                      "$ref": "#/definitions/Special"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "DroneSwarm"
+              ],
+              "properties": {
+                "DroneSwarm": {
+                  "type": "object",
+                  "required": [
+                    "slot"
+                  ],
+                  "properties": {
+                    "slot": {
+                      "$ref": "#/definitions/Special"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "RlCampaign": {
+          "type": "object",
+          "required": [
+            "auto_heal_percent",
+            "initial_cost_cap",
+            "required_variant",
+            "root_node"
+          ],
+          "properties": {
+            "auto_heal_percent": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "initial_cost_cap": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "required_variant": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "root_node": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "RlMatch": {
+          "type": "object",
+          "required": [
+            "ai_ships",
+            "combat_fleet",
+            "combat_fleet_cost",
+            "heal_percent_at_start",
+            "is_final_at_start",
+            "node_id",
+            "player",
+            "win_effects_at_start"
+          ],
+          "properties": {
+            "ai_ships": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  },
+                  {
+                    "$ref": "#/definitions/Ship"
+                  },
+                  {
+                    "$ref": "#/definitions/AiShipInfo"
+                  }
+                ],
+                "maxItems": 3,
+                "minItems": 3
+              }
+            },
+            "combat_fleet": {
+              "description": "Human combat fleet, kept in Fleets' swap-remove order.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "combat_fleet_cost": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "heal_percent_at_start": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "is_final_at_start": {
+              "type": "boolean"
+            },
+            "node_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "player": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "win_effects_at_start": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/WinEffect"
+              }
+            }
+          }
+        },
+        "RlNode": {
+          "type": "object",
+          "required": [
+            "campaign_id",
+            "children",
+            "cost_cap_override",
+            "creator_goes_first",
+            "kind",
+            "map_id",
+            "max_score",
+            "turn_time",
+            "win_effects"
+          ],
+          "properties": {
+            "campaign_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "cost_cap_override": {
+              "description": "0 = no change to the run's cost cap (resupply nodes).",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "creator_goes_first": {
+              "type": "boolean"
+            },
+            "kind": {
+              "$ref": "#/definitions/RlNodeKind"
+            },
+            "map_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "max_score": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "turn_time": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "win_effects": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/WinEffect"
+              }
+            }
+          }
+        },
+        "RlNodeKind": {
+          "type": "string",
+          "enum": [
+            "Combat",
+            "Resupply"
+          ]
+        },
+        "Run": {
+          "type": "object",
+          "required": [
+            "active_game_id",
+            "campaign_id",
+            "current_cost_cap",
+            "current_node",
+            "generation",
+            "required_variant_at_start",
+            "reservation",
+            "reservation_cost",
+            "roster",
+            "status"
+          ],
+          "properties": {
+            "active_game_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "campaign_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "current_cost_cap": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "current_node": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "generation": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "required_variant_at_start": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "reservation": {
+              "description": "Reservation fleet (ships locked between combats), in roster order.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "reservation_cost": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "roster": {
+              "description": "(ship id, carried hp); hp 0 = full.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  },
+                  {
+                    "type": "integer",
+                    "format": "uint8",
+                    "minimum": 0.0
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "status": {
+              "$ref": "#/definitions/RunStatus"
+            }
+          }
+        },
+        "RunStatus": {
+          "type": "string",
+          "enum": [
+            "None",
+            "Active",
+            "Won",
+            "Ended"
+          ]
+        },
+        "ScoringPosition": {
+          "type": "object",
+          "required": [
+            "col",
+            "only_once",
+            "points",
+            "row"
+          ],
+          "properties": {
+            "col": {
+              "type": "integer",
+              "format": "int16"
+            },
+            "only_once": {
+              "type": "boolean"
+            },
+            "points": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "row": {
+              "type": "integer",
+              "format": "int16"
+            }
+          }
+        },
+        "ShieldData": {
+          "type": "object",
+          "required": [
+            "damage_reduction",
+            "movement"
+          ],
+          "properties": {
+            "damage_reduction": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "movement": {
+              "type": "integer",
+              "format": "int8"
+            }
+          }
+        },
+        "Shields": {
+          "type": "string",
+          "enum": [
+            "None",
+            "Light",
+            "Medium",
+            "Heavy",
+            "Future1",
+            "Future2",
+            "Future3",
+            "Future4"
+          ]
+        },
+        "Ship": {
+          "description": "The rules-relevant part of a ship (Types.sol `Ship` minus `owner`, which the contract keeps beside it).",
+          "type": "object",
+          "required": [
+            "equipment",
+            "id",
+            "name",
+            "ship_data",
+            "traits"
+          ],
+          "properties": {
+            "equipment": {
+              "$ref": "#/definitions/Equipment"
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "name": {
+              "type": "string"
+            },
+            "ship_data": {
+              "$ref": "#/definitions/ShipData"
+            },
+            "traits": {
+              "$ref": "#/definitions/Traits"
+            }
+          }
+        },
+        "ShipBoard": {
+          "description": "Types.sol ShipBoardState.",
+          "type": "object",
+          "required": [
+            "active_index",
+            "col",
+            "damage_reduction",
+            "gun_damage",
+            "hull_points",
+            "is_creator",
+            "last_damager",
+            "max_hull_points",
+            "moved_in_round",
+            "movement",
+            "placed",
+            "range",
+            "reactor_critical_timer",
+            "row",
+            "special",
+            "status",
+            "variant",
+            "version",
+            "zeroed_after_moving_round"
+          ],
+          "properties": {
+            "active_index": {
+              "description": "1-based index in its side's active list; 0 = not active.",
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "col": {
+              "type": "integer",
+              "format": "int16"
+            },
+            "damage_reduction": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "gun_damage": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "hull_points": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "is_creator": {
+              "type": "boolean"
+            },
+            "last_damager": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "max_hull_points": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "moved_in_round": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "movement": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "placed": {
+              "type": "boolean"
+            },
+            "range": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "reactor_critical_timer": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "row": {
+              "type": "integer",
+              "format": "int16"
+            },
+            "special": {
+              "$ref": "#/definitions/Special"
+            },
+            "status": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "variant": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "version": {
+              "description": "Attributes version (0 = no stats); also the game's pin.",
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "zeroed_after_moving_round": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "ShipData": {
+          "type": "object",
+          "required": [
+            "constructed",
+            "cost",
+            "costs_version",
+            "in_fleet",
+            "is_free_ship",
+            "modified",
+            "shiny",
+            "ships_destroyed",
+            "timestamp_destroyed"
+          ],
+          "properties": {
+            "constructed": {
+              "type": "boolean"
+            },
+            "cost": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "costs_version": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "in_fleet": {
+              "type": "boolean"
+            },
+            "is_free_ship": {
+              "type": "boolean"
+            },
+            "modified": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "shiny": {
+              "type": "boolean"
+            },
+            "ships_destroyed": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "timestamp_destroyed": {
+              "description": "Seconds; 0 = not destroyed.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "ShipGrant": {
+          "description": "ShipGrantWinEffect.ShipGrant.",
+          "type": "object",
+          "required": [
+            "accuracy",
+            "colors",
+            "equipment",
+            "hull",
+            "is_free_ship",
+            "name",
+            "once_per_address",
+            "shiny",
+            "ships_destroyed",
+            "speed",
+            "variant"
+          ],
+          "properties": {
+            "accuracy": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "colors": {
+              "$ref": "#/definitions/Colors"
+            },
+            "equipment": {
+              "$ref": "#/definitions/Equipment"
+            },
+            "hull": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "is_free_ship": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "once_per_address": {
+              "type": "boolean"
+            },
+            "shiny": {
+              "type": "boolean"
+            },
+            "ships_destroyed": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "speed": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "variant": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          }
+        },
+        "ShipView": {
+          "type": "object",
+          "required": [
+            "owner",
+            "ship"
+          ],
+          "properties": {
+            "owner": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "ship": {
+              "$ref": "#/definitions/Ship"
+            }
+          }
+        },
+        "Side": {
+          "type": "string",
+          "enum": [
+            "Creator",
+            "Joiner"
+          ]
+        },
+        "SpMatch": {
+          "type": "object",
+          "required": [
+            "ai_ships",
+            "ended",
+            "human",
+            "human_fleet",
+            "node_id"
+          ],
+          "properties": {
+            "ai_ships": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0.0
+                  },
+                  {
+                    "$ref": "#/definitions/Ship"
+                  },
+                  {
+                    "$ref": "#/definitions/AiShipInfo"
+                  }
+                ],
+                "maxItems": 3,
+                "minItems": 3
+              }
+            },
+            "ended": {
+              "type": "boolean"
+            },
+            "human": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "human_fleet": {
+              "description": "Human ships still in the fleet (Fleets record).",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "node_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "Special": {
+          "description": "Per-faction LOCAL slot index (see Types.sol). Fixed at 8 members forever.",
+          "type": "string",
+          "enum": [
+            "None",
+            "Slot1",
+            "Slot2",
+            "Slot3",
+            "Slot4",
+            "Slot5",
+            "Slot6",
+            "Slot7"
+          ]
+        },
+        "SpecialData": {
+          "type": "object",
+          "required": [
+            "movement",
+            "range",
+            "strength"
+          ],
+          "properties": {
+            "movement": {
+              "type": "integer",
+              "format": "int8"
+            },
+            "range": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "strength": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            }
+          }
+        },
+        "StorageBalance": {
+          "type": "object",
+          "required": [
+            "available",
+            "total"
+          ],
+          "properties": {
+            "available": {
+              "type": "string"
+            },
+            "total": {
+              "type": "string"
+            }
+          }
+        },
+        "StorageBalanceBounds": {
+          "type": "object",
+          "required": [
+            "min"
+          ],
+          "properties": {
+            "max": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "min": {
+              "type": "string"
+            }
+          }
+        },
+        "Token": {
+          "type": "object",
+          "required": [
+            "owner_id",
+            "token_id"
+          ],
+          "properties": {
+            "approved_account_ids": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/TokenMetadata"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "owner_id": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"\u0192elicia.near\".parse::<AccountId>().is_err()); // (\u0192 is not f) ```",
+              "type": "string"
+            },
+            "token_id": {
+              "type": "string"
+            }
+          }
+        },
+        "TokenKind": {
+          "type": "string",
+          "enum": [
+            "Utc",
+            "Dec"
+          ]
+        },
+        "TokenMetadata": {
+          "type": "object",
+          "properties": {
+            "copies": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "expires_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "extra": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "issued_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "media": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "media_hash": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Base64VecU8"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reference": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reference_hash": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Base64VecU8"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "starts_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "updated_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "Traits": {
+          "type": "object",
+          "required": [
+            "accuracy",
+            "colors",
+            "hull",
+            "serial_number",
+            "speed",
+            "variant"
+          ],
+          "properties": {
+            "accuracy": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "colors": {
+              "$ref": "#/definitions/Colors"
+            },
+            "hull": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "serial_number": {
+              "description": "Randomness request id the ship was built from.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "speed": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "variant": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          }
+        },
+        "VariantAttributeData": {
+          "description": "One immutable published (variant, version) attribute table.",
+          "type": "object",
+          "required": [
+            "armors",
+            "base_hull",
+            "base_speed",
+            "engine_speeds",
+            "fore_accuracy",
+            "guns",
+            "hull",
+            "rank_bonus_pct",
+            "rank_thresholds",
+            "shields",
+            "specials"
+          ],
+          "properties": {
+            "armors": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ArmorData"
+              }
+            },
+            "base_hull": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "base_speed": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "engine_speeds": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "fore_accuracy": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "guns": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/GunData"
+              }
+            },
+            "hull": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "rank_bonus_pct": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "rank_thresholds": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            "shields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ShieldData"
+              }
+            },
+            "specials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SpecialData"
+              }
+            }
+          }
+        },
+        "WinEffect": {
+          "description": "The win-effect contracts, as values configured per node.",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "DecBonus"
+              ],
+              "properties": {
+                "DecBonus": {
+                  "type": "object",
+                  "required": [
+                    "amount"
+                  ],
+                  "properties": {
+                    "amount": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "HealAboveFloor"
+              ],
+              "properties": {
+                "HealAboveFloor": {
+                  "type": "object",
+                  "required": [
+                    "percent"
+                  ],
+                  "properties": {
+                    "percent": {
+                      "type": "integer",
+                      "format": "uint8",
+                      "minimum": 0.0
+                    }
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "ShipGrant"
+              ],
+              "properties": {
+                "ShipGrant": {
+                  "$ref": "#/definitions/ShipGrant"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    }
+  }
+}

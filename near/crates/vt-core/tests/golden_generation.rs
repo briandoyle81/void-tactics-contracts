@@ -4,7 +4,18 @@
 
 use serde_json::Value;
 use vt_core::attributes::{calculate, ship_cost};
-use vt_core::generation::{generate_ship, StubShipNamer};
+use vt_core::generation::{generate_ship, ShipNamer};
+
+/// The fixtures were exported with MockOnchainRandomShipNames ("Mock Ship").
+/// The real namer is checked against the live contract in golden_ship_names.rs;
+/// the name seed it receives is the same one variant-2 drone names use, which
+/// these fixtures do verify.
+struct MockShipNames;
+impl ShipNamer for MockShipNames {
+    fn ship_name(&self, _seed: &[u8; 32]) -> String {
+        "Mock Ship".into()
+    }
+}
 use vt_core::types::*;
 
 fn golden() -> Value {
@@ -122,12 +133,8 @@ fn generation_attributes_and_cost_match_solidity() {
     for f in fixtures {
         let variant = n(&f["variant"]) as u16;
         let base = n(&f["randomBase"]);
-        let mut got = generate_ship(n(&f["id"]), n(&f["serial"]), base, variant, 3, &StubShipNamer);
+        let got = generate_ship(n(&f["id"]), n(&f["serial"]), base, variant, 3, &MockShipNames);
         let want = expected_ship(&f["ship"]);
-        if variant == 1 {
-            // Variant-1 names come from the (unported) external name contract.
-            got.name = want.name.clone();
-        }
         assert_eq!(got, want, "randomBase {base} variant {variant}");
 
         if variant == 1 {

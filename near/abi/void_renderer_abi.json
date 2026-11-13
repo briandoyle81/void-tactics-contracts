@@ -1,0 +1,471 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "name": "void-renderer",
+    "version": "0.1.0"
+  },
+  "body": {
+    "functions": [
+      {
+        "name": "contract_source_metadata",
+        "kind": "view"
+      },
+      {
+        "name": "get_name",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "variant",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "kind",
+              "type_schema": {
+                "$ref": "#/definitions/NameKind"
+              }
+            },
+            {
+              "name": "index",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      {
+        "name": "medal_svg",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "medal_token_uri",
+        "doc": " ShatteredHiveMedal.tokenURI.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "migrate",
+        "kind": "call",
+        "modifiers": [
+          "init",
+          "private"
+        ]
+      },
+      {
+        "name": "new",
+        "kind": "call",
+        "modifiers": [
+          "init"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "owner_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "render_ship_image",
+        "doc": " ImageRenderer(V2).renderShip: `data:image/svg+xml;base64,...`.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ship",
+              "type_schema": {
+                "$ref": "#/definitions/Ship"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "set_names",
+        "doc": " RenderMetadata.set{MainWeapon,Armor,Shields,Special}Name, batched.\n Entries: (variant, kind, enum index, name); empty name clears.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "entries",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": [
+                    {
+                      "type": "integer",
+                      "format": "uint16",
+                      "minimum": 0.0
+                    },
+                    {
+                      "$ref": "#/definitions/NameKind"
+                    },
+                    {
+                      "type": "integer",
+                      "format": "uint8",
+                      "minimum": 0.0
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "maxItems": 4,
+                  "minItems": 4
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "token_uri",
+        "doc": " RenderMetadata.tokenURI: `data:application/json;base64,...`.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "ship",
+              "type_schema": {
+                "$ref": "#/definitions/Ship"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "upgrade",
+        "doc": " Owner-only code upgrade (new WASM as raw input), e.g. new art. Same\n pattern as the game contract.",
+        "kind": "call",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Promise"
+          }
+        }
+      }
+    ],
+    "root_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string",
+      "definitions": {
+        "Armor": {
+          "type": "string",
+          "enum": [
+            "None",
+            "Light",
+            "Medium",
+            "Heavy",
+            "Future1",
+            "Future2",
+            "Future3",
+            "Future4"
+          ]
+        },
+        "Colors": {
+          "description": "HSL colors rolled at mint. h2/s2/l2 have no reader yet but are reserved for a planned feature: keep rolling them.",
+          "type": "object",
+          "required": [
+            "h1",
+            "h2",
+            "l1",
+            "l2",
+            "s1",
+            "s2"
+          ],
+          "properties": {
+            "h1": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "h2": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "l1": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "l2": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "s1": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "s2": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            }
+          }
+        },
+        "Equipment": {
+          "type": "object",
+          "required": [
+            "armor",
+            "main_weapon",
+            "shields",
+            "special"
+          ],
+          "properties": {
+            "armor": {
+              "$ref": "#/definitions/Armor"
+            },
+            "main_weapon": {
+              "$ref": "#/definitions/MainWeapon"
+            },
+            "shields": {
+              "$ref": "#/definitions/Shields"
+            },
+            "special": {
+              "$ref": "#/definitions/Special"
+            }
+          }
+        },
+        "MainWeapon": {
+          "type": "string",
+          "enum": [
+            "Generic",
+            "Sniper",
+            "Missile",
+            "Close",
+            "Future1",
+            "Future2",
+            "Future3",
+            "Future4"
+          ]
+        },
+        "NameKind": {
+          "type": "string",
+          "enum": [
+            "MainWeapon",
+            "Armor",
+            "Shields",
+            "Special"
+          ]
+        },
+        "Promise": true,
+        "Shields": {
+          "type": "string",
+          "enum": [
+            "None",
+            "Light",
+            "Medium",
+            "Heavy",
+            "Future1",
+            "Future2",
+            "Future3",
+            "Future4"
+          ]
+        },
+        "Ship": {
+          "description": "The rules-relevant part of a ship (Types.sol `Ship` minus `owner`, which the contract keeps beside it).",
+          "type": "object",
+          "required": [
+            "equipment",
+            "id",
+            "name",
+            "ship_data",
+            "traits"
+          ],
+          "properties": {
+            "equipment": {
+              "$ref": "#/definitions/Equipment"
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "name": {
+              "type": "string"
+            },
+            "ship_data": {
+              "$ref": "#/definitions/ShipData"
+            },
+            "traits": {
+              "$ref": "#/definitions/Traits"
+            }
+          }
+        },
+        "ShipData": {
+          "type": "object",
+          "required": [
+            "constructed",
+            "cost",
+            "costs_version",
+            "in_fleet",
+            "is_free_ship",
+            "modified",
+            "shiny",
+            "ships_destroyed",
+            "timestamp_destroyed"
+          ],
+          "properties": {
+            "constructed": {
+              "type": "boolean"
+            },
+            "cost": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "costs_version": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "in_fleet": {
+              "type": "boolean"
+            },
+            "is_free_ship": {
+              "type": "boolean"
+            },
+            "modified": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "shiny": {
+              "type": "boolean"
+            },
+            "ships_destroyed": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "timestamp_destroyed": {
+              "description": "Seconds; 0 = not destroyed.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "Special": {
+          "description": "Per-faction LOCAL slot index (see Types.sol). Fixed at 8 members forever.",
+          "type": "string",
+          "enum": [
+            "None",
+            "Slot1",
+            "Slot2",
+            "Slot3",
+            "Slot4",
+            "Slot5",
+            "Slot6",
+            "Slot7"
+          ]
+        },
+        "Traits": {
+          "type": "object",
+          "required": [
+            "accuracy",
+            "colors",
+            "hull",
+            "serial_number",
+            "speed",
+            "variant"
+          ],
+          "properties": {
+            "accuracy": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "colors": {
+              "$ref": "#/definitions/Colors"
+            },
+            "hull": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "serial_number": {
+              "description": "Randomness request id the ship was built from.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "speed": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "variant": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    }
+  }
+}

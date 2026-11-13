@@ -46,6 +46,19 @@ async function main() {
     }
   }
 
+  // RenderMetadata equipment display names (the NEAR renderer's set_names).
+  const shipsConfig: any = await d.ships.read.config();
+  const meta = await at("RenderMetadata", shipsConfig[3]);
+  const rendererNames: unknown[] = [];
+  for (const variant of [1, 2]) {
+    for (let i = 0; i < 8; i++) {
+      for (const [kind, fn] of [["MainWeapon", "mainWeaponNames"], ["Armor", "armorNames"], ["Shields", "shieldsNames"], ["Special", "specialNames"]]) {
+        const name: string = await meta.read[fn]([variant, i]);
+        if (name) rendererNames.push([variant, kind, i, name]);
+      }
+    }
+  }
+
   const config = {
     writtenAt: new Date().toISOString(),
     source: "ignition/modules/DeployAndConfig.ts (PRODUCTION=false) on the ephemeral hardhat network",
@@ -66,6 +79,7 @@ async function main() {
     storefrontTiers: tiers,
     claimCooldownSeconds: Number(await d.freeShipClaim.read.claimCooldownPeriod()),
     maxVariant: Number(await d.ships.read.maxVariant()),
+    rendererNames,
   };
   mkdirSync(path.dirname(OUT), { recursive: true });
   writeFileSync(OUT, JSON.stringify(big(config), null, 2));

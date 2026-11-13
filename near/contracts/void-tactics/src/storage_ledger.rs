@@ -45,6 +45,25 @@ pub struct Account {
     pub drone_core_tier: u8,
     /// Number of ships owned (owner index length).
     pub ship_count: u32,
+    /// TutorialClaim.tutorialCompleted.
+    pub tutorial_completed: bool,
+    /// GameResults.playerStats (tutorial now; PvP in Phase 3).
+    pub wins: u32,
+    pub losses: u32,
+    /// SelfieCheckEligibilityProvider.verifiedUntil (seconds).
+    pub verified_until_s: u64,
+    /// ShatteredHiveMedal (soulbound; NEP-245 id "hive_medal").
+    pub hive_medal: bool,
+    /// Total storage NEAR sponsored for this account by the game.
+    pub sponsored: NearToken,
+    // ---- Lobbies.PlayerLobbyState ----
+    pub active_lobby_id: u64,
+    pub active_lobbies_count: u32,
+    pub has_active_lobby: bool,
+    pub kick_count: u32,
+    pub last_kick_time_s: u64,
+    /// Size of this player's lobby list (Lobbies.playerLobbies).
+    pub lobby_count: u32,
 }
 
 impl Account {
@@ -106,8 +125,35 @@ impl Contract {
         true
     }
 
+    /// Runs `f` and charges (or refunds) `payer` for exactly the storage it
+    /// changed. Used where one call touches state owned by different accounts
+    /// (e.g. a stranger pruning a stale lobby must refund the lobby's
+    /// creator, not themselves). Never nest.
+    pub(crate) fn charged<R>(&mut self, payer: &AccountId, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.flush_all();
+        let before = env::storage_usage();
+        let r = f(self);
+        self.charge_storage_since(payer, before);
+        r
+    }
+
+    /// Non-panicking ledger adjustment for callbacks (the bytes were measured
+    /// by the caller).
+    pub(crate) fn adjust_used_bytes(&mut self, account_id: &AccountId, delta: i64) {
+        if let Some(mut a) = self.accounts.get(account_id).cloned() {
+            a.used_bytes = (a.used_bytes as i64 + delta).max(0) as u64;
+            self.put_account(account_id, a);
+        }
+    }
+
     pub(crate) fn assert_registered(&self, account_id: &AccountId) {
         require!(self.accounts.contains_key(account_id), "StorageNotRegistered");
+    }
+
+    /// Registers with no deposit (the caller credits one right after and
+    /// re-checks coverage). Returns the record's bytes.
+    pub(crate) fn register_without_deposit(&mut self, account_id: &AccountId) -> u64 {
+        self.internal_register(account_id, NearToken::from_yoctonear(0)).used_bytes
     }
 
     fn internal_register(&mut self, account_id: &AccountId, deposit: NearToken) -> Account {
@@ -164,7 +210,9 @@ impl StorageManagement for Contract {
         assert_one_yocto();
         let account_id = env::predecessor_account_id();
         let mut acct = self.account(&account_id);
-        let available = acct.available();
+        // Sponsored NEAR may only be spent on storage, never withdrawn.
+        let floor = acct.locked().max(acct.sponsored);
+        let available = acct.deposit.saturating_sub(floor);
         let amount = amount.unwrap_or(available);
         require!(amount <= available, "WithdrawExceedsAvailable");
         acct.deposit = acct.deposit.saturating_sub(amount);
@@ -184,7 +232,7 @@ impl StorageManagement for Contract {
             return false;
         };
         // Tokens would be destroyed with the record.
-        require!(acct.utc == 0 && acct.dec == 0, "AccountHasTokens");
+        require!(acct.utc == 0 && acct.dec == 0 && !acct.hive_medal, "AccountHasTokens");
         // Only the bare record may remain; any game state (ships, pending
         // requests, ...) must be released first.
         self.flush_all();
@@ -193,7 +241,13 @@ impl StorageManagement for Contract {
         self.flush_all();
         let freed = before - env::storage_usage();
         require!(acct.used_bytes == freed, "AccountHasState");
-        Promise::new(account_id).transfer(acct.deposit).detach();
+        // Unspent sponsorship goes back to the pool.
+        let back_to_pool = acct.sponsored.min(acct.deposit);
+        self.config.sponsor_pool += back_to_pool.as_yoctonear();
+        let refund = acct.deposit.saturating_sub(back_to_pool);
+        if !refund.is_zero() {
+            Promise::new(account_id).transfer(refund).detach();
+        }
         true
     }
 

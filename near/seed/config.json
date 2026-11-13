@@ -1,5 +1,5 @@
 {
-  "writtenAt": "2026-11-13T15:50:38.290Z",
+  "writtenAt": "2026-11-13T19:47:56.432Z",
   "source": "ignition/modules/DeployAndConfig.ts (PRODUCTION=false) on the ephemeral hardhat network",
   "variants": {
     "1": {
@@ -557,5 +557,163 @@
     1625
   ],
   "claimCooldownSeconds": 2419200,
-  "maxVariant": 2
+  "maxVariant": 2,
+  "rendererNames": [
+    [
+      1,
+      "MainWeapon",
+      0,
+      "Laser"
+    ],
+    [
+      1,
+      "MainWeapon",
+      1,
+      "Railgun"
+    ],
+    [
+      1,
+      "Armor",
+      1,
+      "Light Armor"
+    ],
+    [
+      1,
+      "Shields",
+      1,
+      "Light Shields"
+    ],
+    [
+      1,
+      "Special",
+      1,
+      "EMP"
+    ],
+    [
+      1,
+      "MainWeapon",
+      2,
+      "Missile Launcher"
+    ],
+    [
+      1,
+      "Armor",
+      2,
+      "Medium Armor"
+    ],
+    [
+      1,
+      "Shields",
+      2,
+      "Medium Shields"
+    ],
+    [
+      1,
+      "Special",
+      2,
+      "Repair Drones"
+    ],
+    [
+      1,
+      "MainWeapon",
+      3,
+      "Plasma Cannon"
+    ],
+    [
+      1,
+      "Armor",
+      3,
+      "Heavy Armor"
+    ],
+    [
+      1,
+      "Shields",
+      3,
+      "Heavy Shields"
+    ],
+    [
+      1,
+      "Special",
+      3,
+      "Flak Array"
+    ],
+    [
+      2,
+      "MainWeapon",
+      0,
+      "Medium Mining Laser"
+    ],
+    [
+      2,
+      "MainWeapon",
+      1,
+      "Linear Accelerator"
+    ],
+    [
+      2,
+      "Armor",
+      1,
+      "Light Armor"
+    ],
+    [
+      2,
+      "Shields",
+      1,
+      "Light Shields"
+    ],
+    [
+      2,
+      "Special",
+      1,
+      "Lightening Field"
+    ],
+    [
+      2,
+      "MainWeapon",
+      2,
+      "Torpedo Launcher"
+    ],
+    [
+      2,
+      "Armor",
+      2,
+      "Medium Armor"
+    ],
+    [
+      2,
+      "Shields",
+      2,
+      "Medium Shields"
+    ],
+    [
+      2,
+      "Special",
+      2,
+      "Attack Drones"
+    ],
+    [
+      2,
+      "MainWeapon",
+      3,
+      "Mining Drill"
+    ],
+    [
+      2,
+      "Armor",
+      3,
+      "Heavy Armor"
+    ],
+    [
+      2,
+      "Shields",
+      3,
+      "Heavy Shields"
+    ],
+    [
+      2,
+      "Special",
+      3,
+      "Aux Engine"
+    ]
+  ]
 }

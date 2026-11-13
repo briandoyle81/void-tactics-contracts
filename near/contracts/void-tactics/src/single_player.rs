@@ -20,7 +20,8 @@ use crate::events;
 use crate::ships::AI_SHIP_ID_OFFSET;
 use crate::{roles, Contract, ContractExt, OrPanic, StorageKey};
 
-pub const MAX_PLACEMENTS_PER_MAP: usize = 8;
+/// AIEncounters.maxPlacementsPerMap default (the deploy raises it to 14).
+pub const DEFAULT_MAX_PLACEMENTS_PER_MAP: u32 = 8;
 pub const MAX_AI_KILLS: u32 = 1_000_000;
 /// Per call; keeps the receipt well inside NEAR's 100-log / 16 KB limits.
 pub const MAX_AI_MOVES_PER_CALL: u32 = 8;
@@ -84,6 +85,7 @@ pub struct SpState {
     pub games: LookupMap<u64, GameState>,
     pub matches: LookupMap<u64, SpMatch>,
     pub game_count: u64,
+    pub max_placements_per_map: u32,
 }
 
 impl SpState {
@@ -102,6 +104,7 @@ impl SpState {
             games: LookupMap::new(StorageKey::Games),
             matches: LookupMap::new(StorageKey::SpMatches),
             game_count: 0,
+            max_placements_per_map: DEFAULT_MAX_PLACEMENTS_PER_MAP,
         }
     }
 
@@ -145,7 +148,7 @@ impl Default for SpState {
 }
 
 /// Fleets._validateStartingPositions.
-fn validate_positions(map: &PresetMap, positions: &[Position], is_creator: bool) {
+pub(crate) fn validate_positions(map: &PresetMap, positions: &[Position], is_creator: bool) {
     let mut seen = vt_core::grid::Bitmap::EMPTY;
     for p in positions {
         require!(in_bounds(p.row, p.col) && map.is_valid_deployment_tile(p.row, p.col, is_creator), "InvalidPosition");
@@ -156,6 +159,94 @@ fn validate_positions(map: &PresetMap, positions: &[Position], is_creator: bool)
 }
 
 impl Contract {
+    /// Fleets.createFleet for a human fleet: shape, positions, ownership,
+    /// lock state, construction, cost version, single variant and cost cap;
+    /// then locks the ships. Returns the total cost.
+    pub(crate) fn validate_and_lock_fleet(
+        &mut self,
+        owner: &AccountId,
+        ship_ids: &[u64],
+        positions: &[Position],
+        cost_limit: u64,
+        map: &PresetMap,
+        is_creator: bool,
+        frozen_prices: bool,
+    ) -> u64 {
+        require!(ship_ids.len() == positions.len(), "ArrayLengthMismatch");
+        for i in 0..ship_ids.len() {
+            for j in i + 1..ship_ids.len() {
+                require!(ship_ids[i] != ship_ids[j], "DuplicateShipId");
+            }
+        }
+        validate_positions(map, positions, is_creator);
+        let mut total_cost = 0u64;
+        let mut fleet_variant = 0u16;
+        for (i, &id) in ship_ids.iter().enumerate() {
+            let r = self.ship_record(id);
+            let s = &r.ship;
+            require!(&r.owner == owner, "ShipNotOwned");
+            require!(!s.ship_data.in_fleet, "ShipAlreadyInFleet");
+            require!(s.ship_data.constructed, "ShipNotConstructed");
+            if !frozen_prices {
+                let current_costs = self.config.costs.get(&s.traits.variant).map_or(0, |c| c.version);
+                require!(s.ship_data.costs_version == current_costs, "ShipCostVersionMismatch");
+            }
+            if i == 0 {
+                fleet_variant = s.traits.variant;
+            } else {
+                require!(s.traits.variant == fleet_variant, "MixedVariantFleet");
+            }
+            total_cost += s.ship_data.cost as u64;
+        }
+        require!(total_cost <= cost_limit, "InvalidFleetCost");
+        for &id in ship_ids {
+            self.set_in_fleet(id, true);
+        }
+        total_cost
+    }
+
+    /// ShipAttributes.calculateBoardStatsByIds at game start.
+    pub(crate) fn fleet_entries(&self, ship_ids: &[u64], positions: &[Position]) -> Vec<FleetEntry> {
+        ship_ids
+            .iter()
+            .zip(positions)
+            .map(|(&id, p)| {
+                let s = self.ship_record(id).ship;
+                let (version, table) = self.config.current_table(s.traits.variant).or_panic();
+                let attributes = calculate(table, version, &s.stats_input()).or_panic();
+                FleetEntry { ship_id: id, row: p.row, col: p.col, attributes, variant: s.traits.variant, special: s.equipment.special }
+            })
+            .collect()
+    }
+
+    /// SinglePlayerMatch/RoguelikeMatch._mintAIFleet: the map's AI placements
+    /// (ascending cell order) as fleet entries plus per-ship AI info. AI ship
+    /// ids are 2^40 + 1.. within the game.
+    pub(crate) fn build_ai_fleet(&self, map_id: u64) -> (Vec<FleetEntry>, Vec<(u64, Ship, AiShipInfo)>) {
+        let placements = self.sp.sorted_placements(map_id);
+        require!(!placements.is_empty(), "NoAIPlacementsConfigured");
+        let mut ai_ships = Vec::new();
+        let mut joiner_fleet = Vec::new();
+        for (k, (cell, config_id)) in placements.iter().enumerate() {
+            let c = self.sp.ai_configs.get(config_id).cloned().unwrap_or_else(|| env::panic_str("ConfigNotFound"));
+            let id = AI_SHIP_ID_OFFSET + k as u64 + 1;
+            let ship = Ship {
+                name: c.name.clone(),
+                id,
+                equipment: c.equipment.clone(),
+                traits: c.traits.clone(),
+                ship_data: ShipData { shiny: c.shiny, ships_destroyed: c.ships_destroyed, ..Default::default() },
+            };
+            let (version, table) = self.config.current_table(c.traits.variant).or_panic();
+            let attributes = calculate(table, version, &ship.stats_input()).or_panic();
+            let (row, col) = ((*cell as i16) / GRID_WIDTH, (*cell as i16) % GRID_WIDTH);
+            joiner_fleet.push(FleetEntry { ship_id: id, row, col, attributes, variant: c.traits.variant, special: c.equipment.special });
+            let info = AiShipInfo { archetype: c.archetype, variant: c.traits.variant, special: c.equipment.special };
+            ai_ships.push((id, ship, info));
+        }
+        (joiner_fleet, ai_ships)
+    }
+
     fn load_game(&self, game_id: u64) -> (GameState, SpMatch) {
         let g = self.sp.games.get(&game_id).cloned().unwrap_or_else(|| env::panic_str("GameNotFound"));
         let m = self.sp.matches.get(&game_id).cloned().unwrap_or_else(|| env::panic_str("GameNotFound"));
@@ -273,8 +364,14 @@ impl Contract {
             require!(c.0 <= self.sp.ai_config_count, "ConfigNotFound");
             out.push((cell, c.0));
         }
-        require!(out.len() <= MAX_PLACEMENTS_PER_MAP, "TooManyPlacements");
+        require!(out.len() <= self.sp.max_placements_per_map as usize, "TooManyPlacements");
         self.sp.placements.insert(map_id.0, out);
+    }
+
+    /// AIEncounters.setMaxPlacementsPerMap.
+    pub fn set_max_placements_per_map(&mut self, max: u32) {
+        self.assert_owner();
+        self.sp.max_placements_per_map = max;
     }
 
     pub fn create_campaign(&mut self, required_variant: u16) -> U64 {
@@ -321,61 +418,11 @@ impl Contract {
         let map = self.sp.map(node.map_id).clone();
 
         // ---- Fleets.createFleet (human side) ----
-        require!(ship_ids.len() == positions.len(), "ArrayLengthMismatch");
-        for i in 0..ship_ids.len() {
-            for j in i + 1..ship_ids.len() {
-                require!(ship_ids[i] != ship_ids[j], "DuplicateShipId");
-            }
-        }
-        validate_positions(&map, &positions, true);
-        let mut total_cost = 0u64;
-        let mut fleet_variant = 0u16;
-        let mut creator_fleet = Vec::new();
-        for (i, (&id, p)) in ship_ids.iter().zip(&positions).enumerate() {
-            let r = self.ship_record(id);
-            let s = &r.ship;
-            require!(r.owner == human, "ShipNotOwned");
-            require!(!s.ship_data.in_fleet, "ShipAlreadyInFleet");
-            require!(s.ship_data.constructed, "ShipNotConstructed");
-            let current_costs = self.config.costs.get(&s.traits.variant).map_or(0, |c| c.version);
-            require!(s.ship_data.costs_version == current_costs, "ShipCostVersionMismatch");
-            if i == 0 {
-                fleet_variant = s.traits.variant;
-            } else {
-                require!(s.traits.variant == fleet_variant, "MixedVariantFleet");
-            }
-            total_cost += s.ship_data.cost as u64;
-            let (version, table) = self.config.current_table(s.traits.variant).or_panic();
-            let attributes = calculate(table, version, &s.stats_input()).or_panic();
-            creator_fleet.push(FleetEntry { ship_id: id, row: p.row, col: p.col, attributes, variant: s.traits.variant, special: s.equipment.special });
-        }
-        require!(total_cost <= node.cost_limit, "InvalidFleetCost");
-        for &id in &ship_ids {
-            self.set_in_fleet(id, true);
-        }
+        self.validate_and_lock_fleet(&human, &ship_ids, &positions, node.cost_limit, &map, true, false);
+        let creator_fleet = self.fleet_entries(&ship_ids, &positions);
 
         // ---- _mintAIFleet ----
-        let placements = self.sp.sorted_placements(node.map_id);
-        require!(!placements.is_empty(), "NoAIPlacementsConfigured");
-        let mut ai_ships = Vec::new();
-        let mut joiner_fleet = Vec::new();
-        for (k, (cell, config_id)) in placements.iter().enumerate() {
-            let c = self.sp.ai_configs.get(config_id).cloned().unwrap_or_else(|| env::panic_str("ConfigNotFound"));
-            let id = AI_SHIP_ID_OFFSET + k as u64 + 1;
-            let ship = Ship {
-                name: c.name.clone(),
-                id,
-                equipment: c.equipment.clone(),
-                traits: c.traits.clone(),
-                ship_data: ShipData { shiny: c.shiny, ships_destroyed: c.ships_destroyed, ..Default::default() },
-            };
-            let (version, table) = self.config.current_table(c.traits.variant).or_panic();
-            let attributes = calculate(table, version, &ship.stats_input()).or_panic();
-            let (row, col) = ((*cell as i16) / GRID_WIDTH, (*cell as i16) % GRID_WIDTH);
-            joiner_fleet.push(FleetEntry { ship_id: id, row, col, attributes, variant: c.traits.variant, special: c.equipment.special });
-            let info = AiShipInfo { archetype: c.archetype, variant: c.traits.variant, special: c.equipment.special };
-            ai_ships.push((id, ship, info));
-        }
+        let (joiner_fleet, ai_ships) = self.build_ai_fleet(node.map_id);
 
         // ---- Game.startGame ----
         self.sp.game_count += 1;
@@ -400,8 +447,16 @@ impl Contract {
         U64(game_id)
     }
 
-    /// Game.moveShip for the human (creator) side.
+    /// Game.moveShip: the human (creator) side of a single-player match, or
+    /// either player of a PvP game.
     pub fn move_ship(&mut self, game_id: U64, ship_id: U64, new_row: i16, new_col: i16, action: ActionType, target_ship_id: U64) {
+        let input = MoveInput { ship_id: ship_id.0, new_row, new_col, action, target_ship_id: target_ship_id.0 };
+        if self.pvp.games.contains_key(&game_id.0) {
+            return self.pvp_move(game_id.0, input);
+        }
+        if self.rl.matches.contains_key(&game_id.0) {
+            return self.rl_move(game_id.0, input);
+        }
         let caller = env::predecessor_account_id();
         let (mut g, mut m) = self.load_game(game_id.0);
         require!(caller == m.human, "InvalidMove");
@@ -420,6 +475,9 @@ impl Contract {
     /// AI). The AI is deterministic, so a caller can't steer it; storage growth
     /// is charged to the match's human (their game, their bytes).
     pub fn take_ai_turns(&mut self, game_id: U64, max_moves: u32) -> u32 {
+        if self.rl.matches.contains_key(&game_id.0) {
+            return self.rl_ai_turns(game_id.0, max_moves);
+        }
         let (mut g, mut m) = self.load_game(game_id.0);
         let initial = env::storage_usage();
         let now = Self::now_s();
@@ -470,6 +528,10 @@ impl Contract {
 
     pub fn get_map_count(&self) -> U64 {
         U64(self.sp.map_count)
+    }
+
+    pub fn get_ai_config_count(&self) -> U64 {
+        U64(self.sp.ai_config_count)
     }
 
     pub fn get_ai_ship_config(&self, config_id: U64) -> Option<AiShipConfig> {

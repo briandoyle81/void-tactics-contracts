@@ -1,0 +1,43 @@
+# NEAR port (near/): rules + golden parity, contract unit tests, WASM builds,
+# and the near-workspaces sandbox suite. Added 2026-11-13.
+name: near
+
+on:
+  push:
+    paths: ["near/**", "scripts/renderer-pipeline/sol-to-rust.js", "scripts/near-golden/genShipNames.js", ".github/workflows/near.yml"]
+  pull_request:
+    paths: ["near/**", "scripts/renderer-pipeline/sol-to-rust.js", "scripts/near-golden/genShipNames.js", ".github/workflows/near.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: near
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: near
+      - name: Install cargo-near
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+      - name: Rules, golden parity, contract + renderer unit tests
+        run: cargo test -p vt-core -p void-renderer && cargo test -p void-tactics --features test-hooks
+      - name: Generated art is up to date with the Solidity leaves
+        working-directory: .
+        run: node scripts/renderer-pipeline/sol-to-rust.js && git diff --exit-code near/contracts/void-renderer/src/art.rs
+      - name: Generated ship-name table is up to date with near/seed/ship_names.json
+        working-directory: .
+        run: node scripts/near-golden/genShipNames.js && git diff --exit-code near/crates/vt-core/src/ship_names_data.rs
+      - name: Build WASM (test hooks, renderer, upgrade probe)
+        run: ./scripts/build-test-wasm.sh
+      - name: Release WASM builds (no test hooks)
+        run: |
+          cargo near build non-reproducible-wasm --manifest-path contracts/void-tactics/Cargo.toml --out-dir target/near/release
+          cargo near build non-reproducible-wasm --manifest-path contracts/void-renderer/Cargo.toml --out-dir target/near/release
+      - name: Sandbox integration tests
+        run: cargo test -p integration-tests

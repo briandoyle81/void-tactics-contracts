@@ -70,6 +70,7 @@ describe("Seeded AI ship configs", function () {
   // deliberate design exceptions.
   const SNIPER_EXCEPTIONS: Record<string, { gun: number; minRange: number }> = {
     v2sniper3: { gun: 2, minRange: 4 }, // intentional, 2026-10-12
+    aiConfig62: { gun: 2, minRange: 5 }, // Silencio, shiny missile sniper: intentional, 2026-11-13
   };
   // Ships outside the level ramp: the shiny set made in the content editor
   // (La Sombra, Murcielago, Umbria, Abismo, Vacia, Oscuridad, Velo, Umbral,

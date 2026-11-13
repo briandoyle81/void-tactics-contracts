@@ -499,3 +499,16 @@ even a leftover throwaway). Earlier scratch snapshots
 similarly-named `-explore`/experiment directories) are kept only as a
 before/after record and can be deleted once no longer useful as a
 reference.
+
+
+## NEAR renderer (added 2026-11-13)
+
+The NEAR port's renderer (`near/contracts/void-renderer`) uses the same art.
+After regenerating the Solidity leaves, regenerate its Rust data and re-check
+parity:
+
+```bash
+node scripts/renderer-pipeline/sol-to-rust.js          # -> near/contracts/void-renderer/src/art.rs
+npx hardhat run scripts/near-golden/exportRender.ts    # Solidity goldens
+cd near && cargo test -p void-renderer                 # byte-for-byte parity
+```
