@@ -1,0 +1,12 @@
+[package]
+name = "integration-tests"
+edition.workspace = true
+version.workspace = true
+publish = false
+
+[dependencies]
+near-workspaces = "0.24.0"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+serde_json = "1"
+vt-core = { path = "../crates/vt-core" }

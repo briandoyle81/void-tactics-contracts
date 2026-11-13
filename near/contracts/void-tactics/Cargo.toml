@@ -1,0 +1,22 @@
+[package]
+name = "void-tactics"
+description = "Void Tactics single game contract (everything except rendering)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# Exposes test-only entrypoints (e.g. raw randomness requests). Never enable for
+# a real deploy; sandbox tests build with it.
+test-hooks = []
+
+[dependencies]
+near-sdk.workspace = true
+near-contract-standards.workspace = true
+vt-core.workspace = true
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

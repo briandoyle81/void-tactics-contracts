@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/vt-core",
+    "contracts/void-tactics",
+    "tests",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "UNLICENSED"
+
+[workspace.dependencies]
+near-sdk = "5.30.1"
+near-contract-standards = "5.30.1"
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
+vt-core = { path = "crates/vt-core" }
+
+# NEAR-recommended release profile for contract WASM.
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
