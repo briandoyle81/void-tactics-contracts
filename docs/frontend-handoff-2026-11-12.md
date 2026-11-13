@@ -3,6 +3,9 @@
 Written 2026-11-12. It describes the contracts as of that date. Check
 `contracts/ShipPurchaser.sol` before relying on it if much time has passed.
 
+**Replaced by `frontend-handoff-2026-11-12-redeploy.md`** (same day, after the
+redeploy), which repeats these items and adds the redeploy's changes.
+
 ## The rule
 
 Buying UTC and then ships with it costs the same as buying the ships
