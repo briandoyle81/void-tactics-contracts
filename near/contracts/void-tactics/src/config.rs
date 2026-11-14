@@ -83,6 +83,14 @@ pub struct ConfigState {
 
 pub const SETTING_RENDERER: u8 = 0;
 pub const SETTING_NFT_BASE_URI: u8 = 1;
+// 2026-11-14 additions live in `settings` (not new root fields) so the
+// upgrade needs no state migration.
+/// Account nominated by `transfer_ownership`, until it accepts.
+pub const SETTING_PENDING_OWNER: u8 = 2;
+/// Present = UTC minting switched off (UniversalCredits.mintIsActive false).
+pub const SETTING_UTC_MINT_OFF: u8 = 3;
+/// Present = DEC minting switched off (DroneEnergyCores.mintIsActive false).
+pub const SETTING_DEC_MINT_OFF: u8 = 4;
 
 impl ConfigState {
     pub fn new() -> Self {

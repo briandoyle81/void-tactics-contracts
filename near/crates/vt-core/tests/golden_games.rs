@@ -203,13 +203,14 @@ fn check(g: &GameState, snap: &Value, ctx: &str) {
     }
 }
 
-#[test]
-fn single_player_games_match_solidity() {
-    let golden = load("single_player_games.json");
+/// Replays every game in a golden file. Returns (games, steps, rejected moves).
+fn replay(file: &str) -> (usize, usize, usize) {
+    let golden = load(file);
     let rules = rules(&golden["rules"]);
     let games = golden["games"].as_array().unwrap();
     assert!(!games.is_empty());
     let mut total_steps = 0;
+    let mut rejected = 0;
 
     for game in games {
         let node = n(&game["nodeId"]);
@@ -234,6 +235,34 @@ fn single_player_games_match_solidity() {
         for (s, step) in game["steps"].as_array().unwrap().iter().enumerate() {
             let ctx = format!("node {node} step {s} ({})", step["kind"]);
             match step["kind"].as_str().unwrap() {
+                // A move Solidity rejected (engine fuzz): Rust must reject it
+                // too, with the same custom error when Solidity's is known,
+                // and leave the game exactly as it was.
+                "human_rejected" => {
+                    let m = &step["move"];
+                    let input = MoveInput {
+                        ship_id: n(&m["shipId"]),
+                        new_row: i(&m["row"]) as i16,
+                        new_col: i(&m["col"]) as i16,
+                        action: ActionType::from_index(n(&m["action"]) as usize).unwrap(),
+                        target_ship_id: n(&m["target"]),
+                    };
+                    let before = g.clone();
+                    let mut trial = g.clone();
+                    let got = trial.move_ship(Side::Creator, &input, &rules, 0);
+                    let want = step["error"].as_str().unwrap();
+                    match got {
+                        Ok(_) => panic!("{ctx}: Solidity rejected {input:?} with {want}, Rust accepted it"),
+                        Err(e) if !want.starts_with("sig:") && !want.starts_with("reason:") && want != "unknown" => {
+                            assert_eq!(e.name(), want, "{ctx}: rejection reason for {input:?}");
+                        }
+                        Err(_) => {}
+                    }
+                    assert_eq!(g, before, "{ctx}: a rejected move must not change state");
+                    rejected += 1;
+                    total_steps += 1;
+                    continue;
+                }
                 "human" => {
                     let m = &step["move"];
                     let input = MoveInput {
@@ -248,20 +277,32 @@ fn single_player_games_match_solidity() {
                 "ai" => {
                     let out = take_ai_turns(&mut g, &rules, &|id| infos.get(&id).cloned(), 1, 0)
                         .unwrap_or_else(|e| panic!("{ctx}: ai turn failed: {e}"));
-                    let want_logs: Vec<AiLog> = step["aiLogs"]
+                    // Solidity's logs carry no board; compare decisions, then
+                    // check each logged board is exactly the state after the
+                    // move (one move per step here), which `check` below
+                    // verifies against the Solidity snapshot.
+                    let board_now = vt_core::replay::compact_board(&g);
+                    let got_logs: Vec<(u8, u64, Option<ActionType>, u64)> = out
+                        .logs
+                        .iter()
+                        .map(|l| match l {
+                            AiLog::DecisionFailed { ship_id } => (0, *ship_id, None, 0),
+                            AiLog::TurnTaken { ship_id, action, target, board } => {
+                                assert_eq!(board, &board_now, "{ctx}: logged board = state after the move");
+                                (1, *ship_id, Some(*action), *target)
+                            }
+                        })
+                        .collect();
+                    let want_logs: Vec<(u8, u64, Option<ActionType>, u64)> = step["aiLogs"]
                         .as_array()
                         .unwrap()
                         .iter()
                         .map(|l| match l["event"].as_str().unwrap() {
-                            "AIDecisionFailed" => AiLog::DecisionFailed { ship_id: n(&l["shipId"]) },
-                            _ => AiLog::TurnTaken {
-                                ship_id: n(&l["shipId"]),
-                                action: ActionType::from_index(n(&l["action"]) as usize).unwrap(),
-                                target: n(&l["target"]),
-                            },
+                            "AIDecisionFailed" => (0, n(&l["shipId"]), None, 0),
+                            _ => (1, n(&l["shipId"]), Some(ActionType::from_index(n(&l["action"]) as usize).unwrap()), n(&l["target"])),
                         })
                         .collect();
-                    assert_eq!(out.logs, want_logs, "{ctx}: AI decision");
+                    assert_eq!(got_logs, want_logs, "{ctx}: AI decision");
                 }
                 k => panic!("unknown step kind {k}"),
             }
@@ -269,5 +310,19 @@ fn single_player_games_match_solidity() {
             total_steps += 1;
         }
     }
-    eprintln!("replayed {} games / {total_steps} steps", games.len());
+    eprintln!("{file}: replayed {} games / {total_steps} steps ({rejected} rejected moves)", games.len());
+    (games.len(), total_steps, rejected)
+}
+
+#[test]
+fn single_player_games_match_solidity() {
+    replay("single_player_games.json");
+}
+
+/// Randomized games (scripts/near-golden/exportEngineFuzz.ts): random maps,
+/// fleets and moves, including moves Solidity rejects.
+#[test]
+fn engine_fuzz_matches_solidity() {
+    let (games, steps, rejected) = replay("engine_fuzz.json");
+    assert!(games >= 10 && steps >= 1000 && rejected >= 100, "fuzz corpus too small: {games} games, {steps} steps, {rejected} rejected");
 }

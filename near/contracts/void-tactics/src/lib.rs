@@ -18,6 +18,8 @@ use near_sdk::{env, near, require, AccountId, BorshStorageKey, Gas, NearToken, P
 pub mod config;
 pub mod economy;
 pub mod events;
+pub mod history;
+pub mod views;
 pub mod pvp;
 pub mod randomness;
 pub mod roguelike;
@@ -88,6 +90,10 @@ pub(crate) enum StorageKey {
     CompletedNodes,
     Games,
     SpMatches,
+    // history (2026-11-14). New keys only ever go at the end: a key's
+    // position is its storage prefix.
+    PlayerGameAt,
+    PlayerGameCount,
 }
 
 /// Role bits (owner has all of them implicitly).
@@ -143,6 +149,10 @@ pub struct Contract {
 
     // --- single player ---
     pub(crate) sp: SpState,
+
+    // --- per-player game history (2026-11-14). Must stay the LAST field:
+    // `migrate` upgrades older state by appending its encoding. ---
+    pub(crate) player_games: history::PlayerGames,
 }
 
 #[near]
@@ -168,11 +178,42 @@ impl Contract {
             pvp: pvp::PvpState::new(),
             rl: roguelike::RlState::new(),
             sp: SpState::new(),
+            player_games: history::PlayerGames::new(),
         }
     }
 
     pub fn owner_id(&self) -> AccountId {
         self.owner_id.clone()
+    }
+
+    /// Ownable.transferOwnership, made two-step: the owner nominates, the
+    /// nominee calls `accept_ownership`. A typo'd or unreachable account can
+    /// therefore never take admin away (nominate again to replace it, or
+    /// `cancel_ownership_transfer`). Roles are kept. Ownable's
+    /// `renounceOwnership` is deliberately not offered: with no owner, code
+    /// and rules could never change again.
+    pub fn transfer_ownership(&mut self, new_owner: AccountId) {
+        self.assert_owner();
+        self.config.settings.insert(config::SETTING_PENDING_OWNER, new_owner.to_string());
+        events::emit("ownership_transfer_started", near_sdk::serde_json::json!({ "owner": self.owner_id, "pending_owner": new_owner }));
+    }
+
+    pub fn cancel_ownership_transfer(&mut self) {
+        self.assert_owner();
+        self.config.settings.remove(&config::SETTING_PENDING_OWNER);
+    }
+
+    pub fn accept_ownership(&mut self) {
+        let caller = env::predecessor_account_id();
+        let pending = self.config.settings.get(&config::SETTING_PENDING_OWNER).cloned();
+        require!(pending.as_deref() == Some(caller.as_str()), "NotPendingOwner");
+        self.config.settings.remove(&config::SETTING_PENDING_OWNER);
+        let previous = std::mem::replace(&mut self.owner_id, caller.clone());
+        events::emit("ownership_transferred", near_sdk::serde_json::json!({ "previous_owner": previous, "new_owner": caller }));
+    }
+
+    pub fn get_pending_owner(&self) -> Option<AccountId> {
+        self.config.settings.get(&config::SETTING_PENDING_OWNER).and_then(|s| s.parse().ok())
     }
 
     pub fn set_role(&mut self, account_id: AccountId, role_bits: u8) {
@@ -206,13 +247,23 @@ impl Contract {
         )
     }
 
-    /// State migration hook, run by `upgrade`. Today's layout is unchanged,
-    /// so it re-reads the state as-is. A layout change adds a versioned old
-    /// struct here and converts it (see docs/near-pre-audit.md).
+    /// State migration hook, run by `upgrade`. Current state decodes as-is.
+    /// Older layouts are upgraded here (see docs/near-pre-audit.md):
+    ///
+    /// - before 2026-11-14 the root ended at `sp`. Borsh encodes a struct as
+    ///   its fields in order, so appending an empty `player_games` to the
+    ///   old bytes yields the new layout exactly.
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        env::state_read().unwrap_or_else(|| env::panic_str("NoState"))
+        use near_sdk::borsh::BorshDeserialize;
+        let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("NoState"));
+        if let Ok(c) = Self::try_from_slice(&raw) {
+            return c;
+        }
+        let mut upgraded = raw;
+        upgraded.extend(near_sdk::borsh::to_vec(&history::PlayerGames::new()).unwrap_or_else(|_| env::panic_str("MigrationFailed")));
+        Self::try_from_slice(&upgraded).unwrap_or_else(|_| env::panic_str("MigrationFailed"))
     }
 
     /// Code-identity probe for the upgrade drill (test builds only).
@@ -241,6 +292,7 @@ impl Contract {
         self.nullifiers.flush();
         self.pvp.flush();
         self.rl.flush();
+        self.player_games.flush();
     }
 
     pub(crate) fn assert_owner(&self) {

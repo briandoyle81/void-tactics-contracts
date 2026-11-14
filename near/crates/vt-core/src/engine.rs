@@ -220,6 +220,7 @@ pub fn manhattan_checked(a: (i16, i16), b: (i16, i16)) -> Result<u8> {
     diff(a.0, b.0)?.checked_add(diff(a.1, b.1)?).ok_or(Error::ArithmeticOverflow)
 }
 
+#[derive(Clone, Debug)]
 pub struct MoveInput {
     pub ship_id: u64,
     pub new_row: i16,

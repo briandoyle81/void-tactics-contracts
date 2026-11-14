@@ -7,6 +7,14 @@
   "body": {
     "functions": [
       {
+        "name": "accept_ownership",
+        "kind": "call"
+      },
+      {
+        "name": "cancel_ownership_transfer",
+        "kind": "call"
+      },
+      {
         "name": "contract_source_metadata",
         "kind": "view"
       },
@@ -51,6 +59,20 @@
         }
       },
       {
+        "name": "get_pending_owner",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      {
         "name": "medal_svg",
         "kind": "view",
         "result": {
@@ -84,6 +106,7 @@
       },
       {
         "name": "migrate",
+        "doc": " Current state decodes as-is. State from before 2026-11-14 ended at\n `names`: Borsh encodes fields in order, so appending an empty\n `pending_owner` gives the new layout.",
         "kind": "call",
         "modifiers": [
           "init",
@@ -107,6 +130,17 @@
               }
             }
           ]
+        }
+      },
+      {
+        "name": "owner_id",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+            "type": "string"
+          }
         }
       },
       {
@@ -190,6 +224,23 @@
           "type_schema": {
             "type": "string"
           }
+        }
+      },
+      {
+        "name": "transfer_ownership",
+        "doc": " Two-step ownership transfer, as on the game contract.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "new_owner",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
         }
       },
       {

@@ -1,7 +1,9 @@
 //! Shared sandbox helpers for near-workspaces integration tests.
 
+pub mod deployment;
 pub mod policy;
 pub mod pricing;
+pub mod replay;
 pub mod seed;
 
 use anyhow::{Context, Result};

@@ -1,16 +1,18 @@
 # Frontend handoff: native NEAR contracts
 
-_Written 2026-11-13 for the frontend agent (updated the same day: real ship names, testnet deploy, quick start, ABI files). Describes `near/` on branch `near-migration-experiment` as of that date. Contracts change; check the date and `near/README.md` before relying on details. Deployed to **testnet** on 2026-11-13 (see §0); not on mainnet._
+_Written 2026-11-13 for the frontend agent (updated the same day: real ship names, testnet deploy, quick start, ABI files; updated 2026-11-14: RPC endpoint, game code hash, pointer to the parity additions). Describes `near/` on branch `near-migration-experiment` as of that date. Contracts change; check the date and `near/README.md` before relying on details. Deployed to **testnet** on 2026-11-13 (see §0); not on mainnet._
+
+> **2026-11-14:** the game contract was upgraded in place, with state migrated rather than wiped. New methods: the server minter for card checkout, admin edit methods, `get_games_for_player`, settings and player views, and `sync_ship_costs`. Ids are listed in `near/deployments/testnet.json`. Details are in [`near-frontend-handoff-2026-11-14.md`](near-frontend-handoff-2026-11-14.md).
 
 ## 0. Testnet deployment (2026-11-13)
 
 | Contract | Account | Code SHA-256 |
 |---|---|---|
-| Game | `game.void-tactics.testnet` | `0f4cf914c2097406005e16fdcd16e922bf03fbd38ab523f98185771a405c4b9e` |
-| Renderer | `art.void-tactics.testnet` | `f3243d0427ce6eac0cece187582a138dcd3f3c137a4372924a826039c18b51eb` |
+| Game | `game.void-tactics.testnet` | `e1ead8a222d09350778c55ba4eb1ad42334b9616f76670a09345001545483521` (upgraded 2026-11-14 16:41 UTC; before that `9c226611…`, originally `0f4cf914…`) |
+| Renderer | `art.void-tactics.testnet` | `bcd705aadd752ba244180de778cedad0b24488f8aacced4cbbb0810ad8f37066` (upgraded 2026-11-14 16:41 UTC; was `f3243d04…`) |
 | Owner | `void-tactics.testnet` | (plain account) |
 
-- RPC: `https://rpc.testnet.near.org`.
+- RPC: `https://test.rpc.fastnear.com`. ~~`https://rpc.testnet.near.org`~~ is deprecated and now rate-limits hard (noted 2026-11-14).
 - Full content is seeded: 72 maps, 64 AI configs, the 30-node campaign, the roguelike campaign (id `1`) and 6 PvP maps.
 - Ship prices were set from NEAR/USD $3.51. For example, 5 ships cost 1.42 NEAR.
 - `nft_metadata().base_uri` is unset until the frontend image route exists. Rendering works through the renderer views.
@@ -19,7 +21,7 @@ _Written 2026-11-13 for the frontend agent (updated the same day: real ship name
 
 ### Exact types: ABI files
 
-- `near/abi/void_tactics_abi.json` lists all 155 game methods (including admin methods the frontend won't call): names, argument names, JSON schemas for every struct and enum, and view or call plus payable markers.
+- `near/abi/void_tactics_abi.json` lists all 182 game methods as of 2026-11-14 (including admin methods the frontend won't call): names, argument names, JSON schemas for every struct and enum, and view or call plus payable markers.
 - `near/abi/void_renderer_abi.json` covers the renderer.
 - Every method and argument named in this doc was checked against these files.
 - Generate TypeScript types from them rather than copying shapes from this doc. To regenerate: `cd near && cargo near abi --manifest-path contracts/<crate>/Cargo.toml --out-dir abi`, then drop the test-only `upgrade_probe` entry.
@@ -27,7 +29,7 @@ _Written 2026-11-13 for the frontend agent (updated the same day: real ship name
 ### Quick start (testnet)
 
 ```ts
-const RPC = "https://rpc.testnet.near.org";
+const RPC = "https://test.rpc.fastnear.com"; // rpc.testnet.near.org is deprecated
 const GAME = "game.void-tactics.testnet";
 const RENDERER = "art.void-tactics.testnet";
 
@@ -104,7 +106,7 @@ Every player needs a storage balance before doing anything that writes state.
 2. If not registered, call `storage_deposit({account_id: null, registration_only: false})` with attached NEAR. The minimum is `storage_balance_bounds().min` (0.0125 NEAR).
    - About 0.003 NEAR per ship is a useful rule of thumb.
    - Recommend 0.1 NEAR for a new player, about 30 ships.
-3. Show `storage_balance_of` as `{ total, available }` and `storage_used_bytes({account_id})`.
+3. Show `storage_balance_of` as `{ total, available }` and `storage_used_bytes({account_id})`. Since 2026-11-14, `available` means withdrawable: it excludes sponsored and minter-funded NEAR.
 4. Failures:
    - `InsufficientStorageBalance`: prompt a top-up with `storage_deposit` (any amount, no `registration_only`).
    - `StorageNotRegistered`: run step 2.
@@ -183,7 +185,7 @@ const img = await view(renderer, "render_ship_image", { ship }); // data:image/s
 4. `forfeit({game_id})`.
 5. State: `get_game({game_id})` returns the full board, and `get_sp_match({game_id})` returns the node, player and status. Re-read after each call; there is no need to replay `move` events.
 
-Gas: 50 Tgas is plenty for every gameplay call. The heaviest measured are `take_ai_turns(8)` at 10 Tgas and `move_ship` at 4 Tgas. Use 300 Tgas for purchases of 60 ships (measured 106).
+Gas: 50 Tgas is plenty for every gameplay call. The heaviest measured are `take_ai_turns(8)` at 14 Tgas and `move_ship` at 5 Tgas (2026-11-14, with replay frames). Use 300 Tgas for purchases of 60 ships (measured 107).
 
 ## 7. PvP
 
@@ -253,3 +255,4 @@ Panics come back as `FunctionCallError` with the same error names as the Solidit
 - ~~Real variant-1 ship names; names are stubbed until the OnchainRandomShipNames port.~~ Done 2026-11-13: names match the Base contract. One name in about 22,000 is an empty string, so render a fallback (e.g. `Ship #<id>`) when `name` is `""`.
 - ~~Testnet and mainnet deploys. The deploy tool exists (`near/README.md`); account names come with the deploy.~~ Testnet done 2026-11-13 (§0). Mainnet not done.
 - The `base_uri` gateway route (§4).
+- Replay history across devices: needs an indexer reading the `move` events, or an on-chain move log (decision pending, 2026-11-14).

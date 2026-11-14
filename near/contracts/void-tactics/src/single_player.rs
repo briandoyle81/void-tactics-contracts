@@ -119,7 +119,7 @@ impl SpState {
         self.matches.flush();
     }
 
-    fn map(&self, id: u64) -> &PresetMap {
+    pub(crate) fn map(&self, id: u64) -> &PresetMap {
         self.maps.get(&id).unwrap_or_else(|| env::panic_str("MapNotFound"))
     }
 
@@ -305,6 +305,18 @@ impl Contract {
         }
     }
 
+    /// `edit`: what changed, for the `game_map_edited` event (replay frames
+    /// carry ships, not terrain, so indexers need this to keep the map).
+    fn edit_live_map(&mut self, game_id: u64, row: i16, col: i16, edit: near_sdk::serde_json::Value, f: impl FnOnce(&mut vt_core::maps::GameMap)) {
+        self.assert_role(roles::MAP_EDITOR);
+        require!(in_bounds(row, col), "InvalidPosition");
+        let mut g = self.sp.games.get(&game_id).cloned().unwrap_or_else(|| env::panic_str("GameNotFound"));
+        require!(!g.ended, "GameAlreadyEnded");
+        f(&mut g.map);
+        events::emit("game_map_edited", json!({ "game_id": U64(game_id), "row": row, "col": col, "edit": edit }));
+        self.sp.games.insert(game_id, g);
+    }
+
     fn save_game(&mut self, game_id: u64, g: GameState, m: SpMatch) {
         self.sp.games.insert(game_id, g);
         self.sp.matches.insert(game_id, m);
@@ -368,6 +380,41 @@ impl Contract {
         self.sp.placements.insert(map_id.0, out);
     }
 
+    /// AIEncounters.setMapPlacement: one cell of a map's AI fleet (config 0
+    /// clears it). Same checks as the batch setter.
+    pub fn set_map_placement(&mut self, map_id: U64, position: Position, config_id: U64) {
+        self.assert_role(roles::MAP_EDITOR);
+        require!(in_bounds(position.row, position.col), "InvalidPosition");
+        let map = self.sp.map(map_id.0).clone();
+        let cell = (position.row * GRID_WIDTH + position.col) as u16;
+        let mut v = self.sp.placements.get(&map_id.0).cloned().unwrap_or_default();
+        v.retain(|e| e.0 != cell);
+        if config_id.0 != 0 {
+            require!(map.is_valid_deployment_tile(position.row, position.col, false), "InvalidPosition");
+            require!(config_id.0 <= self.sp.ai_config_count, "ConfigNotFound");
+            v.push((cell, config_id.0));
+        }
+        require!(v.len() <= self.sp.max_placements_per_map as usize, "TooManyPlacements");
+        self.sp.placements.insert(map_id.0, v);
+    }
+
+    /// Maps.setBlockedTile / setImpassableTile / setScoringTile: a map
+    /// editor's hotfix to a LIVE game's own map copy (not the preset).
+    /// Rejected once the game has ended. The few bytes a scoring tile adds
+    /// are contract-paid, like other editor content.
+    pub fn set_game_blocked_tile(&mut self, game_id: U64, row: i16, col: i16, blocked: bool) {
+        self.edit_live_map(game_id.0, row, col, json!({ "blocked": blocked }), |m| if blocked { m.blocked.set(bit_index(row, col)) } else { m.blocked.clear(bit_index(row, col)) });
+    }
+
+    pub fn set_game_impassable_tile(&mut self, game_id: U64, row: i16, col: i16, impassable: bool) {
+        self.edit_live_map(game_id.0, row, col, json!({ "impassable": impassable }), |m| if impassable { m.impassable.set(bit_index(row, col)) } else { m.impassable.clear(bit_index(row, col)) });
+    }
+
+    /// Points 0 makes the tile non-scoring; the tile's only-once flag is kept.
+    pub fn set_game_scoring_tile(&mut self, game_id: U64, row: i16, col: i16, points: u8) {
+        self.edit_live_map(game_id.0, row, col, json!({ "points": points }), |m| m.set_scoring(row, col, points, false, true));
+    }
+
     /// AIEncounters.setMaxPlacementsPerMap.
     pub fn set_max_placements_per_map(&mut self, max: u32) {
         self.assert_owner();
@@ -398,6 +445,118 @@ impl Contract {
         self.sp.campaigns.insert(node.campaign_id, campaign);
         self.sp.nodes.insert(id, node);
         U64(id)
+    }
+
+    // ---- edits (Maps / AIEncounters / NodeMap update paths) ----
+    // Live games keep their own copy of the map and AI fleet, so edits only
+    // affect matches started afterwards (as on Base, where the map is copied
+    // into the game at start).
+
+    /// Maps.updatePresetMap: full replace of the blocked (LOS) tiles.
+    pub fn update_preset_map(&mut self, map_id: U64, blocked: Vec<Position>) {
+        self.assert_role(roles::MAP_EDITOR);
+        let mut m = self.sp.map(map_id.0).clone();
+        m.blocked = PresetMap::new(&blocked, &[], &[], m.mode).or_panic().blocked;
+        self.sp.maps.insert(map_id.0, m);
+    }
+
+    /// Maps.updatePresetMapImpassable: full replace of the impassable tiles.
+    pub fn update_preset_map_impassable(&mut self, map_id: U64, impassable: Vec<Position>) {
+        self.assert_role(roles::MAP_EDITOR);
+        let mut m = self.sp.map(map_id.0).clone();
+        m.impassable = PresetMap::new(&[], &impassable, &[], m.mode).or_panic().impassable;
+        self.sp.maps.insert(map_id.0, m);
+    }
+
+    /// Maps.updatePresetScoringMap: full replace of the scoring tiles.
+    pub fn update_preset_scoring_map(&mut self, map_id: U64, scoring: Vec<ScoringPosition>) {
+        self.assert_role(roles::MAP_EDITOR);
+        let mut m = self.sp.map(map_id.0).clone();
+        m.scoring = PresetMap::new(&[], &[], &scoring, m.mode).or_panic().scoring;
+        self.sp.maps.insert(map_id.0, m);
+    }
+
+    /// Maps.setMapMode.
+    pub fn set_map_mode(&mut self, map_id: U64, mode: MapMode) {
+        self.assert_role(roles::MAP_EDITOR);
+        let mut m = self.sp.map(map_id.0).clone();
+        m.mode = mode;
+        self.sp.maps.insert(map_id.0, m);
+    }
+
+    /// The three replaces plus the mode in one call (what the map editor
+    /// saves). Deployment zones are kept.
+    pub fn update_full_preset_map(&mut self, map_id: U64, blocked: Vec<Position>, impassable: Vec<Position>, scoring: Vec<ScoringPosition>, mode: MapMode) {
+        self.assert_role(roles::MAP_EDITOR);
+        let old = self.sp.map(map_id.0).clone();
+        let mut m = PresetMap::new(&blocked, &impassable, &scoring, mode).or_panic();
+        m.creator_zone = old.creator_zone;
+        m.joiner_zone = old.joiner_zone;
+        self.sp.maps.insert(map_id.0, m);
+    }
+
+    /// AIEncounters.updateAIShipConfig.
+    pub fn update_ai_ship_config(&mut self, config_id: U64, config: AiShipConfig) {
+        self.assert_role(roles::MAP_EDITOR);
+        require!(config_id.0 != 0 && config_id.0 <= self.sp.ai_config_count, "ConfigNotFound");
+        let t = &config.traits;
+        require!(t.accuracy <= 2 && t.hull <= 2 && t.speed <= 2, "InvalidTier");
+        require!(t.variant != 0, "InvalidVariant");
+        require!(config.ships_destroyed <= MAX_AI_KILLS, "InvalidKillCount");
+        self.sp.ai_configs.insert(config_id.0, config);
+    }
+
+    /// NodeMap.updateNode. Moving a node to another campaign moves its id
+    /// between the campaigns' node lists (swap-and-pop, as on Base).
+    pub fn update_node(&mut self, node_id: U64, node: CampaignNode) {
+        self.assert_role(roles::NODE_EDITOR);
+        let id = node_id.0;
+        let old = self.sp.nodes.get(&id).cloned().unwrap_or_else(|| env::panic_str("NodeNotFound"));
+        require!(self.sp.campaigns.contains_key(&node.campaign_id), "CampaignNotFound");
+        let mode = self.sp.map(node.map_id).mode;
+        require!(mode == MapMode::PvE || mode == MapMode::Both, "InvalidMapMode");
+        for &p in &node.prerequisites {
+            require!(p != id, "SelfPrerequisite");
+            require!(self.sp.nodes.contains_key(&p), "PrerequisiteNotFound");
+        }
+        if node.campaign_id != old.campaign_id {
+            let mut from = self.sp.campaigns.get(&old.campaign_id).cloned().unwrap_or_default();
+            if let Some(i) = from.node_ids.iter().position(|&n| n == id) {
+                from.node_ids.swap_remove(i);
+            }
+            self.sp.campaigns.insert(old.campaign_id, from);
+            let mut to = self.sp.campaigns.get(&node.campaign_id).cloned().unwrap_or_default();
+            to.node_ids.push(id);
+            self.sp.campaigns.insert(node.campaign_id, to);
+        }
+        self.sp.nodes.insert(id, node);
+    }
+
+    /// NodeMap.addPrerequisite.
+    pub fn add_prerequisite(&mut self, node_id: U64, prerequisite_id: U64) {
+        self.assert_role(roles::NODE_EDITOR);
+        let mut node = self.sp.nodes.get(&node_id.0).cloned().unwrap_or_else(|| env::panic_str("NodeNotFound"));
+        require!(prerequisite_id != node_id, "SelfPrerequisite");
+        require!(self.sp.nodes.contains_key(&prerequisite_id.0), "PrerequisiteNotFound");
+        node.prerequisites.push(prerequisite_id.0);
+        self.sp.nodes.insert(node_id.0, node);
+    }
+
+    /// NodeMap.removePrerequisite (swap-and-pop).
+    pub fn remove_prerequisite(&mut self, node_id: U64, prerequisite_id: U64) {
+        self.assert_role(roles::NODE_EDITOR);
+        let mut node = self.sp.nodes.get(&node_id.0).cloned().unwrap_or_else(|| env::panic_str("NodeNotFound"));
+        let i = node.prerequisites.iter().position(|&p| p == prerequisite_id.0).unwrap_or_else(|| env::panic_str("PrerequisiteNotInNode"));
+        node.prerequisites.swap_remove(i);
+        self.sp.nodes.insert(node_id.0, node);
+    }
+
+    /// NodeMap.setCampaignRequiredVariant.
+    pub fn set_campaign_required_variant(&mut self, campaign_id: U64, variant: u16) {
+        self.assert_role(roles::NODE_EDITOR);
+        let mut c = self.sp.campaigns.get(&campaign_id.0).cloned().unwrap_or_else(|| env::panic_str("CampaignNotFound"));
+        c.required_variant = variant;
+        self.sp.campaigns.insert(campaign_id.0, c);
     }
 
     // ================================================================ play
@@ -441,7 +600,9 @@ impl Contract {
         )
         .or_panic();
         let m = SpMatch { human: human.clone(), node_id: node_id.0, human_fleet: ship_ids, ai_ships, ended: false };
+        events::emit_board(game_id, "start", &g);
         self.save_game(game_id, g, m);
+        self.index_player_game(&human, game_id);
         self.charge_storage_since(&human, initial);
         events::emit("node_match_started", json!({ "game_id": U64(game_id), "node_id": node_id, "player": human }));
         U64(game_id)
@@ -466,9 +627,10 @@ impl Contract {
         let evs = g.move_ship(Side::Creator, &input, &self.config, now).or_panic();
         let last = g.last_move.clone();
         self.apply_engine_events(game_id.0, &mut m, &evs, now);
+        let board = events::board_frame(&g);
         self.save_game(game_id.0, g, m);
         self.charge_storage_since(&caller, initial);
-        events::emit("move", json!({ "game_id": game_id, "last_move": last }));
+        events::emit("move", json!({ "game_id": game_id, "last_move": last, "board": board }));
     }
 
     /// SinglePlayerMatch.takeAITurns: permissionless (anyone may advance the
@@ -486,6 +648,7 @@ impl Contract {
             .unwrap_or_else(|e| env::panic_str(e));
         self.apply_engine_events(game_id.0, &mut m, &res.events, now);
         let human = m.human.clone();
+        let final_board = events::board_frame(&g);
         self.save_game(game_id.0, g, m);
         self.charge_storage_since(&human, initial);
         let logs: Vec<_> = res
@@ -493,10 +656,12 @@ impl Contract {
             .iter()
             .map(|l| match l {
                 AiLog::DecisionFailed { ship_id } => json!({ "decision_failed": U64(*ship_id) }),
-                AiLog::TurnTaken { ship_id, action, target } => json!({ "ship_id": U64(*ship_id), "action": action, "target": U64(*target) }),
+                AiLog::TurnTaken { ship_id, action, target, board } => json!({ "ship_id": U64(*ship_id), "action": action, "target": U64(*target), "board": board }),
             })
             .collect();
-        events::emit("ai_turns", json!({ "game_id": game_id, "turns": logs }));
+        // `board`: after the whole call (also covers the AI conceding with no
+        // move, which logs no turn).
+        events::emit("ai_turns", json!({ "game_id": game_id, "turns": logs, "board": final_board }));
         res.moves
     }
 
@@ -508,6 +673,7 @@ impl Contract {
         let initial = env::storage_usage();
         let evs = g.force_end(Some(Side::Joiner)).or_panic();
         self.apply_engine_events(game_id.0, &mut m, &evs, Self::now_s());
+        events::emit_board(game_id.0, "forfeit", &g);
         self.save_game(game_id.0, g, m);
         self.charge_storage_since(&caller, initial);
     }
@@ -528,6 +694,32 @@ impl Contract {
 
     pub fn get_map_count(&self) -> U64 {
         U64(self.sp.map_count)
+    }
+
+    /// Maps.getAllPresetMaps, paginated: (map id, map) from id `from_index + 1`.
+    pub fn get_preset_maps(&self, from_index: Option<u64>, limit: Option<u64>) -> Vec<(U64, PresetMap)> {
+        let start = from_index.unwrap_or(0) + 1;
+        let end = (start + limit.unwrap_or(20).min(100)).min(self.sp.map_count + 1);
+        (start..end).filter_map(|id| self.sp.maps.get(&id).map(|m| (U64(id), m.clone()))).collect()
+    }
+
+    /// AIEncounters.getAIShipConfigsPaginated.
+    pub fn get_ai_ship_configs(&self, from_index: Option<u64>, limit: Option<u64>) -> Vec<(U64, AiShipConfig)> {
+        let start = from_index.unwrap_or(0) + 1;
+        let end = (start + limit.unwrap_or(20).min(100)).min(self.sp.ai_config_count + 1);
+        (start..end).filter_map(|id| self.sp.ai_configs.get(&id).map(|c| (U64(id), c.clone()))).collect()
+    }
+
+    pub fn get_campaign_count(&self) -> U64 {
+        U64(self.sp.campaign_count)
+    }
+
+    pub fn get_node_count(&self) -> U64 {
+        U64(self.sp.node_count)
+    }
+
+    pub fn get_max_placements_per_map(&self) -> u32 {
+        self.sp.max_placements_per_map
     }
 
     pub fn get_ai_config_count(&self) -> U64 {

@@ -64,6 +64,22 @@ pub struct ShipGrant {
 }
 
 /// The win-effect contracts, as values configured per node.
+#[near(serializers = [json])]
+pub struct RunNodeFlags {
+    pub node_id: U64,
+    pub locked: bool,
+    pub defeated: bool,
+}
+
+/// GameLens.RunView.
+#[near(serializers = [json])]
+pub struct RunView {
+    pub run: Run,
+    /// (ship id, persisted HP) for each roster ship.
+    pub roster_hp: Vec<(U64, u8)>,
+    pub nodes: Vec<RunNodeFlags>,
+}
+
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug)]
 pub enum WinEffect {
@@ -574,9 +590,10 @@ impl Contract {
         let evs = g.move_ship(Side::Creator, &input, &self.config, Self::now_s()).or_panic();
         let last = g.last_move.clone();
         self.apply_rl_events(game_id, &mut m, &g, &evs);
+        let board = events::board_frame(&g);
         self.save_rl(game_id, g, m);
         self.charge_storage_since(&caller, initial);
-        events::emit("move", json!({ "game_id": U64(game_id), "last_move": last }));
+        events::emit("move", json!({ "game_id": U64(game_id), "last_move": last, "board": board }));
     }
 
     /// take_ai_turns dispatch target for roguelike games.
@@ -588,6 +605,7 @@ impl Contract {
             .unwrap_or_else(|e| env::panic_str(e));
         self.apply_rl_events(game_id, &mut m, &g, &res.events);
         let player = m.player.clone();
+        let final_board = events::board_frame(&g);
         self.save_rl(game_id, g, m);
         self.charge_storage_since(&player, initial);
         let logs: Vec<_> = res
@@ -595,10 +613,10 @@ impl Contract {
             .iter()
             .map(|l| match l {
                 AiLog::DecisionFailed { ship_id } => json!({ "decision_failed": U64(*ship_id) }),
-                AiLog::TurnTaken { ship_id, action, target } => json!({ "ship_id": U64(*ship_id), "action": action, "target": U64(*target) }),
+                AiLog::TurnTaken { ship_id, action, target, board } => json!({ "ship_id": U64(*ship_id), "action": action, "target": U64(*target), "board": board }),
             })
             .collect();
-        events::emit("ai_turns", json!({ "game_id": U64(game_id), "turns": logs }));
+        events::emit("ai_turns", json!({ "game_id": U64(game_id), "turns": logs, "board": final_board }));
         res.moves
     }
 }
@@ -651,6 +669,37 @@ impl Contract {
             RlNode { campaign_id: campaign_id.0, kind, map_id: map_id.0, turn_time, max_score, creator_goes_first, cost_cap_override, children: vec![], win_effects: vec![] },
         );
         U64(id)
+    }
+
+    /// RoguelikeNodeMap.updateNode. Children and win effects are kept (they
+    /// have their own setters).
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_rl_node(
+        &mut self,
+        node_id: U64,
+        campaign_id: U64,
+        kind: RlNodeKind,
+        map_id: U64,
+        turn_time: u64,
+        max_score: u64,
+        creator_goes_first: bool,
+        cost_cap_override: u64,
+    ) {
+        self.assert_role(roles::NODE_EDITOR);
+        let mut n = self.rl.nodes.get(&node_id.0).cloned().unwrap_or_else(|| env::panic_str("NodeNotFound"));
+        require!(self.rl.campaigns.contains_key(&campaign_id.0), "CampaignNotFound");
+        if kind == RlNodeKind::Combat {
+            let m = self.sp.maps.get(&map_id.0).unwrap_or_else(|| env::panic_str("MapNotFound"));
+            require!(m.mode == MapMode::PvE || m.mode == MapMode::Both, "InvalidMapMode");
+        }
+        n.campaign_id = campaign_id.0;
+        n.kind = kind;
+        n.map_id = map_id.0;
+        n.turn_time = turn_time;
+        n.max_score = max_score;
+        n.creator_goes_first = creator_goes_first;
+        n.cost_cap_override = cost_cap_override;
+        self.rl.nodes.insert(node_id.0, n);
     }
 
     pub fn add_rl_child(&mut self, parent_id: U64, child_id: U64) {
@@ -789,6 +838,8 @@ impl Contract {
             }
         }
         run.active_game_id = game_id;
+        // After the carried-over HP is applied.
+        events::emit_board(game_id, "start", &g);
         let m = RlMatch {
             player: p.clone(),
             node_id: node_id.0,
@@ -801,6 +852,7 @@ impl Contract {
         };
         self.rl.runs.insert(p.clone(), run);
         self.save_rl(game_id, g, m);
+        self.index_player_game(&p, game_id);
         self.charge_storage_since(&p, initial);
         events::emit("combat_node_entered", json!({ "game_id": U64(game_id), "node_id": node_id, "player": p }));
         U64(game_id)
@@ -834,6 +886,7 @@ impl Contract {
             require!(m.player == p, "NotYourGame");
             let evs = g.force_end(Some(Side::Joiner)).or_panic();
             self.apply_rl_events(game_id.0, &mut m, &g, &evs);
+            events::emit_board(game_id.0, "retreat", &g);
             self.save_rl(game_id.0, g, m);
         } else {
             require!(run.active_game_id == 0, "ActiveGameInProgress");
@@ -933,6 +986,44 @@ impl Contract {
 
     pub fn get_rl_match(&self, game_id: U64) -> Option<RlMatch> {
         self.rl.matches.get(&game_id.0).cloned()
+    }
+
+    /// GameLens.getCampaignGraph: every node reachable from the campaign's
+    /// root, breadth-first, root first, each once (cycles are fine). Empty for
+    /// an unknown campaign or one with no root.
+    pub fn get_rl_campaign_graph(&self, campaign_id: U64) -> Vec<(U64, RlNode)> {
+        let Some(root) = self.rl.campaigns.get(&campaign_id.0).map(|c| c.root_node).filter(|&r| r != 0) else { return vec![] };
+        let mut out: Vec<(U64, RlNode)> = Vec::new();
+        let mut queue = vec![root];
+        let mut head = 0;
+        while head < queue.len() && queue.len() <= 512 {
+            let id = queue[head];
+            head += 1;
+            let Some(n) = self.rl.nodes.get(&id).cloned() else { continue };
+            for &c in &n.children {
+                if !queue.contains(&c) {
+                    queue.push(c);
+                }
+            }
+            out.push((U64(id), n));
+        }
+        out
+    }
+
+    /// GameLens.getRunView: the run, each roster ship's persisted HP, and this
+    /// run's locked/defeated flags for every node in its campaign graph.
+    pub fn get_run_view(&self, account_id: AccountId) -> RunView {
+        let run = self.run_of(&account_id);
+        let roster_hp = run.roster.iter().map(|&(id, _)| (U64(id), self.rl.ship_hp(&account_id, &run, id))).collect();
+        let nodes = if run.status == RunStatus::None {
+            vec![]
+        } else {
+            self.get_rl_campaign_graph(U64(run.campaign_id))
+                .into_iter()
+                .map(|(id, _)| RunNodeFlags { node_id: id, locked: self.rl.is_locked(&account_id, run.generation, id.0), defeated: self.rl.is_defeated(&account_id, run.generation, id.0) })
+                .collect()
+        };
+        RunView { run, roster_hp, nodes }
     }
 
     pub fn is_rl_node_locked(&self, account_id: AccountId, node_id: U64) -> bool {

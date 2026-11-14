@@ -243,7 +243,7 @@ impl Contract {
     }
 
     /// Lobbies.getPlayerTimeoutEnd.
-    fn timeout_end(&self, p: &AccountId) -> u64 {
+    pub(crate) fn timeout_end(&self, p: &AccountId) -> u64 {
         let a = self.accounts.get(p).cloned().unwrap_or_default();
         if a.kick_count == 0 { 0 } else { a.last_kick_time_s + a.kick_count as u64 * KICK_PENALTY_PER_KICK_S }
     }
@@ -381,15 +381,17 @@ impl Contract {
         let evs = g.move_ship(side, &input, &self.config, Self::now_s()).or_panic();
         let last = g.last_move.clone();
         let result = self.apply_pvp_events(game_id, &mut pg, &evs);
+        let board = events::board_frame(&g);
         self.save_pvp(&caller, game_id, g, pg, result);
-        events::emit("move", json!({ "game_id": U64(game_id), "last_move": last }));
+        events::emit("move", json!({ "game_id": U64(game_id), "last_move": last, "board": board }));
     }
 
-    fn force_end_pvp(&mut self, game_id: u64, winner: Side) {
+    fn force_end_pvp(&mut self, game_id: u64, winner: Side, reason: &str) {
         let caller = env::predecessor_account_id();
         let (mut g, mut pg) = self.load_pvp(game_id);
         let evs = g.force_end(Some(winner)).or_panic();
         let result = self.apply_pvp_events(game_id, &mut pg, &evs);
+        events::emit_board(game_id, reason, &g);
         self.save_pvp(&caller, game_id, g, pg, result);
     }
 
@@ -414,7 +416,14 @@ impl Contract {
         l.game_id = game_id;
         let joiner = l.joiner.clone().unwrap();
         let pg = PvpGame { lobby_id: l.id, creator: l.creator.clone(), joiner: joiner.clone(), ended: false };
+        events::emit_board(game_id, "start", &g);
         self.save_pvp(payer, game_id, g, pg, None);
+        // Each player pays for their own history row when they can; if not,
+        // the caller covers it, so the other player draining their balance
+        // can't make this game start revert.
+        let creator = l.creator.clone();
+        self.charged_or_fallback(&creator, payer, |c| c.index_player_game(&creator, game_id));
+        self.charged_or_fallback(&joiner, payer, |c| c.index_player_game(&joiner, game_id));
         events::emit("game_started", json!({ "game_id": U64(game_id), "lobby_id": U64(l.id), "creator": l.creator, "joiner": joiner }));
     }
 }
@@ -785,7 +794,7 @@ impl Contract {
         } else {
             env::panic_str("NotInGame")
         };
-        self.force_end_pvp(game_id.0, winner);
+        self.force_end_pvp(game_id.0, winner, "flee");
     }
 
     /// PvPMatch.endGameOnTimeout: the waiting player wins once the player to
@@ -803,7 +812,7 @@ impl Contract {
         } else {
             env::panic_str("NotInGame")
         };
-        self.force_end_pvp(game_id.0, side);
+        self.force_end_pvp(game_id.0, side, "timeout");
     }
 
     // ============================================================ blob registry

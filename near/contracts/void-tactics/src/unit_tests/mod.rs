@@ -6,6 +6,7 @@
 
 mod phase2;
 mod pvp;
+mod parity;
 mod roguelike;
 
 use near_sdk::json_types::U64;

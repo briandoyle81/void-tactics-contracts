@@ -269,6 +269,18 @@ impl Contract {
         Ok(())
     }
 
+    /// Ships._setCostOfShip: re-price at the variant's live costs version.
+    /// Cost and version are fixed-size fields, so this never changes storage.
+    pub(crate) fn internal_set_cost(&mut self, ship_id: u64) {
+        let mut rec = self.ship_record(ship_id);
+        require!(!rec.ship.ship_data.in_fleet, "ShipInFleet");
+        let costs = self.config.costs.get(&rec.ship.traits.variant).unwrap_or_else(|| env::panic_str("InvalidCostsVersion"));
+        rec.ship.ship_data.costs_version = costs.version;
+        rec.ship.ship_data.cost = ship_cost(costs, &rec.ship).unwrap_or_else(|e| env::panic_str(e.name()));
+        self.ships.insert(ship_id, rec);
+        events::emit("metadata_update", json!({ "ship_id": U64(ship_id) }));
+    }
+
     pub(crate) fn mark_destroyed(&mut self, ship_id: u64, now: u64) {
         if let Some(mut r) = self.ships.get(&ship_id).cloned() {
             if r.ship.ship_data.timestamp_destroyed == 0 {
@@ -332,6 +344,38 @@ impl Contract {
         }
         self.charge_storage_since(&caller, initial);
         events::emit("ship_constructed", json!({ "ship_id": ship_id }));
+    }
+
+    /// Ships.syncShipCosts: after the owner publishes new costs, a player
+    /// re-prices their own ships so fleets accept them again
+    /// (`ShipCostVersionMismatch` otherwise). Owner of every id only (HA7-08:
+    /// a third party re-pricing someone's ship could push their roster over
+    /// a cost cap); ships in a fleet are rejected.
+    pub fn sync_ship_costs(&mut self, ship_ids: Vec<U64>) {
+        let caller = env::predecessor_account_id();
+        self.charged(&caller, |c| {
+            for id in &ship_ids {
+                require!(c.ship_record(id.0).owner == caller, "NotYourShip");
+                c.internal_set_cost(id.0);
+            }
+        });
+    }
+
+    /// Ships.setCostOfShip: contract owner re-prices any ship (e.g. after a
+    /// cost table fix). Bytes, if any, are charged to the ship's owner.
+    pub fn set_cost_of_ship(&mut self, ship_id: U64) {
+        self.assert_owner();
+        let owner = self.ship_record(ship_id.0).owner;
+        self.charged(&owner, |c| c.internal_set_cost(ship_id.0));
+    }
+
+    /// Ships.constructShips: `construct_ship` for several of the caller's
+    /// ships (up to 50) in one call.
+    pub fn construct_ships(&mut self, ship_ids: Vec<U64>) {
+        require!(ship_ids.len() <= 50, "TooManyShips");
+        for id in ship_ids {
+            self.construct_ship(id);
+        }
     }
 
     // ---- NEP-171 core transfers ----

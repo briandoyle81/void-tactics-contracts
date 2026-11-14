@@ -812,3 +812,81 @@ fn blob_requires_finished_game() {
     h.ctx("alice.near", 0);
     h.c.record_blob(U64(g), acc("alice.near"), "0x".to_string() + &"ab".repeat(32));
 }
+
+// ------------------------------------------- Game.getGamesForPlayer (2026-11-14)
+
+#[test]
+/// Byte-exact attribution of each player's row (Bob's lands in Alice's
+/// call) is asserted by the sandbox PvP suite's ledger check.
+fn a_pvp_game_is_listed_for_both_players() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    h.ctx(OWNER, 0);
+    let id = h.c.create_lobby_for_addresses(acc("alice.near"), acc("bob.near"), 1000, 300, U64(0), 100).0;
+    submit(&mut h, "bob.near", id, false);
+    let game = submit(&mut h, "alice.near", id, true).unwrap();
+    for p in ["alice.near", "bob.near"] {
+        let list = h.c.get_games_for_player(acc(p), None, None);
+        assert_eq!(list.len(), 1);
+        assert_eq!((list[0].game_id.0, list[0].mode, list[0].node_or_lobby_id.0), (game, crate::history::GameMode::PvP, id));
+    }
+}
+
+/// Hostile joiner: commits a fleet, then withdraws every spare yocto so their
+/// own history row can't be paid. The creator's fleet still starts the game
+/// instead of reverting forever. (Today the joiner's lobby-list refund at
+/// game start happens to cover the row, so this path doesn't reach the
+/// fallback; `charged_or_fallback_bills_the_fallback_when_owner_cant_cover`
+/// tests the fallback itself.)
+#[test]
+fn a_joiner_draining_their_storage_cannot_block_the_game_start() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    let id = create(&mut h, "alice.near", None);
+    join(&mut h, "bob.near", id);
+    submit(&mut h, "bob.near", id, false);
+    h.ctx("bob.near", 1);
+    h.c.storage_withdraw(None);
+    assert_eq!(account(&h, "bob.near").spare_bytes(), 0);
+    let game = submit(&mut h, "alice.near", id, true).expect("game starts");
+    for p in ["alice.near", "bob.near"] {
+        assert_eq!(h.c.get_games_for_player(acc(p), None, None)[0].game_id.0, game);
+    }
+    let a = account(&h, "bob.near");
+    assert!(a.deposit >= a.locked(), "bob was never charged past his balance");
+}
+
+#[test]
+fn charged_or_fallback_bills_the_fallback_when_owner_cant_cover() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    h.ctx("bob.near", 1);
+    h.c.storage_withdraw(None);
+    let (bob0, alice0) = (account(&h, "bob.near").used_bytes, account(&h, "alice.near").used_bytes);
+    h.ctx("alice.near", 0);
+    h.c.charged_or_fallback(&acc("bob.near"), &acc("alice.near"), |c| c.index_player_game(&acc("bob.near"), 77));
+    assert_eq!(account(&h, "bob.near").used_bytes, bob0, "bob can't cover: not charged");
+    assert!(account(&h, "alice.near").used_bytes > alice0, "the caller covered bob's row");
+    assert_eq!(h.c.get_player_game_count(acc("bob.near")), 1, "the row is still written");
+    // With room, the owner pays for their own row.
+    h.ctx("bob.near", ONE_NEAR);
+    near_contract_standards::storage_management::StorageManagement::storage_deposit(&mut h.c, None, None);
+    let (bob1, alice1) = (account(&h, "bob.near").used_bytes, account(&h, "alice.near").used_bytes);
+    h.ctx("alice.near", 0);
+    h.c.charged_or_fallback(&acc("bob.near"), &acc("alice.near"), |c| c.index_player_game(&acc("bob.near"), 78));
+    assert!(account(&h, "bob.near").used_bytes > bob1);
+    assert_eq!(account(&h, "alice.near").used_bytes, alice1);
+}
+
+#[test]
+fn lobby_batch_membership_and_kick_views() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    let id = create(&mut h, "alice.near", None);
+    join(&mut h, "bob.near", id);
+    assert!(h.c.is_player_in_lobby(acc("bob.near"), U64(id)));
+    assert_eq!(h.c.get_lobbies(vec![U64(id), U64(99)]).len(), 1);
+    assert_eq!(h.c.get_lobby_count().0, id);
+    submit(&mut h, "alice.near", id, true);
+    h.now_s += 301;
+    h.ctx("alice.near", 0);
+    h.c.timeout_joiner(U64(id));
+    assert!(h.c.is_kicked_from_lobby(U64(id), acc("bob.near")));
+    assert!(h.c.get_player_timeout_end(acc("bob.near")).0 > h.now_s);
+}

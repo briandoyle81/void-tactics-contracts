@@ -721,3 +721,54 @@ fn ledger_keeps_hp_for_a_ship_that_leaves_and_returns_and_resets_per_generation(
     r.generation = 2; // a new run starts clean
     assert_eq!(h.c.rl.ship_hp(&p, &r, 3), 0);
 }
+
+// ------------------------------------------- Game.getGamesForPlayer (2026-11-14)
+
+#[test]
+fn roguelike_combat_games_are_listed_in_the_players_history() {
+    let (mut h, _) = setup(1);
+    start(&mut h, 2);
+    let g = enter(&mut h, 1);
+    win(&mut h, g);
+    let list = h.c.get_games_for_player(acc(P), None, None);
+    assert_eq!(list.len(), 1);
+    assert_eq!((list[0].game_id.0, list[0].mode, list[0].node_or_lobby_id.0, list[0].ended), (g, crate::history::GameMode::Roguelike, 1, true));
+    assert_eq!(list[0].winner, Some(Side::Creator));
+}
+
+#[test]
+fn rl_grant_claimed_view_tracks_once_per_address_grants() {
+    let (mut h, _) = setup(1);
+    assert!(!h.c.is_rl_grant_claimed(U64(1), acc(P)));
+    h.ctx(OWNER, 0);
+    h.c.set_rl_node_win_effects(U64(1), vec![WinEffect::ShipGrant(grant(1, true))]);
+    start(&mut h, 2);
+    let g = enter(&mut h, 1);
+    win(&mut h, g);
+    assert!(h.c.is_rl_grant_claimed(U64(1), acc(P)));
+}
+
+#[test]
+fn campaign_graph_is_breadth_first_from_the_root_each_node_once() {
+    let (h, _) = setup(1);
+    // root 1 -> [2, 3]; 2 -> [4]; 3 -> [4]
+    let ids: Vec<u64> = h.c.get_rl_campaign_graph(U64(1)).iter().map(|x| x.0 .0).collect();
+    assert_eq!(ids, vec![1, 2, 3, 4]);
+    assert!(h.c.get_rl_campaign_graph(U64(9)).is_empty());
+}
+
+#[test]
+fn run_view_bundles_the_run_roster_hp_and_node_flags() {
+    let (mut h, _) = setup(1);
+    assert!(h.c.get_run_view(acc(P)).nodes.is_empty(), "no run yet");
+    let roster = start(&mut h, 2);
+    let g = enter(&mut h, 1);
+    win(&mut h, g);
+    let g = enter(&mut h, 2);
+    win(&mut h, g);
+    let v = h.c.get_run_view(acc(P));
+    assert_eq!(v.roster_hp.len(), roster.len());
+    let flag = |n: u64| v.nodes.iter().find(|x| x.node_id.0 == n).map(|x| (x.locked, x.defeated)).unwrap();
+    assert_eq!(flag(2), (false, true));
+    assert_eq!(flag(3), (true, false), "the sibling is locked by the one-way commit");
+}

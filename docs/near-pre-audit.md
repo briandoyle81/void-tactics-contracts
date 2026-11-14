@@ -1,12 +1,12 @@
 # NEAR port: pre-audit notes
 
-_Written 2026-11-13 (updated the same day: ship names ported; decisions on §8 recorded), describing `near/` on branch `near-migration-experiment` as of that date. Contract behavior changes over time; check the date before relying on details._
+_Written 2026-11-13 (updated the same day: ship names ported; decisions on §8 recorded; updated 2026-11-14: EVM parity audit and fixes, §10), describing `near/` on branch `near-migration-experiment` as of that date. Contract behavior changes over time; check the date before relying on details._
 
 ## 1. Scope
 
 | Contract | Source | Size (release WASM) |
 |---|---|---|
-| Game (`void-tactics`): ships (NEP-171), UTC/DEC/medal (NEP-245), storage ledger (NEP-145), randomness, single-player campaign, PvP, roguelike, economy, admin | `near/contracts/void-tactics/` + rules in `near/crates/vt-core/` | ~1.28 MB (about 380 KB of it is the 21,826-entry ship-name table) |
+| Game (`void-tactics`): ships (NEP-171), UTC/DEC/medal (NEP-245), storage ledger (NEP-145), randomness, single-player campaign, PvP, roguelike, economy, admin | `near/contracts/void-tactics/` + rules in `near/crates/vt-core/` | ~1.42 MB as of the 2026-11-14 afternoon build (about 380 KB of it is the 21,826-entry ship-name table) |
 | Renderer (`void-renderer`): ship art, NFT metadata JSON, medal art (views) | `near/contracts/void-renderer/` (`src/art.rs` generated) | ~997 KB |
 
 Out of scope: Tournament and the Uniswap v4 lottery hook (dropped for NEAR). The variant-1 ship-name generator (`OnchainShipNames` from the separate `onchain_names` repo) is compiled into the game contract instead of being an external contract.
@@ -35,10 +35,19 @@ All of these use fixtures exported from the unmodified Solidity contracts (`scri
   - `VERIFIER`: Selfie verification.
   - `SPONSOR`: storage sponsorship from the owner-funded pool.
   - `BLOB_WRITER`: replay blobs.
+  - `MINTER` (2026-11-14): `create_ships_for`, the card-checkout server mint (Base: `FIREBASE_FLOW_MINTER` on `Ships.createShips`). A compromised minter key can mint unlimited ships, as on Base. Keep that key on the server only, and revoke it with `set_role(account, 0)`.
 - **Code changes:**
   - **Upgrades.** `upgrade` (owner-only, raw WASM input) redeploys and then calls `#[private] migrate`. If the migration fails, the deploy fails too.
   - **Key posture.** After deploy, both contract accounts' full-access keys are deleted (`deploy --delete-keys`), so the owner's `upgrade` is the only way to change code. The deploy tool refuses this if the owner is a contract account, because that would freeze the code.
   - **Drill.** `phase6_hardening::upgrade_drill_with_full_access_keys_deleted` checks that only the owner can upgrade, that a direct redeploy is impossible once the key is deleted, and that state survives the upgrade.
+  - **State migrations** (2026-11-14). The root state struct may only grow by appending fields at the end. Borsh encodes a struct as its fields in order, so `migrate` upgrades older state by appending the new fields' encoding to the stored bytes; already-current state decodes as is. Storage-key enum variants are also append-only, because a variant's position is its storage prefix.
+    - `phase6_hardening::upgrade_migrates_state_written_by_the_2026_11_13_testnet_code` runs the exact WASM deployed on 2026-11-13 (`near/tests/fixtures/`) and upgrades it.
+    - It checks that ships, balances and the ledger survive, that new code works on the migrated state with byte-exact charging, and that a second upgrade is a no-op.
+    - Testnet was upgraded this way on 2026-11-14.
+    - The renderer did the same for its `pending_owner` field (2026-11-14). `renderer_upgrade_migrates_state_and_ownership_moves_in_two_steps` starts from the exact testnet renderer WASM.
+    - New game-contract settings from the second parity pass (pending owner, the per-token mint switches) live in the existing `settings` map instead of new root fields, so that upgrade needs no migration.
+- **Ownership transfer** (2026-11-14; Base: `Ownable.transferOwnership`). Both contracts use two steps: the owner nominates with `transfer_ownership`, and the nominee calls `accept_ownership`. A typo or an unreachable account can't take admin away. Roles are kept. `renounceOwnership` isn't offered, because without an owner, code and rules could never change again. This is how the deploy account hands over to a multisig.
+- **Live-game map edits** (2026-11-14; Base: `Maps.setBlockedTile`/`setImpassableTile`/`setScoringTile`). A `MAP_EDITOR` can change terrain and scoring in a game **in progress**, as on Base, until it ends. That's a real power over live matches: give `MAP_EDITOR` only to trusted operators. Each edit emits `game_map_edited`.
 - **Recommendation:** put the owner behind a multisig with a timelock. An upgrade can change any rule.
 
 ## 3. Storage model (solvency)
@@ -52,13 +61,17 @@ All of these use fixtures exported from the unmodified Solidity contracts (`scri
   - Fleets and lobby-list entries: that player.
   - Game state and results: whoever's call wrote them.
   - Single-player and roguelike games: the player.
+  - Game-history rows (2026-11-14): each participant. In PvP, the second fleet's call writes both players' rows.
+    - The other player's row is charged to them only if their balance covers it; otherwise the caller covers it (`charged_or_fallback`).
+    - The fallback exists so a hostile player who empties their balance can't make the other player's call revert.
+    - Today the joiner's lobby-list refund at game start covers their row anyway; the fallback makes that safety independent of entry sizes.
   - Without this, a stranger pruning a stale lobby would be refunded the creator's bytes.
 - **Transfers** move the ship's prepaid bytes with it; the sender pays. Nobody can fill another player's storage by sending ships.
 - **Fixed-size records.** Account records and randomness requests never grow, so token mints, kill rewards and the randomness callback never need to charge anyone and can't fail for storage.
 - **Paid purchases.** A NEAR purchase prepays its own bytes out of the price; a price below a pack's storage cost is rejected.
-- **Sponsorship.** Sponsored NEAR can be spent on storage but never withdrawn, and unspent sponsorship returns to the pool on unregister.
-- **Contract-paid storage.** Code plus owner-seeded content is about 1.32 MB on the game account (13.2 NEAR) and about 1 MB on the renderer (10 NEAR). Fund each with a buffer on top.
-- **Upgrade transaction size.** `upgrade` carries the new WASM as call input, and a transaction is capped at 1.5 MB. The game WASM is 1.28 MB, so about 220 KB of growth remains before upgrades need a staged upload (e.g. chunked writes, or a global contract).
+- **Sponsorship.** Sponsored NEAR can be spent on storage but never withdrawn, and unspent sponsorship returns to the pool on unregister. NEAR the minter attaches to `create_ships_for` is credited the same way, so a card buyer can't cash out the server's deposit. Since 2026-11-14 the NEP-145 `available` field reports the withdrawable amount (deposit minus the larger of locked and sponsored). Before, it showed sponsored NEAR as available even though `storage_withdraw` refused it.
+- **Contract-paid storage.** Code plus owner-seeded content is about 1.5 MB on the game account (about 15 NEAR, as of the 2026-11-14 afternoon build) and about 1 MB on the renderer (10 NEAR). Fund each with a buffer on top. Every upgrade that grows the code needs spare balance for the extra bytes, or it fails with `LackBalanceForState` (it did once on testnet and rolled back cleanly).
+- **Upgrade transaction size.** `upgrade` carries the new WASM as call input, and a transaction is capped at 1.5 MB. As of the 2026-11-14 afternoon build the game WASM is 1.42 MB, so **about 148 KB** of growth remains before upgrades need a staged upload (e.g. chunked writes, or a global contract). This is now a near-term constraint.
 
 ## 4. Randomness
 
@@ -91,6 +104,12 @@ Each method below has no access control beyond "must be registered" or "must be 
 | `end_game_on_timeout`, `flee` | — | Participant-only. Timeout is strictly greater than the turn time. |
 | `record_blob` | — | Participant or `BLOB_WRITER` only; storage paid by the caller. |
 | `buy_utc_with_near` | — | Exact price; mints the pegged UTC amount. |
+| `sync_ship_costs` (2026-11-14) | Re-prices someone else's ships to push their roster over a cost cap | Owner of every id only (`NotYourShip`); ships in a fleet are rejected. Same rule as Base (HA7-08). No storage change. |
+| `get_games_for_player` rows (2026-11-14) | A hostile PvP opponent empties their balance so the game start reverts | `charged_or_fallback`: the caller covers that row instead. Tested in `charged_or_fallback_bills_the_fallback_when_owner_cant_cover`. |
+| `create_ships_for` (2026-11-14) | — | `MINTER` role or owner only. Its deposit is non-withdrawable sponsorship. |
+| `mt_burn` (2026-11-14) | — | Burns the caller's own balance only (1 yocto). The medal can't be burned (soulbound). |
+| `construct_ships` (2026-11-14) | — | Each id goes through `construct_ship` (owner of the ship only, deterministic from the stored value). At most 50 per call. |
+| Preview and batch views (2026-11-14) | Expensive views | Bounded: `get_games` ≤ 10, `get_lobbies` ≤ 50, `get_ships_by_ids`/`get_ship_attributes` ≤ 100, `get_rl_campaign_graph` ≤ 512 nodes. Views cost the caller's RPC, not the contract. |
 
 Private callbacks (`resolve_randomness`, `nft_resolve_transfer`, `migrate`) reject external callers (tested). `new` cannot re-initialize, because near-sdk's `#[init]` refuses when state exists.
 
@@ -129,21 +148,56 @@ Both the Solidity engine and the port behave this way. Each was reviewed and **k
 | Layer | Count | What |
 |---|---|---|
 | `vt-core` | 17 | Rules, plus the generation, ship-name and full-game golden-parity suites |
-| `void-tactics` unit | 184 | Ported Hardhat cases (same names) for ships, economy, claims, medal, eligibility, storefront, PvP lobbies and matches, roguelike |
+| `void-tactics` unit | 224 (as of 2026-11-14) | Ported Hardhat cases (same names) for ships, economy, claims, medal, eligibility, storefront, PvP lobbies and matches, roguelike |
 | `void-renderer` | 2 | Color math; byte-for-byte golden parity (192 ships + medal) |
-| Sandbox (`near-workspaces`) | 19 | Randomness (later block, batch-revert immunity, private callback), storage ledger exactness, session keys, hostile NEP-171 receivers, full SP/PvP/roguelike games, renderer via views, full seed, upgrade drill with keys deleted, gas budgets |
+| Sandbox (`near-workspaces`) | 22 (as of 2026-11-14, incl. `phase7_replay`) | Randomness (later block, batch-revert immunity, private callback), storage ledger exactness, session keys, hostile NEP-171 receivers, full SP/PvP/roguelike games, renderer via views, full seed, upgrade drill with keys deleted, gas budgets |
 
 **Gas budget**, measured on the heaviest seeded encounter (14 AI ships against 8):
-- AI turns peak at 10 Tgas per `take_ai_turns(8)`.
-- Moves peak at 4 Tgas.
-- Starting the match costs 6 Tgas.
-- Buying and constructing 60 ships costs 106 Tgas.
+- AI turns peak at 14 Tgas per `take_ai_turns(8)` (10 before replay frames were added, 2026-11-14).
+- Moves peak at 5 Tgas (2026-11-14, with replay frames).
+- Starting the match costs 8 Tgas (2026-11-14, with replay frames).
+- Buying and constructing 60 ships costs 107 Tgas.
 
 The per-receipt limit is 1 PGas.
 
 CI: `.github/workflows/near.yml` runs every layer, plus a check that the generated art matches the Solidity leaves.
 
-## 10. Open items before mainnet
+## 10. EVM parity audit (2026-11-14)
+
+Every external function of the in-scope Solidity contracts was compared against the NEAR ABI. Most names without a match are wiring between contracts that one contract doesn't need, or have a renamed equivalent. These real gaps were found, and all but the last are fixed:
+
+1. ~~No `syncShipCosts`.~~ **Bug:** after any `set_costs`, every existing ship failed `ShipCostVersionMismatch` in every fleet, permanently. Fixed: `sync_ship_costs` (owner of each ship) and `set_cost_of_ship` (owner).
+2. ~~No server mint for card checkout (`Ships.createShips` via `isAllowedToCreateShips`).~~ Fixed: `create_ships_for` under the `MINTER` role.
+3. ~~Create-only content.~~ Fixed:
+   - `update_preset_map`, `update_preset_map_impassable`, `update_preset_scoring_map`, `set_map_mode`, and `update_full_preset_map` (NEAR only);
+   - `update_ai_ship_config`;
+   - `update_node`, `add_prerequisite`, `remove_prerequisite`, `set_campaign_required_variant`;
+   - `update_rl_node`.
+
+   Live games keep their own copy of their map and AI fleet, so edits never change a match in progress (tested).
+4. ~~No `Game.getGamesForPlayer`.~~ Fixed: `get_games_for_player`, a per-player history that keeps finished games. It added the first new root field, migrated as described in §2.
+5. ~~Public getters with no view:~~
+   - ~~`tutorialCompleted`, `ShipGrantWinEffect.hasClaimed`;~~
+   - ~~lobby settings and every scalar rules setting;~~
+   - ~~referral counts, `getShipsByIds`;~~
+   - ~~paginated map and AI-config lists, and counts.~~
+
+   Fixed: `is_tutorial_completed`, `is_rl_grant_claimed`, `get_settings`, `get_lobby_config`, `get_player_summary`, `get_ships_by_ids`, `get_preset_maps`, `get_ai_ship_configs` and the count views.
+6. ~~No NEAR deployment record (content key → id).~~ Fixed:
+   - the deploy tool writes `near/deployments/<network>.json`, only after checking every id against the chain (203 checks on testnet);
+   - `--upgrade` and `--record-only` modes;
+   - `seed::plan_all`, a dry-run plan of the ids.
+
+   The full-seed test checks that the plan equals the real seed and that a record with swapped ids is rejected.
+7. ~~**Still open: cross-device replay.** Base had no on-chain move list either; frontends read event logs, and NEAR RPC can't search logs. The `move` events exist. The options are an indexer (recommended; no on-chain cost) or an on-chain move log charged to each mover (very roughly 0.02 NEAR for a 60-move game). The project owner is deciding.~~ Decided 2026-11-14: an indexer.
+   - Every event that changes a game now carries the whole compact board (`vt_core::replay`): about 620 bytes for the largest seeded board. That covers game starts, each human move, each AI move inside `ai_turns`, and games ended outside a move.
+   - Logs aren't state, so this has no storage cost. Gas on the heaviest board: `take_ai_turns(8)` went from 10 to 14 Tgas.
+   - **Per-receipt cap:** 16,384 bytes of logs and 100 entries. The heaviest measured receipt logs 6.2 KB (8 AI moves on 22 ships). `phase7_replay` asserts the cap; a future feature that adds logs to AI turns must keep that margin.
+   - Verified by rebuilding a whole game from logs alone (`phase7_replay`) and by the golden-game suite (743 steps).
+
+Tests: 40 new contract unit tests (`unit_tests/parity.rs`, plus the history and hostile-joiner cases in `pvp.rs` and `roguelike.rs`) and 1 new sandbox test (the migration).
+
+## 11. Open items before mainnet
 
 1. ~~Port OnchainRandomShipNames (source pending) and refresh the generation goldens with real names.~~ Done 2026-11-13: ported, verified against the live contract; the generation goldens now check the mock name, as the Hardhat export used it.
 2. Set real NEAR pricing (`seed_rules_priced(.., NearUsd::Live)` prices from the live NEAR/USD rate).
@@ -151,3 +205,5 @@ CI: `.github/workflows/near.yml` runs every layer, plus a check that the generat
 4. ~~Decide on the lobby join-griefing mitigation and on the disabled-side rule.~~ Decided 2026-11-13: keep both (§8).
 5. Frontend gateway for `base_uri`, plus an indexer for history (NEAR has no `eth_getLogs`).
 6. External audit, which is calendar-bound.
+7. ~~Decide how replays work across devices: an indexer or an on-chain move log (§10).~~ Decided 2026-11-14: an indexer, with full boards in events (§10). The indexer service itself still needs building.
+8. Plan a staged upload before the game WASM grows past the 1.5 MB transaction limit (about 160 KB left, §3).

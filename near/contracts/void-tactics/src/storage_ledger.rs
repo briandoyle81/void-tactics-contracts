@@ -75,8 +75,17 @@ impl Account {
         self.deposit.saturating_sub(self.locked())
     }
 
+    /// What `storage_withdraw` will pay out: sponsored NEAR (storage
+    /// sponsorship, minter-funded card purchases) can be spent on storage but
+    /// never withdrawn.
+    pub fn withdrawable(&self) -> NearToken {
+        self.deposit.saturating_sub(self.locked().max(self.sponsored))
+    }
+
+    /// NEP-145 `available` is the withdrawable amount (not spending capacity,
+    /// which `spare_bytes` reports and which includes sponsored NEAR).
     fn to_balance(&self) -> StorageBalance {
-        StorageBalance { total: self.deposit, available: self.available() }
+        StorageBalance { total: self.deposit, available: self.withdrawable() }
     }
 
     /// Bytes this account can still pay for.
@@ -134,6 +143,21 @@ impl Contract {
         let before = env::storage_usage();
         let r = f(self);
         self.charge_storage_since(payer, before);
+        r
+    }
+
+    /// Runs `f` and charges its bytes to `owner` if `owner`'s balance covers
+    /// them, else to `fallback` (who must). For writes made on someone else's
+    /// behalf inside another player's call: `owner` emptying their balance
+    /// can never make that call revert (hostile-actor rule, CLAUDE.md).
+    pub(crate) fn charged_or_fallback<R>(&mut self, owner: &AccountId, fallback: &AccountId, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.flush_all();
+        let before = env::storage_usage();
+        let r = f(self);
+        self.flush_all();
+        let added = env::storage_usage().saturating_sub(before);
+        let covers = self.accounts.get(owner).is_some_and(|a| a.spare_bytes() >= added);
+        self.charge_storage_since(if covers { owner } else { fallback }, before);
         r
     }
 
@@ -211,8 +235,7 @@ impl StorageManagement for Contract {
         let account_id = env::predecessor_account_id();
         let mut acct = self.account(&account_id);
         // Sponsored NEAR may only be spent on storage, never withdrawn.
-        let floor = acct.locked().max(acct.sponsored);
-        let available = acct.deposit.saturating_sub(floor);
+        let available = acct.withdrawable();
         let amount = amount.unwrap_or(available);
         require!(amount <= available, "WithdrawExceedsAvailable");
         acct.deposit = acct.deposit.saturating_sub(amount);

@@ -37,6 +37,9 @@ pub struct Renderer {
     owner_id: AccountId,
     /// (variant, kind, enum index) -> display name.
     names: LookupMap<(u16, u8, u8), String>,
+    /// Nominated by `transfer_ownership` until it accepts (2026-11-14). Must
+    /// stay the LAST field: `migrate` upgrades older state by appending it.
+    pending_owner: Option<AccountId>,
 }
 
 impl Names for Renderer {
@@ -58,7 +61,7 @@ impl Names for Renderer {
 impl Renderer {
     #[init]
     pub fn new(owner_id: AccountId) -> Self {
-        Self { owner_id, names: LookupMap::new(StorageKey::Names) }
+        Self { owner_id, names: LookupMap::new(StorageKey::Names), pending_owner: None }
     }
 
     /// RenderMetadata.set{MainWeapon,Armor,Shields,Special}Name, batched.
@@ -90,10 +93,46 @@ impl Renderer {
         )
     }
 
+    /// Current state decodes as-is. State from before 2026-11-14 ended at
+    /// `names`: Borsh encodes fields in order, so appending an empty
+    /// `pending_owner` gives the new layout.
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        env::state_read().unwrap_or_else(|| env::panic_str("NoState"))
+        use near_sdk::borsh::BorshDeserialize;
+        let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("NoState"));
+        if let Ok(r) = Self::try_from_slice(&raw) {
+            return r;
+        }
+        let mut upgraded = raw;
+        upgraded.extend(near_sdk::borsh::to_vec(&Option::<AccountId>::None).unwrap_or_else(|_| env::panic_str("MigrationFailed")));
+        Self::try_from_slice(&upgraded).unwrap_or_else(|_| env::panic_str("MigrationFailed"))
+    }
+
+    /// Two-step ownership transfer, as on the game contract.
+    pub fn transfer_ownership(&mut self, new_owner: AccountId) {
+        require!(env::predecessor_account_id() == self.owner_id, "NotOwner");
+        self.pending_owner = Some(new_owner);
+    }
+
+    pub fn cancel_ownership_transfer(&mut self) {
+        require!(env::predecessor_account_id() == self.owner_id, "NotOwner");
+        self.pending_owner = None;
+    }
+
+    pub fn accept_ownership(&mut self) {
+        let caller = env::predecessor_account_id();
+        require!(self.pending_owner.as_ref() == Some(&caller), "NotPendingOwner");
+        self.pending_owner = None;
+        self.owner_id = caller;
+    }
+
+    pub fn owner_id(&self) -> AccountId {
+        self.owner_id.clone()
+    }
+
+    pub fn get_pending_owner(&self) -> Option<AccountId> {
+        self.pending_owner.clone()
     }
 
     pub fn get_name(&self, variant: u16, kind: NameKind, index: u8) -> Option<String> {

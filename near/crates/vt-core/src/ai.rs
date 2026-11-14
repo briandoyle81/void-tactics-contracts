@@ -1543,7 +1543,8 @@ pub fn pick_ship(g: &GameState, is_support: &dyn Fn(u64) -> bool) -> Result<Opti
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AiLog {
     DecisionFailed { ship_id: u64 },
-    TurnTaken { ship_id: u64, action: ActionType, target: u64 },
+    /// `board`: the whole board right after this move (see crate::replay).
+    TurnTaken { ship_id: u64, action: ActionType, target: u64, board: crate::replay::CompactBoard },
 }
 
 #[derive(Default, Debug)]
@@ -1612,13 +1613,13 @@ pub fn take_ai_turns(
         let primary = MoveInput { ship_id, new_row: d.dest_row, new_col: d.dest_col, action: d.action, target_ship_id: d.target };
         if let Some(ev) = attempt(g, primary) {
             out.events.extend(ev);
-            out.logs.push(AiLog::TurnTaken { ship_id, action: d.action, target: d.target });
+            out.logs.push(AiLog::TurnTaken { ship_id, action: d.action, target: d.target, board: crate::replay::compact_board(g) });
         } else {
             let pass = MoveInput { ship_id, new_row: row, new_col: col, action: ActionType::Pass, target_ship_id: 0 };
             match attempt(g, pass) {
                 Some(ev) => {
                     out.events.extend(ev);
-                    out.logs.push(AiLog::TurnTaken { ship_id, action: ActionType::Pass, target: 0 });
+                    out.logs.push(AiLog::TurnTaken { ship_id, action: ActionType::Pass, target: 0, board: crate::replay::compact_board(g) });
                 }
                 None => break,
             }

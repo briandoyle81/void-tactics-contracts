@@ -25,7 +25,7 @@ pub fn repo_path(rel: &str) -> String {
     format!("{}/../../{rel}", env!("CARGO_MANIFEST_DIR"))
 }
 
-fn read_json(rel: &str) -> Result<Value> {
+pub(crate) fn read_json(rel: &str) -> Result<Value> {
     let p = repo_path(rel);
     Ok(serde_json::from_str(&std::fs::read_to_string(&p).with_context(|| p.clone())?)?)
 }
@@ -139,6 +139,12 @@ pub async fn seed_rules_priced(owner: &Account, contract: &Contract, near_usd: N
 /// Seeds the single-player starter content. `max_nodes` limits the campaign
 /// to its first N nodes (and only the maps/configs they use).
 pub async fn seed_single_player(owner: &Account, contract: &Contract, max_nodes: usize) -> Result<SeedSummary> {
+    seed_single_player_impl(owner, contract, max_nodes, false).await
+}
+
+/// `dry`: build the calls and the ids they produce on a fresh contract, but
+/// send nothing (see `plan_all`).
+async fn seed_single_player_impl(owner: &Account, contract: &Contract, max_nodes: usize, dry: bool) -> Result<SeedSummary> {
     let content = read_json("ignition/data/singlePlayerStarterContent.json")?;
     let nodes: Vec<&Value> = content["campaignNodes"].as_array().unwrap().iter().take(max_nodes).collect();
     let wanted_maps: Vec<&str> = nodes.iter().map(|n| n["mapKey"].as_str().unwrap()).collect();
@@ -219,13 +225,17 @@ pub async fn seed_single_player(owner: &Account, contract: &Contract, max_nodes:
             }}),
         ));
     }
-    send_batched(owner, contract, calls).await?;
+    if !dry {
+        send_batched(owner, contract, calls).await?;
+    }
     Ok(SeedSummary { map_ids, config_ids, node_ids, campaign_id })
 }
 
 /// Placeholder win-effect values from the deploy module (DECBonusWinEffect
 /// bonusAmount, HealAboveFloorWinEffect healToPercent).
 pub const DEC_BONUS_AMOUNT: u64 = 20;
+/// Campaign node whose completion makes the hive medal claimable.
+pub const MEDAL_FINAL_NODE_KEY: &str = "f06";
 pub const HEAL_TO_PERCENT: u8 = 100;
 
 async fn view_u64(contract: &Contract, method: &str) -> Result<u64> {
@@ -239,10 +249,36 @@ async fn view_u64(contract: &Contract, method: &str) -> Result<u64> {
 /// pass the single-player seed so shared keys (e.g. a roguelike node on a
 /// campaign map) reuse those ids. Returns the campaign id.
 pub async fn seed_roguelike(owner: &Account, contract: &Contract, sp_seed: Option<&SeedSummary>) -> Result<u64> {
+    Ok(seed_roguelike_impl(owner, contract, sp_seed, None).await?.campaign_id)
+}
+
+/// Ids the roguelike seed assigned (maps and configs include the shared
+/// single-player ones it reused).
+#[derive(Clone, Debug, Default)]
+pub struct RlSeed {
+    pub campaign_id: u64,
+    pub map_ids: HashMap<String, u64>,
+    pub config_ids: HashMap<String, u64>,
+    pub node_ids: HashMap<String, u64>,
+}
+
+/// Counts on the contract before the roguelike seed; given = dry run.
+#[derive(Clone, Copy, Debug)]
+pub struct RlBases {
+    pub map_base: u64,
+    pub config_base: u64,
+    pub campaign_base: u64,
+    pub node_base: u64,
+}
+
+async fn seed_roguelike_impl(owner: &Account, contract: &Contract, sp_seed: Option<&SeedSummary>, plan: Option<RlBases>) -> Result<RlSeed> {
+    let dry = plan.is_some();
     let rl = read_json("ignition/data/roguelikeStarterContent.json")?;
     let sp = read_json("ignition/data/singlePlayerStarterContent.json")?;
-    let map_base = view_u64(contract, "get_map_count").await?;
-    let config_base = view_u64(contract, "get_ai_config_count").await?;
+    let (map_base, config_base) = match plan {
+        Some(b) => (b.map_base, b.config_base),
+        None => (view_u64(contract, "get_map_count").await?, view_u64(contract, "get_ai_config_count").await?),
+    };
     let colors = &sp["aiShipColors"];
     let mut calls: Vec<(&'static str, Value)> = Vec::new();
 
@@ -311,16 +347,21 @@ pub async fn seed_roguelike(owner: &Account, contract: &Contract, sp_seed: Optio
             json!({"map_id": map_ids[p["mapKey"].as_str().unwrap()].to_string(), "positions": positions(&p["positions"]), "config_ids": ids}),
         ));
     }
-    send_batched(owner, contract, std::mem::take(&mut calls)).await?;
+    if !dry {
+        send_batched(owner, contract, std::mem::take(&mut calls)).await?;
+    }
 
     // Campaign graph.
-    let campaign: String = owner.call(contract.id(), "create_rl_campaign").transact().await?.into_result()?.json()?;
-    let node_base = {
-        let mut n = 0u64;
-        while contract.view("get_rl_node").args_json(json!({"node_id": (n + 1).to_string()})).await?.json::<Option<Value>>()?.is_some() {
-            n += 1;
+    let (campaign, node_base): (String, u64) = match plan {
+        Some(b) => ((b.campaign_base + 1).to_string(), b.node_base),
+        None => {
+            let campaign: String = owner.call(contract.id(), "create_rl_campaign").transact().await?.into_result()?.json()?;
+            let mut n = 0u64;
+            while contract.view("get_rl_node").args_json(json!({"node_id": (n + 1).to_string()})).await?.json::<Option<Value>>()?.is_some() {
+                n += 1;
+            }
+            (campaign, n)
         }
-        n
     };
     let mut node_ids = HashMap::new();
     for n in rl["nodes"].as_array().unwrap() {
@@ -381,8 +422,10 @@ pub async fn seed_roguelike(owner: &Account, contract: &Contract, sp_seed: Optio
             calls.push(("set_rl_node_win_effects", json!({"node_id": node_ids[n["key"].as_str().unwrap()].to_string(), "effects": effects})));
         }
     }
-    send_batched(owner, contract, calls).await?;
-    Ok(campaign.parse()?)
+    if !dry {
+        send_batched(owner, contract, calls).await?;
+    }
+    Ok(RlSeed { campaign_id: campaign.parse()?, map_ids, config_ids, node_ids })
 }
 
 /// Sets the renderer's equipment display names from near/seed/config.json
@@ -402,8 +445,16 @@ pub async fn seed_renderer(owner: &Account, renderer: &Contract) -> Result<()> {
 /// Seeds the PvP maps from ignition/data/pvpStarterContent.json (ids continue
 /// after existing maps). Returns key -> map id.
 pub async fn seed_pvp_maps(owner: &Account, contract: &Contract) -> Result<HashMap<String, u64>> {
+    seed_pvp_impl(owner, contract, None).await
+}
+
+/// `plan_base`: the map count before this seed; given = dry run.
+async fn seed_pvp_impl(owner: &Account, contract: &Contract, plan_base: Option<u64>) -> Result<HashMap<String, u64>> {
     let pvp = read_json("ignition/data/pvpStarterContent.json")?;
-    let base = view_u64(contract, "get_map_count").await?;
+    let base = match plan_base {
+        Some(b) => b,
+        None => view_u64(contract, "get_map_count").await?,
+    };
     let mut ids = HashMap::new();
     let mut calls: Vec<(&'static str, Value)> = Vec::new();
     for (i, m) in pvp["maps"].as_array().unwrap().iter().enumerate() {
@@ -424,13 +475,16 @@ pub async fn seed_pvp_maps(owner: &Account, contract: &Contract) -> Result<HashM
             calls.push(("set_deployment_zones", json!({"map_id": id.to_string(), "creator_zone": positions(cz), "joiner_zone": positions(jz)})));
         }
     }
-    send_batched(owner, contract, calls).await?;
+    if plan_base.is_none() {
+        send_batched(owner, contract, calls).await?;
+    }
     Ok(ids)
 }
 
 pub struct FullSeed {
     pub single_player: SeedSummary,
     pub roguelike_campaign: u64,
+    pub roguelike: RlSeed,
     pub pvp_maps: HashMap<String, u64>,
 }
 
@@ -440,10 +494,32 @@ pub struct FullSeed {
 pub async fn seed_all(owner: &Account, contract: &Contract, renderer: Option<&Contract>, near_usd: NearUsd) -> Result<FullSeed> {
     seed_rules_priced(owner, contract, near_usd).await?;
     let single_player = seed_single_player(owner, contract, usize::MAX).await?;
-    let roguelike_campaign = seed_roguelike(owner, contract, Some(&single_player)).await?;
+    // The medal is claimable after the main campaign's final node (deploy
+    // module: ShatteredHiveMedal(nodeMap, nodeIds["f06"])).
+    owner
+        .call(contract.id(), "set_medal_final_node")
+        .args_json(json!({"node_id": single_player.node_ids[MEDAL_FINAL_NODE_KEY].to_string()}))
+        .transact()
+        .await?
+        .into_result()?;
+    let roguelike = seed_roguelike_impl(owner, contract, Some(&single_player), None).await?;
     let pvp_maps = seed_pvp_maps(owner, contract).await?;
     if let Some(r) = renderer {
         seed_renderer(owner, r).await?;
     }
-    Ok(FullSeed { single_player, roguelike_campaign, pvp_maps })
+    Ok(FullSeed { single_player, roguelike_campaign: roguelike.campaign_id, roguelike, pvp_maps })
+}
+
+/// The ids `seed_all` assigns on a fresh contract, without sending anything.
+/// The NEAR seed is sequential transactions from one signer, so creation
+/// order (and so every id) is deterministic; `deployment::verify` still
+/// checks each id against the chain before a record is written.
+pub async fn plan_all(owner: &Account, contract: &Contract) -> Result<FullSeed> {
+    let single_player = seed_single_player_impl(owner, contract, usize::MAX, true).await?;
+    let sp_maps = single_player.map_ids.len() as u64;
+    let bases = RlBases { map_base: sp_maps, config_base: single_player.config_ids.len() as u64, campaign_base: 0, node_base: 0 };
+    let roguelike = seed_roguelike_impl(owner, contract, Some(&single_player), Some(bases)).await?;
+    let rl_created = roguelike.map_ids.values().filter(|&&id| id > sp_maps).count() as u64;
+    let pvp_maps = seed_pvp_impl(owner, contract, Some(sp_maps + rl_created)).await?;
+    Ok(FullSeed { single_player, roguelike_campaign: roguelike.campaign_id, roguelike, pvp_maps })
 }

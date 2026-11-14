@@ -123,6 +123,39 @@ impl Contract {
         ships.into_iter().map(U64).collect()
     }
 
+    /// Ships.createShips for an allowlisted server (Base: FIREBASE_FLOW_MINTER,
+    /// used for card checkout). `MINTER` role or owner. Same rank presets
+    /// and purchase counting as a paid pack unless `is_free`.
+    ///
+    /// The attached NEAR pays for the recipient's storage: it is credited as
+    /// sponsored deposit (spendable on storage, never withdrawable by the
+    /// player, returned to the sponsor pool on unregister), so a card buyer
+    /// needs no NEAR and can't cash out the server's deposit. The recipient
+    /// is registered if needed; the call fails if the deposit plus any
+    /// existing balance can't cover the new bytes.
+    #[payable]
+    pub fn create_ships_for(&mut self, to: AccountId, amount: u32, variant: u16, tier: u8, is_free: bool) -> Vec<U64> {
+        self.assert_role(roles::MINTER);
+        require!(amount > 0, "ZeroAmount");
+        let paid = env::attached_deposit();
+        if !self.accounts.contains_key(&to) {
+            self.register_without_deposit(&to);
+        }
+        if !paid.is_zero() {
+            let mut a = self.account(&to);
+            a.sponsored = a.sponsored.saturating_add(paid);
+            a.deposit = a.deposit.saturating_add(paid);
+            self.put_account(&to, a);
+        }
+        self.flush_all();
+        let initial = env::storage_usage();
+        let (ships, randoms) = self.internal_create_ships(&to, amount, variant, tier, is_free);
+        self.charge_storage_since(&to, initial);
+        Self::schedule_resolution(randoms).detach();
+        mint_event(&to, &ships, "minter");
+        ships.into_iter().map(U64).collect()
+    }
+
     /// ShipPurchaser.purchaseWithUTC. Storage comes from the buyer's prepaid
     /// balance. Referral pays UTC from the collected price on ShipPurchaser's
     /// same ladder as NEAR purchases (referrer must be registered).
