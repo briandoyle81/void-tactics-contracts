@@ -1251,3 +1251,15 @@ Both fits use `sim/experiments/iter4-prices.json` (20,000 Average-vs-Average gam
 ### New prices and roguelike caps (2026-11-26)
 
 The suggested prices and 25% higher roguelike caps are applied in code (details and old values: `docs/balance-recommendations-2026-11-21.md` §7). The simulator reads both from `near/seed/config.json` and `ignition/data/roguelikeStarterContent.json`, so every run from now on uses them. Results from earlier runs (price fits, calibration, the value model in `fit-values`, economy runs) used the old prices and should be redone before relying on them.
+
+### Roguelike stage, new vs old prices (2026-11-26)
+
+`sim/experiments/prices-rl.json` (the iter3 roguelike stage alone: 40 runs per level plus 10 per forced path), current code (min movement 3, purpose placement, current weights) both times; only prices and caps differ. Old prices and caps were loaded with `VT_SIM_OVERRIDE` (a simulator-only data-file switch added for this). Runs: `sim/out/prices-rl-new`, `sim/out/prices-rl-old`.
+
+| Level | Combats won per run (old → new) | Runs won of 40 | Ships lost per run |
+|---|---|---|---|
+| Poor | 1.18 → 1.02 | 0 → 0 | 0.4 → 0.3 |
+| Average | 4.47 → 3.62 | 2 → 0 | 0.1 → 0.6 |
+| Excellent | 11.95 → 11.30 | 38 → 34 | 0.1 → 0.1 |
+
+Biggest per-mission drops: Average on 5. Shocking Revelation 62% → 47% and 8. Interference 64% → 40%; Excellent on 15. The Hive: Alliance 50% → 33% and 10. Full Court Press 79% → 71%. The 25% cap rise keeps the human's own fleets, but the composer's best fleets under the old prices were wider (a bare ship cost 75, now 120), so they lose a ship or two. The new prices with these caps make the roguelike harder, mostly for Average players.
