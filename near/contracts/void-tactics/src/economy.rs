@@ -55,6 +55,54 @@ impl Contract {
         ship_ids.into_iter().map(U64).collect()
     }
 
+    /// FreeShipClaim.topUpFreeShips (added 2026-11-19): fills the caller back
+    /// up to `free_claim_base` (10) ships that aren't destroyed, with free
+    /// ships of `variant` (random rolls, exactly as a claim makes them). Any
+    /// time: no cooldown, and the 28-day claim's timer is untouched. Ships in
+    /// fleets and runs count (they still exist); destroyed ships don't (they
+    /// stay in the owner index, and free ones can never be recycled out).
+    ///
+    /// Why it's safe to leave open: any new account can already claim 10
+    /// free ships at once, so a top-up only spares a player who ran out from
+    /// restarting on a fresh account. Storage is charged to the caller, as
+    /// for the claim.
+    ///
+    /// EVM parity: the EVM floor is a separate owner-set `topUpFloor` (0
+    /// turns top-ups off). Here the floor is the claim base, to avoid a
+    /// state-layout change on the live testnet deployment.
+    pub fn top_up_free_ships(&mut self, variant: u16) -> Vec<U64> {
+        let caller = env::predecessor_account_id();
+        let _registered = self.account(&caller);
+        if self.config.free_claim_requires_verification {
+            require!(self.is_verified(&caller), "NotEligible");
+        }
+        let floor = self.config.free_claim_base;
+        let live = self.live_ship_count(&caller, floor);
+        require!(live < floor, "NothingToTopUp");
+        let amount = floor - live;
+
+        let initial = env::storage_usage();
+        let (ship_ids, random_ids) = self.internal_create_ships(&caller, amount, variant, 0, true);
+        self.charge_storage_since(&caller, initial);
+        Self::schedule_resolution(random_ids).detach();
+
+        near_contract_standards::non_fungible_token::events::NftMint {
+            owner_id: &caller,
+            token_ids: &ship_ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().iter().map(String::as_str).collect::<Vec<_>>(),
+            memo: Some("free_topup"),
+        }
+        .emit();
+        events::emit("free_ships_topped_up", json!({ "player": caller, "amount": amount }));
+        ship_ids.into_iter().map(U64).collect()
+    }
+
+    /// Ships `account_id` owns that aren't destroyed, counted up to `cap`
+    /// (default `free_claim_base`): what `top_up_free_ships` compares with
+    /// its floor. The frontend can show "top up N ships" from it.
+    pub fn get_live_ship_count(&self, account_id: near_sdk::AccountId, cap: Option<u32>) -> u32 {
+        self.live_ship_count(&account_id, cap.unwrap_or(self.config.free_claim_base))
+    }
+
     /// DroneStorefront.turnInCores: burn exactly the next tier's DEC cost for
     /// +1 permanent free ship per claim.
     pub fn turn_in_cores(&mut self, amount: U128) {

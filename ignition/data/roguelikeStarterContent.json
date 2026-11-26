@@ -1,6 +1,6 @@
 {
   "campaign": {
-    "initialCostCap": 600,
+    "initialCostCap": 750,
     "autoHealPercent": 80,
     "requiredVariant": 1
   },
@@ -39,7 +39,7 @@
     {
       "key": "m04",
       "kind": "Resupply",
-      "costCapOverride": 800,
+      "costCapOverride": 1000,
       "title": "Resupply Station",
       "description": "Finally, we've reached a resupply station!  The company brass has sent us more ships.  We can add more ships to our fleet and swap out any that are damaged.  We'll be able to chase down this mystery with greater forces."
     },
@@ -66,7 +66,7 @@
     {
       "key": "m07",
       "kind": "Resupply",
-      "costCapOverride": 1000,
+      "costCapOverride": 1250,
       "title": "Resupply Station",
       "description": "We've reached the resupply station!  We can swap out damaged ships and add new ones to our fleet.  With the last escalation, we've been authorized to bring in a greater force.  I recommend we do so now."
     },
@@ -248,118 +248,6 @@
       }
     },
     {
-      "key": "d02",
-      "kind": "Combat",
-      "mapKey": "rlD02",
-      "turnTime": 600,
-      "maxScore": 39,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "d03",
-      "kind": "Combat",
-      "mapKey": "rlD03",
-      "turnTime": 600,
-      "maxScore": 51,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "d04",
-      "kind": "Combat",
-      "mapKey": "rlD04",
-      "turnTime": 600,
-      "maxScore": 64,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "d05",
-      "kind": "Combat",
-      "mapKey": "rlD05",
-      "turnTime": 600,
-      "maxScore": 76,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "d06",
-      "kind": "Combat",
-      "mapKey": "rlD06",
-      "turnTime": 600,
-      "maxScore": 88,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "s01",
-      "kind": "Combat",
-      "mapKey": "rlS01",
-      "turnTime": 900,
-      "maxScore": 107,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "s02",
-      "kind": "Combat",
-      "mapKey": "rlS02",
-      "turnTime": 900,
-      "maxScore": 113,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "s03",
-      "kind": "Combat",
-      "mapKey": "rlS03",
-      "turnTime": 900,
-      "maxScore": 120,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "f01",
-      "kind": "Combat",
-      "mapKey": "rlF01",
-      "turnTime": 900,
-      "maxScore": 133,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "f02",
-      "kind": "Combat",
-      "mapKey": "rlF02",
-      "turnTime": 900,
-      "maxScore": 147,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "f03",
-      "kind": "Combat",
-      "mapKey": "rlF03",
-      "turnTime": 900,
-      "maxScore": 160,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "f04",
-      "kind": "Combat",
-      "mapKey": "rlF04",
-      "turnTime": 900,
-      "maxScore": 173,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "f05",
-      "kind": "Combat",
-      "mapKey": "rlF05",
-      "turnTime": 900,
-      "maxScore": 187,
-      "creatorGoesFirst": true
-    },
-    {
-      "key": "f06",
-      "kind": "Combat",
-      "mapKey": "rlF06",
-      "turnTime": 900,
-      "maxScore": 200,
-      "creatorGoesFirst": true
-    },
-    {
       "key": "r01",
       "kind": "Combat",
       "mapKey": "map68",
@@ -375,24 +263,9 @@
     {
       "key": "r02",
       "kind": "Resupply",
-      "costCapOverride": 1200,
+      "costCapOverride": 1500,
       "title": "Resupply Station",
       "description": "Finally, we've reached a resupply station!  The company brass has sent us more ships.  We can add more ships to our fleet and swap out any that are damaged.  This is our last resupply before we head to the hive. I hope you know how you're going to choose which path to take."
-    },
-    {
-      "key": "r03",
-      "kind": "Resupply",
-      "costCapOverride": 750
-    },
-    {
-      "key": "r04",
-      "kind": "Resupply",
-      "costCapOverride": 1200
-    },
-    {
-      "key": "r05",
-      "kind": "Resupply",
-      "costCapOverride": 1600
     }
   ],
   "maps": [
@@ -18388,76 +18261,12 @@
       "to": "m14"
     },
     {
-      "from": "d02",
-      "to": "d03"
-    },
-    {
-      "from": "d03",
-      "to": "r03"
-    },
-    {
-      "from": "r03",
-      "to": "d04"
-    },
-    {
-      "from": "d04",
-      "to": "d05"
-    },
-    {
-      "from": "d05",
-      "to": "d06"
-    },
-    {
-      "from": "s01",
-      "to": "r04"
-    },
-    {
-      "from": "r04",
-      "to": "s02"
-    },
-    {
-      "from": "s02",
-      "to": "s03"
-    },
-    {
-      "from": "f01",
-      "to": "f02"
-    },
-    {
-      "from": "f02",
-      "to": "f03"
-    },
-    {
-      "from": "f03",
-      "to": "r05"
-    },
-    {
-      "from": "r05",
-      "to": "f04"
-    },
-    {
-      "from": "f04",
-      "to": "f05"
-    },
-    {
-      "from": "f05",
-      "to": "f06"
-    },
-    {
-      "from": "d03",
-      "to": "s01"
-    },
-    {
       "from": "m05",
       "to": "d01"
     },
     {
       "from": "d01",
       "to": "m06"
-    },
-    {
-      "from": "f06",
-      "to": "d02"
     },
     {
       "from": "m09",

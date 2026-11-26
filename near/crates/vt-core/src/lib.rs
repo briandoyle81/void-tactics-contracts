@@ -20,6 +20,7 @@ pub mod grid;
 pub mod maps;
 pub mod random;
 pub mod replay;
+pub mod roguelike;
 pub mod ship_names;
 mod ship_names_data;
 pub mod types;

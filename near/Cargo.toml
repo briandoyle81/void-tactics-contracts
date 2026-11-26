@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/vt-core",
+    "crates/vt-sim",
     "contracts/void-tactics",
     "contracts/test-receiver",
     "contracts/void-renderer",
@@ -26,4 +27,12 @@ opt-level = "z"
 lto = true
 debug = false
 panic = "abort"
+overflow-checks = true
+
+# The balance simulator is CPU-bound host code: build it fast, not small.
+#   cargo run -p vt-sim --profile sim -- <command>
+[profile.sim]
+inherits = "release"
+opt-level = 3
+panic = "unwind"
 overflow-checks = true

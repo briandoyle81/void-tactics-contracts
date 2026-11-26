@@ -235,7 +235,9 @@ impl Contract {
                 id,
                 equipment: c.equipment.clone(),
                 traits: c.traits.clone(),
-                ship_data: ShipData { shiny: c.shiny, ships_destroyed: c.ships_destroyed, ..Default::default() },
+                // AIShips.allocateShip: constructed (AI ships never go through
+                // randomness), template shiny and kills, unpriced.
+                ship_data: ShipData { shiny: c.shiny, ships_destroyed: c.ships_destroyed, constructed: true, ..Default::default() },
             };
             let (version, table) = self.config.current_table(c.traits.variant).or_panic();
             let attributes = calculate(table, version, &ship.stats_input()).or_panic();
@@ -314,11 +316,11 @@ impl Contract {
         require!(!g.ended, "GameAlreadyEnded");
         f(&mut g.map);
         events::emit("game_map_edited", json!({ "game_id": U64(game_id), "row": row, "col": col, "edit": edit }));
-        self.sp.games.insert(game_id, g);
+        self.put_game(game_id, g);
     }
 
     fn save_game(&mut self, game_id: u64, g: GameState, m: SpMatch) {
-        self.sp.games.insert(game_id, g);
+        self.put_game(game_id, g);
         self.sp.matches.insert(game_id, m);
     }
 }

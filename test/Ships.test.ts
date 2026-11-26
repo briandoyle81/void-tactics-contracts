@@ -2099,6 +2099,40 @@ describe("Ships", function () {
       expect(referralCount).to.equal(5n);
     });
 
+    // 2026-11-25: the UTC ladder was off by one (paid 0% at 1000+ referred
+    // ships instead of 10%). It now matches Ships._processReferral.
+    it("Should pay 10% UTC referral once 1000 ships are referred", async function () {
+      this.timeout(300_000);
+      const { user1, user2, universalCredits, user1Purchaser, shipPurchaser } =
+        await loadFixture(deployShipsFixture);
+      const TIER = 4; // 60 ships for 49.99 UTC
+      const price = (await shipPurchaser.read.tierPrices([BigInt(TIER)])) as bigint;
+      const balance = () => universalCredits.read.balanceOf([user2.account.address]);
+      // 16 purchases: 960 ships referred, still below the first stage.
+      const start = await balance();
+      for (let i = 0; i < 16; i++) {
+        await user1Purchaser.write.purchaseWithUTC([
+          user1.account.address,
+          TIER,
+          user2.account.address,
+          1,
+        ]);
+      }
+      expect((await balance()) - start).to.equal(0n);
+      // The 17th takes the count to 1020: 10% of this sale.
+      const before = await balance();
+      await user1Purchaser.write.purchaseWithUTC([
+        user1.account.address,
+        TIER,
+        user2.account.address,
+        1,
+      ]);
+      expect(
+        await shipPurchaser.read.referralCount([user2.account.address]),
+      ).to.equal(1020n);
+      expect((await balance()) - before).to.equal((price * 10n) / 100n);
+    });
+
     it("Should revert with insufficient UTC balance", async function () {
       const { user1, user2, universalCredits, user1Purchaser } =
         await loadFixture(deployShipsFixture);
@@ -3053,6 +3087,136 @@ describe("Ships", function () {
         const ship = tupleToShip(shipTuple);
         expect(ship.shipData.isFreeShip).to.equal(false);
       }
+    });
+  });
+
+  // 2026-11-19: topUpFreeShips fills a player back up to topUpFloor (10)
+  // ships that aren't destroyed, any time. A new address can already claim
+  // 10 free ships at once, so this only spares a player who ran out from
+  // restarting on a fresh account.
+  describe("Free Ship Top-Up", function () {
+    async function liveCount(freeShipClaim: any, who: `0x${string}`) {
+      return (await freeShipClaim.read.liveShipCount([who, 1000n])) as bigint;
+    }
+
+    it("fills an empty hangar to 10 free ships, then has nothing to top up", async function () {
+      const { ships, user1, freeShipClaim } =
+        await loadFixture(deployShipsFixture);
+
+      await freeShipClaim.write.topUpFreeShips([1], { account: user1.account });
+
+      const ids = await ships.read.getShipIdsOwned([user1.account.address]);
+      expect(ids.length).to.equal(10);
+      for (const id of ids) {
+        const ship = tupleToShip((await ships.read.ships([id])) as ShipTuple);
+        expect(ship.shipData.isFreeShip).to.equal(true);
+      }
+      await expect(
+        freeShipClaim.write.topUpFreeShips([1], { account: user1.account }),
+      ).to.be.rejectedWith("NothingToTopUp");
+    });
+
+    it("replaces destroyed ships only: destroyed ships stay owned but don't count", async function () {
+      const { ships, owner, user1, freeShipClaim } =
+        await loadFixture(deployShipsFixture);
+
+      await freeShipClaim.write.claimFreeShips([1], { account: user1.account });
+      const ids = await ships.read.getShipIdsOwned([user1.account.address]);
+      for (const id of ids.slice(0, 3)) {
+        await ships.write.markDestroyed([id], { account: owner.account });
+      }
+      expect(await liveCount(freeShipClaim, user1.account.address)).to.equal(7n);
+
+      await freeShipClaim.write.topUpFreeShips([1], { account: user1.account });
+
+      const after = await ships.read.getShipIdsOwned([user1.account.address]);
+      expect(after.length).to.equal(13); // the 3 wrecks are still owned
+      expect(await liveCount(freeShipClaim, user1.account.address)).to.equal(10n);
+      await expect(
+        freeShipClaim.write.topUpFreeShips([1], { account: user1.account }),
+      ).to.be.rejectedWith("NothingToTopUp");
+    });
+
+    it("counts purchased ships: a player with 10+ live ships of any kind gets nothing", async function () {
+      const { universalCredits, user1, user2, shipPurchaser, freeShipClaim } =
+        await loadFixture(deployShipsFixture);
+
+      await universalCredits.write.approve(
+        [shipPurchaser.address, parseEther("100")],
+        { account: user1.account },
+      );
+      await shipPurchaser.write.purchaseWithUTC(
+        [user1.account.address, 1n, user2.account.address, 1],
+        { account: user1.account },
+      );
+      await expect(
+        freeShipClaim.write.topUpFreeShips([1], { account: user1.account }),
+      ).to.be.rejectedWith("NothingToTopUp");
+    });
+
+    it("is independent of the 28-day claim: neither needs nor resets its cooldown", async function () {
+      const { owner, user1, freeShipClaim, ships } =
+        await loadFixture(deployShipsFixture);
+
+      await freeShipClaim.write.claimFreeShips([1], { account: user1.account });
+      const claimedAt = await freeShipClaim.read.lastClaimTimestamp([
+        user1.account.address,
+      ]);
+      const ids = await ships.read.getShipIdsOwned([user1.account.address]);
+      for (const id of ids) {
+        await ships.write.markDestroyed([id], { account: owner.account });
+      }
+      // Still inside the claim cooldown, the top-up works...
+      await freeShipClaim.write.topUpFreeShips([1], { account: user1.account });
+      expect(await liveCount(freeShipClaim, user1.account.address)).to.equal(10n);
+      // ...and leaves the claim timer alone, so the claim stays blocked.
+      expect(
+        await freeShipClaim.read.lastClaimTimestamp([user1.account.address]),
+      ).to.equal(claimedAt);
+      await expect(
+        freeShipClaim.write.claimFreeShips([1], { account: user1.account }),
+      ).to.be.rejectedWith("ClaimCooldownNotPassed");
+    });
+
+    it("follows the owner-set floor; 0 turns top-ups off; only the owner can set it", async function () {
+      const { ships, owner, user1, freeShipClaim } =
+        await loadFixture(deployShipsFixture);
+
+      const asUser1 = await hre.viem.getContractAt(
+        "FreeShipClaim",
+        freeShipClaim.address,
+        { client: { wallet: user1 } },
+      );
+      await expect(asUser1.write.setTopUpFloor([20n])).to.be.rejectedWith(
+        "OwnableUnauthorizedAccount",
+      );
+
+      await freeShipClaim.write.setTopUpFloor([4n], { account: owner.account });
+      await freeShipClaim.write.topUpFreeShips([1], { account: user1.account });
+      expect(
+        (await ships.read.getShipIdsOwned([user1.account.address])).length,
+      ).to.equal(4);
+
+      await freeShipClaim.write.setTopUpFloor([0n], { account: owner.account });
+      await expect(
+        freeShipClaim.write.topUpFreeShips([1], { account: user1.account }),
+      ).to.be.rejectedWith("NothingToTopUp");
+    });
+
+    it("respects the eligibility provider like the claim does", async function () {
+      const { owner, user1, freeShipClaim } =
+        await loadFixture(deployShipsFixture);
+
+      const provider = await hre.viem.deployContract(
+        "SelfieCheckEligibilityProvider",
+        [owner.account.address],
+      );
+      await freeShipClaim.write.setEligibilityProvider([provider.address], {
+        account: owner.account,
+      });
+      await expect(
+        freeShipClaim.write.topUpFreeShips([1], { account: user1.account }),
+      ).to.be.rejectedWith("NotEligible");
     });
   });
 

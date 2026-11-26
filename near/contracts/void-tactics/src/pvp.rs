@@ -167,11 +167,22 @@ impl Contract {
         self.pvp.lobbies.get(&id).cloned().unwrap_or_else(|| env::panic_str("LobbyNotFound"))
     }
 
+    /// Every lobby write goes through here; both players' nonces bump
+    /// (their lobby lists show this lobby's state). The record is the
+    /// creator's, but the caller covers its growth if the creator can't
+    /// (audit 2026-11-14: a player emptying their balance must never block
+    /// the other player's leave/quit/handover).
     fn save_lobby(&mut self, l: Lobby) {
         let creator = l.creator.clone();
-        self.charged(&creator, |c| {
+        let joiner = l.joiner.clone();
+        let caller = env::predecessor_account_id();
+        self.charged_or_fallback(&creator, &caller, |c| {
             c.pvp.lobbies.insert(l.id, l);
         });
+        self.touch_player(&creator);
+        if let Some(j) = joiner {
+            self.touch_player(&j);
+        }
     }
 
     fn player_in_lobby(&self, p: &AccountId, id: u64) -> bool {
@@ -211,11 +222,15 @@ impl Contract {
         });
     }
 
-    /// _addLobbyToOpenSet (stamps opened_at on the caller's copy).
+    /// _addLobbyToOpenSet (stamps opened_at on the caller's copy). The entry
+    /// is the creator's; the caller covers it if the creator can't (a joiner
+    /// leaving or quitting re-opens the lobby and must never be blocked by
+    /// the creator's balance).
     fn open_add(&mut self, l: &mut Lobby) {
         l.opened_at = Self::now_s();
         let (id, creator) = (l.id, l.creator.clone());
-        self.charged(&creator, |c| {
+        let caller = env::predecessor_account_id();
+        self.charged_or_fallback(&creator, &caller, |c| {
             c.pvp.open.insert(id);
         });
     }
@@ -321,7 +336,7 @@ impl Contract {
                     let Some(mut killer) = self.ships.get(&last_damager).cloned() else { continue };
                     killer.ship.ship_data.ships_destroyed = killer.ship.ship_data.ships_destroyed.saturating_add(1);
                     let owner = killer.owner.clone();
-                    self.ships.insert(last_damager, killer);
+                    self.put_ship(last_damager, killer);
                     let reward = self.config.recycle_reward >> 2;
                     if !self.try_mint(&owner, TokenKind::Utc, reward) {
                         events::emit("reward_skipped", json!({ "game_id": U64(game_id), "destroyer_owner": owner }));
@@ -352,7 +367,7 @@ impl Contract {
     fn save_pvp(&mut self, payer: &AccountId, game_id: u64, g: GameState, pg: PvpGame, result: Option<(AccountId, AccountId)>) {
         let now = Self::now_s();
         self.charged(payer, |c| {
-            c.sp.games.insert(game_id, g);
+            c.put_game(game_id, g);
             c.pvp.games.insert(game_id, pg);
             if let Some((winner, loser)) = result {
                 events::emit("game_result_recorded", json!({ "game_id": U64(game_id), "winner": winner, "loser": loser }));
@@ -655,6 +670,10 @@ impl Contract {
         require!(is_creator || l.joiner.as_ref() == Some(&caller), "NotInLobby");
         require!(!(is_creator && l.creator_fleet) && !(!is_creator && l.joiner_fleet), "FleetAlreadyCreated");
         let ids: Vec<u64> = ship_ids.into_iter().map(|s| s.0).collect();
+        // 2026-11-25 (pre-audit §11 #3): an empty fleet started a game with
+        // one side empty; if it moved first, the other player waited out the
+        // turn time with ships locked. Rejected on Base too.
+        require!(!ids.is_empty(), "EmptyFleet");
         let map = self.pvp_map(l.map_id);
         let total_cost = self.validate_and_lock_fleet(&caller, &ids, &positions, l.cost_limit, &map, is_creator, false);
         let fleet = PvpFleet { owner: caller.clone(), ship_ids: ids, positions, total_cost };

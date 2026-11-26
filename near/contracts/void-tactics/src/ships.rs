@@ -60,6 +60,24 @@ impl Contract {
         idx
     }
 
+    /// Owned ships that aren't destroyed, up to `cap`: walks the owner index
+    /// newest first and stops at `cap`, so it only reaches old wrecks when
+    /// the player is actually short of live ships.
+    pub(crate) fn live_ship_count(&self, owner: &AccountId, cap: u32) -> u32 {
+        let n = self.accounts.get(owner).map_or(0, |a| a.ship_count);
+        let mut live = 0;
+        let mut i = n;
+        while i > 0 && live < cap {
+            i -= 1;
+            if let Some(&id) = self.owner_ship_at.get(&(owner.clone(), i)) {
+                if self.ship_record(id).ship.ship_data.timestamp_destroyed == 0 {
+                    live += 1;
+                }
+            }
+        }
+        live
+    }
+
     fn index_remove(&mut self, owner: &AccountId, idx: u32) {
         let mut a = self.account(owner);
         let last = a.ship_count - 1;
@@ -68,7 +86,7 @@ impl Contract {
             self.owner_ship_at.insert((owner.clone(), idx), moved);
             let mut r = self.ship_record(moved);
             r.owner_index = idx;
-            self.ships.insert(moved, r);
+            self.put_ship(moved, r);
         }
         self.owner_ship_at.remove(&(owner.clone(), last));
         a.ship_count = last;
@@ -105,7 +123,7 @@ impl Contract {
         ship.ship_data.ships_destroyed = kills;
         ship.ship_data.is_free_ship = is_free;
         let owner_index = self.index_add(to, id);
-        self.ships.insert(id, ShipRecord { ship, owner: to.clone(), owner_index });
+        self.put_ship(id, ShipRecord { ship, owner: to.clone(), owner_index });
         if let Some(r) = random_id {
             self.random_to_ship.insert(r, id);
         }
@@ -161,7 +179,7 @@ impl Contract {
         let costs = self.config.costs.get(&s.traits.variant).unwrap_or_else(|| env::panic_str("InvalidCostsVersion"));
         s.ship_data.costs_version = costs.version;
         s.ship_data.cost = ship_cost(costs, s).unwrap_or_else(|e| env::panic_str(e.name()));
-        self.ships.insert(ship_id, rec);
+        self.put_ship(ship_id, rec);
         events::emit("metadata_update", json!({ "ship_id": U64(ship_id) }));
     }
 
@@ -212,7 +230,7 @@ impl Contract {
         moved.owner = to.clone();
         moved.owner_index = self.account(to).ship_count;
         self.index_add(to, ship_id);
-        self.ships.insert(ship_id, moved);
+        self.put_ship(ship_id, moved);
         self.flush_all();
         let added = env::storage_usage() - (before - freed);
 
@@ -265,7 +283,7 @@ impl Contract {
             }
         }
         rec.ship = ship;
-        self.ships.insert(ship_id, rec);
+        self.put_ship(ship_id, rec);
         Ok(())
     }
 
@@ -277,7 +295,7 @@ impl Contract {
         let costs = self.config.costs.get(&rec.ship.traits.variant).unwrap_or_else(|| env::panic_str("InvalidCostsVersion"));
         rec.ship.ship_data.costs_version = costs.version;
         rec.ship.ship_data.cost = ship_cost(costs, &rec.ship).unwrap_or_else(|e| env::panic_str(e.name()));
-        self.ships.insert(ship_id, rec);
+        self.put_ship(ship_id, rec);
         events::emit("metadata_update", json!({ "ship_id": U64(ship_id) }));
     }
 
@@ -285,7 +303,7 @@ impl Contract {
         if let Some(mut r) = self.ships.get(&ship_id).cloned() {
             if r.ship.ship_data.timestamp_destroyed == 0 {
                 r.ship.ship_data.timestamp_destroyed = now.max(1);
-                self.ships.insert(ship_id, r);
+                self.put_ship(ship_id, r);
             }
         }
     }
@@ -296,7 +314,7 @@ impl Contract {
             require!(r.ship.ship_data.timestamp_destroyed == 0, "ShipDestroyed");
         }
         r.ship.ship_data.in_fleet = in_fleet;
-        self.ships.insert(ship_id, r);
+        self.put_ship(ship_id, r);
     }
 
     fn to_token(&self, id: u64, r: &ShipRecord) -> Token {

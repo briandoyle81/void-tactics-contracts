@@ -4,9 +4,6 @@
 //!
 //! Each entry is a fixed-size (player, index) -> game id row plus a per-player
 //! count, charged to that player's storage when the game starts.
-//!
-//! Added 2026-11-14 as the last root field; `migrate` appends it to state
-//! written by earlier code (see lib.rs).
 
 use near_sdk::json_types::U64;
 use near_sdk::store::LookupMap;
@@ -65,6 +62,7 @@ impl Contract {
         let n = self.player_games.count.get(player).copied().unwrap_or(0);
         self.player_games.at.insert((player.clone(), n), game_id);
         self.player_games.count.insert(player.clone(), n + 1);
+        self.touch_player(player);
     }
 
     fn summary(&self, game_id: u64) -> Option<GameSummary> {

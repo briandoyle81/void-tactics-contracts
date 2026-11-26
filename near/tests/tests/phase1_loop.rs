@@ -159,3 +159,38 @@ async fn claim_play_earn_and_upgrade() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// Free top-up (2026-11-19) on a real node: an empty hangar fills to 10
+/// constructed free ships, the caller's storage ledger pays for them, and a
+/// full hangar has nothing to top up.
+#[tokio::test]
+async fn top_up_fills_an_empty_hangar_and_charges_the_caller() -> anyhow::Result<()> {
+    let env = setup().await?;
+    let owner = env.contract.as_account();
+    seed_rules(owner, &env.contract).await?;
+
+    let bob = env.registered_user(NearToken::from_near(1)).await?;
+    let used0 = env.used_bytes(&bob).await?;
+    let ids: Vec<String> = bob
+        .call(env.contract.id(), "top_up_free_ships")
+        .args_json(json!({"variant": 1}))
+        .gas(Gas::from_tgas(200))
+        .transact()
+        .await?
+        .into_result()?
+        .json()?;
+    assert_eq!(ids.len(), 10);
+    let ships: Vec<Value> = env.contract.view("get_ships_for_owner").args_json(json!({"account_id": bob.id()})).await?.json()?;
+    assert_eq!(ships.len(), 10);
+    for s in &ships {
+        assert_eq!(s["ship"]["ship_data"]["constructed"], true, "callback must construct every topped-up ship: {s}");
+        assert!(s["ship"]["ship_data"]["is_free_ship"].as_bool().unwrap());
+    }
+    assert!(env.used_bytes(&bob).await? > used0, "the caller pays for the new ships' storage");
+    let live: u32 = env.contract.view("get_live_ship_count").args_json(json!({"account_id": bob.id()})).await?.json()?;
+    assert_eq!(live, 10);
+
+    let again = bob.call(env.contract.id(), "top_up_free_ships").args_json(json!({"variant": 1})).gas(Gas::from_tgas(200)).transact().await?;
+    assert!(format!("{:?}", again.into_result().unwrap_err()).contains("NothingToTopUp"));
+    Ok(())
+}

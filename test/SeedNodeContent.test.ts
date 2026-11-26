@@ -9,7 +9,9 @@ import roguelikeStarterContent from "../ignition/data/roguelikeStarterContent.js
 // field (2026-10-02): every roguelike node gets exactly its `winEffects`
 // list, and nodes without one get nothing. (Node titles/descriptions used to
 // be seeded into NodeContentRegistry and checked here too; that contract was
-// removed 2026-10-08 — they're frontend-only display data now.)
+// removed 2026-10-08 — they're frontend-only display data now.) Endings —
+// reachable combat nodes with no outgoing edge — also get
+// RoguelikeCompletionWinEffect last, for the campaign medal (2026-11-21).
 type SeedNode = {
   key: string;
   winEffects?: string[];
@@ -28,11 +30,14 @@ describe("Seeded roguelike node win effects", function () {
       SHIP_GRANT_WIN_EFFECT: getAddress(deployed.shipGrantWinEffect.address),
     };
     const nodes = roguelikeStarterContent.nodes as SeedNode[];
+    const endings = ["m11", "m15"]; // 11. The Hive: Dominance, 15. The Hive: Alliance
+    const completion = getAddress(deployed.roguelikeCompletionWinEffect.address);
     for (const [i, node] of nodes.entries()) {
       const effects = await deployed.roguelikeNodeMap.read.getNodeWinEffects([BigInt(i + 1)]);
-      expect(effects.map((a) => getAddress(a)), node.key).to.deep.equal(
-        (node.winEffects ?? []).map((k) => addressByKey[k]),
-      );
+      expect(effects.map((a) => getAddress(a)), node.key).to.deep.equal([
+        ...(node.winEffects ?? []).map((k) => addressByKey[k]),
+        ...(endings.includes(node.key) ? [completion] : []),
+      ]);
     }
   });
 });

@@ -821,3 +821,143 @@ fn live_map_edits_are_editor_only() {
     h.ctx(P, 0);
     h.c.set_game_blocked_tile(U64(g), 4, 8, true);
 }
+
+// =====================================================================
+// Change detection for pollers: GameState::version, Account::nonce.
+
+fn nonce(h: &H, who: &str) -> u64 {
+    h.c.get_player_nonce(acc(who)).map_or(0, |n| n.0)
+}
+
+#[test]
+fn game_version_bumps_on_every_write() {
+    let mut h = sp_setup();
+    let ships = h.owned(P);
+    let g = U64(start_sp(&mut h, &ships[..1]));
+    let v0 = h.c.get_game_version(g).unwrap().0;
+    assert_eq!(v0, 1, "start writes the game once");
+    h.ctx(OWNER, 0);
+    h.c.set_game_blocked_tile(g, 4, 8, true);
+    assert_eq!(h.c.get_game_version(g).unwrap().0, v0 + 1, "a map edit");
+    h.ctx(P, 0);
+    h.c.forfeit(g);
+    assert_eq!(h.c.get_game_version(g).unwrap().0, v0 + 2, "a forfeit");
+    assert_eq!(h.c.get_game(g).unwrap().version, v0 + 2, "the same number as on the full board");
+    assert!(h.c.get_game_version(U64(999)).is_none());
+}
+
+#[test]
+fn player_nonce_bumps_on_their_own_changes_only() {
+    let mut h = H::new();
+    h.register(P, 1);
+    h.register(Q, 1);
+    let (p0, q0) = (nonce(&h, P), nonce(&h, Q));
+    h.ctx(P, 0);
+    h.c.claim_free_ships(1);
+    let p1 = nonce(&h, P);
+    assert!(p1 > p0, "a claim (account + new ships)");
+    assert_eq!(nonce(&h, Q), q0, "another player's claim doesn't touch Q");
+    h.resolve_all();
+    assert!(nonce(&h, P) > p1, "construction by the randomness callback");
+    let p2 = nonce(&h, P);
+    h.mint(P, TokenKind::Utc, E18);
+    assert!(nonce(&h, P) > p2, "a balance change");
+    assert_eq!(nonce(&h, Q), q0);
+    assert!(h.c.get_player_nonce(acc("nobody.near")).is_none());
+}
+
+#[test]
+fn player_nonce_bumps_when_someone_else_changes_their_data() {
+    let mut h = H::new();
+    with_minter(&mut h);
+    h.register(Q, 1);
+    let q0 = nonce(&h, Q);
+    h.ctx(SERVER, ONE_NEAR / 10);
+    h.c.create_ships_for(acc(Q), 5, 1, 0, false);
+    assert!(nonce(&h, Q) > q0, "ships minted to Q by the server");
+    let q1 = nonce(&h, Q);
+    h.mint(Q, TokenKind::Utc, 0);
+    assert_eq!(nonce(&h, Q), q1, "a zero mint writes nothing");
+}
+
+#[test]
+fn ship_writes_bump_the_owner() {
+    let mut h = sp_setup();
+    let ships = h.owned(P);
+    let n0 = nonce(&h, P);
+    republish_costs(&mut h, 1);
+    h.ctx(P, 0);
+    h.c.sync_ship_costs(vec![U64(ships[0])]);
+    assert!(nonce(&h, P) > n0, "re-pricing a ship");
+}
+
+/// AIShips.allocateShip: AI ships are constructed, carry the template's
+/// shiny and kills, and are unpriced. (A ship with constructed=false renders
+/// with the unconstructed art.)
+#[test]
+fn ai_ships_are_constructed_like_on_base() {
+    let mut h = sp_setup();
+    let ships = h.owned(P);
+    let g = start_sp(&mut h, &ships[..1]);
+    let m = h.c.get_sp_match(U64(g)).unwrap();
+    assert!(!m.ai_ships.is_empty());
+    for (_, s, _) in &m.ai_ships {
+        assert!(s.ship_data.constructed, "AI ship {} must be constructed", s.id);
+        assert_eq!((s.ship_data.cost, s.ship_data.costs_version, s.traits.serial_number), (0, 0, 0));
+    }
+}
+
+/// Audit 2026-11-14: recycling a ship before its randomness resolves must not
+/// leave the pending request behind (it could never be used and would lock
+/// its bytes on the payer forever).
+#[test]
+fn recycling_an_unconstructed_ship_drops_its_pending_request() {
+    let mut h = H::new();
+    h.register(P, 5);
+    let price = h.c.get_price_tiers()[0].near_ship_price.0;
+    h.ctx(P, price);
+    let ids: Vec<U64> = h.c.purchase_ships_with_near(0, None, 1);
+    let requests: Vec<u64> = ids.iter().map(|i| h.ship(i.0).ship.traits.serial_number).collect();
+    h.ctx(P, 0);
+    h.c.recycle_ships(ids.clone());
+    for r in &requests {
+        assert!(h.c.random_requests.get(r).is_none(), "request {r} dropped with its ship");
+    }
+    // A late callback for those ids is a no-op.
+    h.resolve_all();
+    for r in &requests {
+        assert!(h.c.random_requests.get(r).is_none());
+    }
+    let a = h.c.accounts.get(&acc(P)).unwrap();
+    assert!(a.deposit >= a.locked());
+}
+
+/// Mirrors ShipCostsVersions.test.ts "floors a ship's final range at 1 and
+/// movement at 3" (2026-11-26): movement modifiers that sum below zero and an
+/// inert range-0 gun floor at movement 3 and range 1, at rank 0 and top rank.
+#[test]
+fn floors_final_range_at_1_and_movement_at_3() {
+    let cfg = read_config();
+    let mut t = attribute_table(&cfg["variants"]["1"]["attributeVersions"][0]);
+    t.base_speed = 0;
+    t.engine_speeds = vec![0; t.engine_speeds.len()];
+    for g in &mut t.guns {
+        g.range = 0;
+        g.movement = -1;
+    }
+    for a in &mut t.armors {
+        a.movement = -2;
+    }
+    for s in &mut t.shields {
+        s.movement = -2;
+    }
+    for s in &mut t.specials {
+        s.movement = 0;
+    }
+    let ship = |destroyed: u32| ShipStatsInput { id: 1, variant: 1, ships_destroyed: destroyed, ..Default::default() };
+    for destroyed in [0, 1_000_000] {
+        let a = vt_core::attributes::calculate(&t, 1, &ship(destroyed)).unwrap();
+        assert_eq!((a.movement, a.range), (vt_core::attributes::MIN_MOVEMENT, 1));
+        assert_eq!(a.movement, 3);
+    }
+}

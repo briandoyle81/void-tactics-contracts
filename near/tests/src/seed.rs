@@ -231,6 +231,31 @@ async fn seed_single_player_impl(owner: &Account, contract: &Contract, max_nodes
     Ok(SeedSummary { map_ids, config_ids, node_ids, campaign_id })
 }
 
+/// Keys of the roguelike's endings: combat nodes reachable from the root
+/// with no outgoing edge. Winning one wins the run and earns the medal.
+pub fn rl_ending_keys(rl: &Value) -> Vec<String> {
+    let edges = rl["edges"].as_array().unwrap();
+    let mut reachable = vec![rl["root"].as_str().unwrap().to_string()];
+    let mut i = 0;
+    while i < reachable.len() {
+        for e in edges {
+            let to = e["to"].as_str().unwrap();
+            if e["from"].as_str() == Some(reachable[i].as_str()) && !reachable.iter().any(|k| k == to) {
+                reachable.push(to.to_string());
+            }
+        }
+        i += 1;
+    }
+    rl["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|n| n["kind"] == "Combat")
+        .map(|n| n["key"].as_str().unwrap().to_string())
+        .filter(|k| reachable.contains(k) && !edges.iter().any(|e| e["from"].as_str() == Some(k.as_str())))
+        .collect()
+}
+
 /// Placeholder win-effect values from the deploy module (DECBonusWinEffect
 /// bonusAmount, HealAboveFloorWinEffect healToPercent).
 pub const DEC_BONUS_AMOUNT: u64 = 20;
@@ -398,6 +423,10 @@ async fn seed_roguelike_impl(owner: &Account, contract: &Contract, sp_seed: Opti
         json!({"campaign_id": campaign, "root_node": node_ids[rl["root"].as_str().unwrap()].to_string(),
                "auto_heal_percent": c["autoHealPercent"], "required_variant": c["requiredVariant"], "initial_cost_cap": c["initialCostCap"]}),
     ));
+    // The medal for winning a run (2026-11-21): every reachable combat node
+    // with no outgoing edge also gets HiveMedal, as the EVM deploy module
+    // attaches RoguelikeCompletionWinEffect.
+    let endings = rl_ending_keys(&rl);
     for n in rl["nodes"].as_array().unwrap() {
         let keys: Vec<&str> = n.get("winEffects").and_then(|w| w.as_array()).map(|a| a.iter().filter_map(|k| k.as_str()).collect()).unwrap_or_default();
         let effects: Vec<Value> = keys
@@ -418,6 +447,10 @@ async fn seed_roguelike_impl(owner: &Account, contract: &Contract, sp_seed: Opti
                 other => panic!("unknown win effect {other}"),
             })
             .collect();
+        let mut effects = effects;
+        if endings.iter().any(|k| k == n["key"].as_str().unwrap()) {
+            effects.push(json!("HiveMedal"));
+        }
         if !effects.is_empty() {
             calls.push(("set_rl_node_win_effects", json!({"node_id": node_ids[n["key"].as_str().unwrap()].to_string(), "effects": effects})));
         }

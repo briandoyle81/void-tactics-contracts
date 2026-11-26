@@ -105,6 +105,7 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
     error NoAIPlacementsConfigured();
     error NodeNotUnlocked();
     error WrongCampaignVariant();
+    error EmptyFleet();
 
     event AIFleetCreated(uint indexed gameId, uint fleetId);
     event NodeMatchStarted(
@@ -248,6 +249,9 @@ contract SinglePlayerMatch is Ownable, IGameOrchestrator {
             ENGINE_ID_BLOCK_SIZE +
             nodeMatchCount;
 
+        // 2026-11-25: an empty human fleet made a match that could never be
+        // played (matches the NEAR port's EmptyFleet).
+        if (_shipIds.length == 0) revert EmptyFleet();
         uint humanFleetId = fleets.createFleet(
             gameId,
             msg.sender,

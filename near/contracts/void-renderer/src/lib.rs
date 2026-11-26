@@ -37,8 +37,7 @@ pub struct Renderer {
     owner_id: AccountId,
     /// (variant, kind, enum index) -> display name.
     names: LookupMap<(u16, u8, u8), String>,
-    /// Nominated by `transfer_ownership` until it accepts (2026-11-14). Must
-    /// stay the LAST field: `migrate` upgrades older state by appending it.
+    /// Nominated by `transfer_ownership` until it accepts.
     pending_owner: Option<AccountId>,
 }
 
@@ -93,20 +92,12 @@ impl Renderer {
         )
     }
 
-    /// Current state decodes as-is. State from before 2026-11-14 ended at
-    /// `names`: Borsh encodes fields in order, so appending an empty
-    /// `pending_owner` gives the new layout.
+    /// State migration hook, run by `upgrade`; the current layout re-reads
+    /// as-is (same rules as the game contract's `migrate`).
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        use near_sdk::borsh::BorshDeserialize;
-        let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("NoState"));
-        if let Ok(r) = Self::try_from_slice(&raw) {
-            return r;
-        }
-        let mut upgraded = raw;
-        upgraded.extend(near_sdk::borsh::to_vec(&Option::<AccountId>::None).unwrap_or_else(|_| env::panic_str("MigrationFailed")));
-        Self::try_from_slice(&upgraded).unwrap_or_else(|_| env::panic_str("MigrationFailed"))
+        env::state_read().unwrap_or_else(|| env::panic_str("NoState"))
     }
 
     /// Two-step ownership transfer, as on the game contract.

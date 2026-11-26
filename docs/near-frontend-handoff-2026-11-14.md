@@ -11,7 +11,7 @@ _Written 2026-11-14 for the frontend agent (updated the same day: replay through
 
 ## Changes since the first version of this doc (2026-11-14)
 
-Everything below is **live on testnet** since 16:41 UTC: game `e1ead8a2…`, renderer `bcd705aa…`. State was migrated in place, so ids and test accounts are unchanged.
+Everything below is **live on testnet** after the fresh deploy at 17:34 UTC: game `a272ae84…`, renderer `f380058c…`. Content is identical to Base. Test accounts and their games were reset.
 
 | When | What | Where |
 |---|---|---|
@@ -20,6 +20,9 @@ Everything below is **live on testnet** since 16:41 UTC: game `e1ead8a2…`, ren
 | Afternoon | Second parity pass: ship stats, token metadata (DEC now shows as **DCC**), `mt_burn`, mint switches, move previews, batch/count/lens views, two-step ownership, live-game map edits (indexers must apply `game_map_edited`) | §8 |
 | 16:41 UTC | The **hive medal is claimable**: its final campaign node (`f06`, id 30) was missing from the NEAR seed and is now set, as on Base | — |
 | 16:41 UTC | Regenerated ABIs: `near/abi/void_tactics_abi.json` (221 methods), `near/abi/void_renderer_abi.json` (15) | — |
+| 2026-11-14 21:57 UTC | **Fix: AI ships are now constructed** (`ship_data.constructed = true`, as Base's `AIShips` sets), so the renderer draws them with their real art instead of the unconstructed art. Game code `fa1d5a12…`; in-place upgrade, state kept. AI ships stored in games started before this keep the old flag. **Roguelike games:** read them with `get_rl_match`, not `get_sp_match` (which is single-player only and returns `null` for roguelike games); use `get_games_for_player(...).mode` to pick the view. `turn_start_time` and `started_at` are seconds. | §1 of the 2026-11-13 doc |
+| 2026-11-14 (after the fresh deploy) | NFT `base_uri` set to `https://warpflow-git-near-migration-experiment-briandoyle81s-projects.vercel.app/api/ship`, so ship metadata is fetched from `…/api/ship/<id>`. **Build that route and make the preview public** (it's behind Vercel Authentication now). | 2026-11-13 doc §0 |
+| 17:34 UTC | **Change counters** `get_game_version` and `get_player_nonce`, and roguelike node listing (`get_rl_node_count`, `get_rl_nodes`). They change stored record layouts, so testnet was **redeployed fresh** under the same account names: game `a272ae84…`, renderer `f380058c…`. Content is reseeded and verified identical to Base (0 differences). Ids are in `near/deployments/testnet.json`. **Earlier test accounts' ships and games are gone.** Prices are now from NEAR/USD $3.14. ABI: 226 methods. | §9 |
 
 **Content note (same on Base):** only 18 of the roguelike campaign's 35 nodes are reachable from its root. `get_rl_campaign_graph` returns those 18. The other 17 have no incoming edges in `roguelikeStarterContent.json`.
 
@@ -254,3 +257,24 @@ From `docs/near-evm-parity-audit-2026-11-14.md`. **Live on testnet** since the 2
 - Live-game hotfixes, as on Base (map editor only, rejected once the game ends): `set_game_blocked_tile`, `set_game_impassable_tile` and `set_game_scoring_tile({game_id, row, col, …})`.
   - These emit **`game_map_edited`** `{game_id, row, col, edit}`.
   - **Replay indexers must apply it.** Frames carry ships, not terrain.
+
+## 9. Change counters and roguelike node listing (2026-11-14 evening)
+
+**Live on testnet** since the fresh deploy at 17:34 UTC (game `a272ae84…`, renderer `f380058c…`). Both counters live inside stored records (the game and the player's account), so testnet was redeployed rather than upgraded. Re-read `near/deployments/testnet.json` for ids; test accounts started empty. A newly registered account's nonce is `0`.
+
+**Polling with one number:**
+- **`get_game_version({game_id})`** returns the game's version (`U64`), or `null` for an unknown game.
+  - It changes on every write to that game: each human move, each AI move batch, forfeit, flee or timeout, roguelike retreat, and live-map edits.
+  - The full board from `get_game` carries the same number as `version`.
+  - Poll it cheaply, and call `get_game` only when it changes.
+- **`get_player_nonce({account_id})`** returns the player's nonce (`U64`), or `null` if the player isn't registered.
+  - It changes whenever the player's data changes: balances, storage, their ship list or any of their ships (mint, construction, transfer, fleet locks, kills, destruction, re-pricing, modification), their roguelike run, their game history, their lobby list, or a lobby they're in (someone joins, accepts or leaves).
+  - It also changes when someone else's call changes their data: ships received, ships minted by the card-checkout server, kill rewards earned during an AI turn.
+  - It doesn't change on moves inside a game; poll `get_game_version` for those.
+- Both values only ever increase. Compare them for inequality rather than doing arithmetic on them.
+
+**Every roguelike node:**
+- `get_rl_node_count()`: node ids run from 1 to the count, across all campaigns.
+- `get_rl_nodes({from_index, limit})`: paginated `[id, node]` pairs (default 20, max 100), whether or not a root reaches them. Use this for the admin list of all 35, instead of probing ids.
+- `get_rl_campaign_count()`.
+- `get_rl_campaign_graph` is unchanged: only the nodes reachable from the root.

@@ -1,0 +1,632 @@
+{
+ "_source": "Base Sepolia, account 0x8DDaC6B68dE3c829bc792c06764A9f7af6b99c46, one roguelike run, read 2026-11-18 (Game.getGamesForPlayer + Ships.getShip). Path from the roguelike graph and game order; fights replayed at full HP.",
+ "attempts": [
+  {
+   "node": "m01",
+   "mode": "roguelike",
+   "network": "base-sepolia",
+   "game_id": 2199023255554,
+   "result": "win",
+   "destroyed": 0,
+   "retreated": 0,
+   "ships": [
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 2,
+     "speed": 2,
+     "kills": 10
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot2",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Heavy",
+     "special": "Slot1",
+     "accuracy": 0,
+     "hull": 0,
+     "speed": 2,
+     "kills": 2
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "Medium",
+     "shields": "None",
+     "special": "Slot3",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 0,
+     "kills": 3
+    }
+   ]
+  },
+  {
+   "node": "m02",
+   "mode": "roguelike",
+   "network": "base-sepolia",
+   "game_id": 2199023255555,
+   "result": "win",
+   "destroyed": 0,
+   "retreated": 0,
+   "ships": [
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 2,
+     "speed": 2,
+     "kills": 10
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot2",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Heavy",
+     "special": "Slot1",
+     "accuracy": 0,
+     "hull": 0,
+     "speed": 2,
+     "kills": 2
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "Medium",
+     "shields": "None",
+     "special": "Slot3",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 0,
+     "kills": 3
+    }
+   ]
+  },
+  {
+   "node": "m03",
+   "mode": "roguelike",
+   "network": "base-sepolia",
+   "game_id": 2199023255556,
+   "result": "win",
+   "destroyed": 0,
+   "retreated": 0,
+   "ships": [
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 2,
+     "speed": 2,
+     "kills": 10
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot2",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Heavy",
+     "special": "Slot1",
+     "accuracy": 0,
+     "hull": 0,
+     "speed": 2,
+     "kills": 2
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "Medium",
+     "shields": "None",
+     "special": "Slot3",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 0,
+     "kills": 3
+    }
+   ]
+  },
+  {
+   "node": "m05",
+   "mode": "roguelike",
+   "network": "base-sepolia",
+   "game_id": 2199023255557,
+   "result": "win",
+   "destroyed": 0,
+   "retreated": 2,
+   "ships": [
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 2,
+     "speed": 2,
+     "kills": 10
+    },
+    {
+     "variant": 1,
+     "weapon": "Generic",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot2",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 0,
+     "kills": 1
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 1,
+     "speed": 0,
+     "kills": 7
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Heavy",
+     "special": "Slot1",
+     "accuracy": 0,
+     "hull": 0,
+     "speed": 2,
+     "kills": 2
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot2",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    }
+   ]
+  },
+  {
+   "node": "d01",
+   "mode": "roguelike",
+   "network": "base-sepolia",
+   "game_id": 2199023255558,
+   "result": "win",
+   "destroyed": 0,
+   "retreated": 0,
+   "ships": [
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 2,
+     "speed": 2,
+     "kills": 10
+    },
+    {
+     "variant": 1,
+     "weapon": "Generic",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot2",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 0,
+     "kills": 1
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 1,
+     "speed": 0,
+     "kills": 7
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot2",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Heavy",
+     "special": "Slot1",
+     "accuracy": 0,
+     "hull": 0,
+     "speed": 2,
+     "kills": 2
+    }
+   ]
+  },
+  {
+   "node": "m06",
+   "mode": "roguelike",
+   "network": "base-sepolia",
+   "game_id": 2199023255559,
+   "result": "win",
+   "destroyed": 0,
+   "retreated": 0,
+   "ships": [
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 2,
+     "speed": 2,
+     "kills": 10
+    },
+    {
+     "variant": 1,
+     "weapon": "Generic",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot2",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 0,
+     "kills": 1
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 1,
+     "speed": 0,
+     "kills": 7
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot2",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Heavy",
+     "special": "Slot1",
+     "accuracy": 0,
+     "hull": 0,
+     "speed": 2,
+     "kills": 2
+    }
+   ]
+  },
+  {
+   "node": "m08",
+   "mode": "roguelike",
+   "network": "base-sepolia",
+   "game_id": 2199023255560,
+   "result": "win",
+   "destroyed": 0,
+   "retreated": 0,
+   "ships": [
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 2,
+     "speed": 2,
+     "kills": 10
+    },
+    {
+     "variant": 1,
+     "weapon": "Generic",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot2",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 0,
+     "kills": 1
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot2",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Heavy",
+     "special": "Slot1",
+     "accuracy": 0,
+     "hull": 0,
+     "speed": 2,
+     "kills": 2
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "Medium",
+     "shields": "None",
+     "special": "None",
+     "accuracy": 1,
+     "hull": 2,
+     "speed": 2,
+     "kills": 33
+    },
+    {
+     "variant": 1,
+     "weapon": "Generic",
+     "armor": "Medium",
+     "shields": "None",
+     "special": "None",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Missile",
+     "armor": "None",
+     "shields": "Light",
+     "special": "None",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 1,
+     "kills": 2
+    }
+   ]
+  },
+  {
+   "node": "m09",
+   "mode": "roguelike",
+   "network": "base-sepolia",
+   "game_id": 2199023255561,
+   "result": "win",
+   "destroyed": 0,
+   "retreated": 3,
+   "ships": [
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "Medium",
+     "shields": "None",
+     "special": "None",
+     "accuracy": 1,
+     "hull": 2,
+     "speed": 2,
+     "kills": 33
+    },
+    {
+     "variant": 1,
+     "weapon": "Generic",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot2",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 0,
+     "kills": 1
+    },
+    {
+     "variant": 1,
+     "weapon": "Missile",
+     "armor": "None",
+     "shields": "Light",
+     "special": "None",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 1,
+     "kills": 2
+    },
+    {
+     "variant": 1,
+     "weapon": "Generic",
+     "armor": "Medium",
+     "shields": "None",
+     "special": "None",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot2",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Heavy",
+     "special": "Slot1",
+     "accuracy": 0,
+     "hull": 0,
+     "speed": 2,
+     "kills": 2
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 2,
+     "speed": 2,
+     "kills": 10
+    }
+   ]
+  },
+  {
+   "node": "m10",
+   "mode": "roguelike",
+   "network": "base-sepolia",
+   "game_id": 2199023255562,
+   "result": "loss",
+   "destroyed": 3,
+   "retreated": 2,
+   "ships": [
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "Medium",
+     "shields": "None",
+     "special": "None",
+     "accuracy": 1,
+     "hull": 2,
+     "speed": 2,
+     "kills": 33
+    },
+    {
+     "variant": 1,
+     "weapon": "Generic",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot2",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 0,
+     "kills": 1
+    },
+    {
+     "variant": 1,
+     "weapon": "Missile",
+     "armor": "None",
+     "shields": "Light",
+     "special": "None",
+     "accuracy": 0,
+     "hull": 2,
+     "speed": 1,
+     "kills": 2
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Heavy",
+     "special": "Slot1",
+     "accuracy": 0,
+     "hull": 0,
+     "speed": 2,
+     "kills": 2
+    },
+    {
+     "variant": 1,
+     "weapon": "Generic",
+     "armor": "Medium",
+     "shields": "None",
+     "special": "None",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    },
+    {
+     "variant": 1,
+     "weapon": "Close",
+     "armor": "None",
+     "shields": "Medium",
+     "special": "Slot1",
+     "accuracy": 2,
+     "hull": 2,
+     "speed": 2,
+     "kills": 10
+    },
+    {
+     "variant": 1,
+     "weapon": "Sniper",
+     "armor": "None",
+     "shields": "Light",
+     "special": "Slot2",
+     "accuracy": 1,
+     "hull": 0,
+     "speed": 0,
+     "kills": 0
+    }
+   ]
+  }
+ ]
+}

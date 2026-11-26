@@ -391,6 +391,36 @@ fn grant(variant: u16, once: bool) -> ShipGrant {
 }
 
 #[test]
+fn hive_medal_win_effect_awards_the_medal_at_an_ending_only() {
+    let (mut h, _) = setup(1);
+    h.ctx(OWNER, 0);
+    // Attached mid-run (node 1 has a child) and at the ending (node 4).
+    for node in [1, 4] {
+        h.c.set_rl_node_win_effects(U64(node), vec![WinEffect::HiveMedal]);
+    }
+    start(&mut h, 2);
+    for node in [1, 2] {
+        let g = enter(&mut h, node);
+        win(&mut h, g);
+    }
+    assert_eq!(h.c.mt_balance_of(acc(P), "hive_medal".into()).0, 0, "no medal for a mid-run win");
+    let g = enter(&mut h, 4);
+    win(&mut h, g);
+    assert_eq!(run(&h).status, RunStatus::Won);
+    assert_eq!(h.c.mt_balance_of(acc(P), "hive_medal".into()).0, 1);
+    assert_eq!(h.c.mt_supply("hive_medal".into()).unwrap().0, 1);
+
+    // A second winning run doesn't fail or award it twice.
+    start(&mut h, 2);
+    for node in [1, 2, 4] {
+        let g = enter(&mut h, node);
+        win(&mut h, g);
+    }
+    assert_eq!(run(&h).status, RunStatus::Won);
+    assert_eq!(h.c.mt_supply("hive_medal".into()).unwrap().0, 1);
+}
+
+#[test]
 fn ship_grant_mints_every_property_without_the_gate_nft() {
     let (mut h, _) = setup(1);
     h.ctx(OWNER, 0);
@@ -771,4 +801,25 @@ fn run_view_bundles_the_run_roster_hp_and_node_flags() {
     let flag = |n: u64| v.nodes.iter().find(|x| x.node_id.0 == n).map(|x| (x.locked, x.defeated)).unwrap();
     assert_eq!(flag(2), (false, true));
     assert_eq!(flag(3), (true, false), "the sibling is locked by the one-way commit");
+}
+
+#[test]
+fn every_roguelike_node_is_listable_reachable_or_not() {
+    let (mut h, _) = setup(1);
+    h.ctx(OWNER, 0);
+    let c2 = h.c.create_rl_campaign();
+    let orphan = h.c.create_rl_node(c2, RlNodeKind::Resupply, U64(0), 0, 0, false, 100);
+    assert_eq!(h.c.get_rl_node_count().0, orphan.0);
+    assert_eq!(h.c.get_rl_campaign_count().0, 2);
+    let all: Vec<u64> = h.c.get_rl_nodes(None, Some(100)).iter().map(|x| x.0 .0).collect();
+    assert_eq!(all, (1..=orphan.0).collect::<Vec<_>>(), "includes nodes no root reaches");
+    assert_eq!(h.c.get_rl_nodes(Some(2), Some(2)).iter().map(|x| x.0 .0).collect::<Vec<_>>(), vec![3, 4]);
+}
+
+#[test]
+fn run_writes_bump_the_players_nonce() {
+    let (mut h, _) = setup(1);
+    let n0 = h.c.get_player_nonce(acc(P)).unwrap().0;
+    start(&mut h, 2);
+    assert!(h.c.get_player_nonce(acc(P)).unwrap().0 > n0);
 }

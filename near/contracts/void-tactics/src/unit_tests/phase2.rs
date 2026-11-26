@@ -473,6 +473,77 @@ fn free_claim_requires_verification_when_enabled() {
     h.c.claim_free_ships(1);
 }
 
+// ------------------------------------------------- free top-ups (2026-11-19)
+
+#[test]
+fn top_up_fills_an_empty_hangar_to_ten_free_ships() {
+    let mut h = h_with(&["alice.near"]);
+    h.ctx("alice.near", 0);
+    assert_eq!(h.c.top_up_free_ships(1).len(), 10);
+    h.resolve_all();
+    assert_eq!(h.owned("alice.near").len(), 10);
+    assert!(h.owned("alice.near").iter().all(|&id| h.ship(id).ship.ship_data.is_free_ship));
+    assert_eq!(h.c.get_live_ship_count(acc("alice.near"), None), 10);
+}
+
+#[test]
+#[should_panic(expected = "NothingToTopUp")]
+fn top_up_with_ten_live_ships_has_nothing_to_do() {
+    let mut h = h_with(&["alice.near"]);
+    h.ctx("alice.near", 0);
+    h.c.claim_free_ships(1);
+    h.ctx("alice.near", 0);
+    h.c.top_up_free_ships(1);
+}
+
+#[test]
+fn top_up_replaces_only_destroyed_ships_and_leaves_the_claim_timer_alone() {
+    let mut h = h_with(&["alice.near"]);
+    h.ctx("alice.near", 0);
+    h.c.claim_free_ships(1);
+    h.resolve_all();
+    let claimed_at = h.c.accounts.get(&acc("alice.near")).unwrap().last_free_claim_s;
+    let ids = h.owned("alice.near");
+    for &id in ids.iter().take(3) {
+        h.c.mark_destroyed(id, 1);
+    }
+    assert_eq!(h.c.get_live_ship_count(acc("alice.near"), Some(100)), 7);
+    h.ctx("alice.near", 0);
+    assert_eq!(h.c.top_up_free_ships(1).len(), 3);
+    assert_eq!(h.owned("alice.near").len(), 13, "the wrecks stay owned");
+    assert_eq!(h.c.get_live_ship_count(acc("alice.near"), Some(100)), 10);
+    assert_eq!(
+        h.c.accounts.get(&acc("alice.near")).unwrap().last_free_claim_s,
+        claimed_at,
+        "a top-up neither needs nor resets the claim cooldown"
+    );
+}
+
+#[test]
+#[should_panic(expected = "ClaimCooldownNotPassed")]
+fn top_up_does_not_reopen_the_claim() {
+    let mut h = h_with(&["alice.near"]);
+    h.ctx("alice.near", 0);
+    h.c.claim_free_ships(1);
+    for id in h.owned("alice.near") {
+        h.c.mark_destroyed(id, 1);
+    }
+    h.ctx("alice.near", 0);
+    h.c.top_up_free_ships(1);
+    h.ctx("alice.near", 0);
+    h.c.claim_free_ships(1);
+}
+
+#[test]
+#[should_panic(expected = "NotEligible")]
+fn top_up_requires_verification_when_enabled() {
+    let mut h = h_with(&["alice.near"]);
+    h.ctx(OWNER, 0);
+    h.c.set_verification_requirements(true, false, true);
+    h.ctx("alice.near", 0);
+    h.c.top_up_free_ships(1);
+}
+
 #[test]
 fn free_claim_succeeds_once_verified() {
     let mut h = h_with(&["alice.near"]);

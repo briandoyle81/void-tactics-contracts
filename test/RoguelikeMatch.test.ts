@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import hre from "hardhat";
-import { parseEther, zeroAddress } from "viem";
+import { getAddress, parseEther, zeroAddress } from "viem";
 import {
   ActionType,
   GameDataView,
@@ -2239,6 +2239,115 @@ describe("RoguelikeMatch / RoguelikeResupply / RoguelikeNodeMap", function () {
       expect(events[0].args.player?.toLowerCase()).to.equal(
         human.account.address.toLowerCase(),
       );
+    });
+  });
+
+  describe("Campaign medal: won by winning either roguelike ending (2026-11-21)", function () {
+    it("wires the medal to RoguelikeCompletionWinEffect and attaches it to every ending, and only there", async function () {
+      const { deployed } = await loadFixture(deployFixture);
+      const { roguelikeNodeMap, gameLens, shatteredHiveMedal, roguelikeCompletionWinEffect } =
+        deployed;
+      expect(await shatteredHiveMedal.read.nodeMap()).to.equal(
+        getAddress(roguelikeCompletionWinEffect.address),
+      );
+      expect(
+        await roguelikeCompletionWinEffect.read.isAllowedToTrigger([
+          deployed.roguelikeMatch.address,
+        ]),
+      ).to.equal(true);
+
+      const graph = await gameLens.read.getCampaignGraph([1n]);
+      const effect = getAddress(roguelikeCompletionWinEffect.address);
+      let endings = 0;
+      for (const node of graph as any[]) {
+        const effects = (await roguelikeNodeMap.read.getNodeWinEffects([node.id])).map(
+          (a: string) => getAddress(a),
+        );
+        const isEnding = node.kind === 0 && node.children.length === 0;
+        if (isEnding) endings++;
+        expect(effects.includes(effect), `node ${node.id}`).to.equal(isEnding);
+      }
+      // 11. The Hive: Dominance and 15. The Hive: Alliance.
+      expect(endings).to.equal(2);
+    });
+
+    it("lets a player claim the medal after winning a run at an ending, not before", async function () {
+      const { deployed, owner, human, humanRoguelikeMatch, otherRoguelikeMatch, humanGame } =
+        await loadFixture(deployFixture);
+      const { ships, maps, aiEncounters, roguelikeNodeMap, randomManager, game, shatteredHiveMedal } =
+        deployed;
+      const { campaignId, rootNodeId } = await setupCampaignWithRoot(
+        roguelikeNodeMap,
+        maps,
+        aiEncounters,
+      );
+      // rootNodeId has no children -- it IS the ending.
+      await roguelikeNodeMap.write.setNodeWinEffects([
+        rootNodeId,
+        [deployed.roguelikeCompletionWinEffect.address],
+      ]);
+      const humanMedal = await hre.viem.getContractAt(
+        "ShatteredHiveMedal",
+        shatteredHiveMedal.address,
+        { client: { wallet: human } },
+      );
+      await expect(humanMedal.write.claimMedal()).to.be.rejectedWith(
+        "CampaignNotCompleted",
+      );
+
+      await purchaseAndConstructHumanShips(ships, randomManager, human);
+      await humanRoguelikeMatch.write.startRun([campaignId, [1n]]);
+      await humanRoguelikeMatch.write.enterCombatNode([
+        rootNodeId,
+        [{ row: 0, col: 0 }],
+      ]);
+      await winCombatNode(
+        game,
+        humanGame,
+        otherRoguelikeMatch,
+        owner,
+        human,
+        ROGUELIKE_GAME_ID_OFFSET + 1n,
+        1n,
+      );
+
+      expect(
+        await deployed.roguelikeCompletionWinEffect.read.hasCompleted([
+          human.account.address,
+        ]),
+      ).to.equal(true);
+      await humanMedal.write.claimMedal();
+      expect(await shatteredHiveMedal.read.balanceOf([human.account.address])).to.equal(1n);
+      await expect(humanMedal.write.claimMedal()).to.be.rejectedWith("AlreadyClaimed");
+    });
+
+    it("records nothing for a win at a node that still has children", async function () {
+      const { deployed, human, other } = await loadFixture(deployFixture);
+      const { roguelikeCompletionWinEffect, roguelikeNodeMap } = deployed;
+      const root = await roguelikeNodeMap.read.campaignRootNode([1n]);
+      expect((await roguelikeNodeMap.read.getChildren([root])).length).to.be.greaterThan(0);
+      await roguelikeCompletionWinEffect.write.setIsAllowedToTrigger([
+        other.account.address,
+        true,
+      ]);
+      await roguelikeCompletionWinEffect.write.onWin([human.account.address, root], {
+        account: other.account,
+      });
+      expect(
+        await roguelikeCompletionWinEffect.read.hasCompleted([human.account.address]),
+      ).to.equal(false);
+    });
+
+    it("onWin can only be called by an allowed trigger", async function () {
+      const { deployed, human } = await loadFixture(deployFixture);
+      const graph = await deployed.gameLens.read.getCampaignGraph([1n]);
+      const ending = (graph as any[]).find((n) => n.children.length === 0 && n.kind === 0);
+      await expect(
+        deployed.roguelikeCompletionWinEffect.write.onWin(
+          [human.account.address, ending.id],
+          { account: human.account },
+        ),
+      ).to.be.rejectedWith("NotAllowedToTrigger");
     });
   });
 

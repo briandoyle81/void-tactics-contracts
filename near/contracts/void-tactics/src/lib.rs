@@ -90,8 +90,8 @@ pub(crate) enum StorageKey {
     CompletedNodes,
     Games,
     SpMatches,
-    // history (2026-11-14). New keys only ever go at the end: a key's
-    // position is its storage prefix.
+    // history. New keys only ever go at the end: a key's position is its
+    // storage prefix, so reordering would point collections at other data.
     PlayerGameAt,
     PlayerGameCount,
 }
@@ -150,8 +150,7 @@ pub struct Contract {
     // --- single player ---
     pub(crate) sp: SpState,
 
-    // --- per-player game history (2026-11-14). Must stay the LAST field:
-    // `migrate` upgrades older state by appending its encoding. ---
+    // --- per-player game history ---
     pub(crate) player_games: history::PlayerGames,
 }
 
@@ -194,26 +193,25 @@ impl Contract {
     /// and rules could never change again.
     pub fn transfer_ownership(&mut self, new_owner: AccountId) {
         self.assert_owner();
-        self.config.settings.insert(config::SETTING_PENDING_OWNER, new_owner.to_string());
+        self.config.pending_owner = Some(new_owner.clone());
         events::emit("ownership_transfer_started", near_sdk::serde_json::json!({ "owner": self.owner_id, "pending_owner": new_owner }));
     }
 
     pub fn cancel_ownership_transfer(&mut self) {
         self.assert_owner();
-        self.config.settings.remove(&config::SETTING_PENDING_OWNER);
+        self.config.pending_owner = None;
     }
 
     pub fn accept_ownership(&mut self) {
         let caller = env::predecessor_account_id();
-        let pending = self.config.settings.get(&config::SETTING_PENDING_OWNER).cloned();
-        require!(pending.as_deref() == Some(caller.as_str()), "NotPendingOwner");
-        self.config.settings.remove(&config::SETTING_PENDING_OWNER);
+        require!(self.config.pending_owner.as_ref() == Some(&caller), "NotPendingOwner");
+        self.config.pending_owner = None;
         let previous = std::mem::replace(&mut self.owner_id, caller.clone());
         events::emit("ownership_transferred", near_sdk::serde_json::json!({ "previous_owner": previous, "new_owner": caller }));
     }
 
     pub fn get_pending_owner(&self) -> Option<AccountId> {
-        self.config.settings.get(&config::SETTING_PENDING_OWNER).and_then(|s| s.parse().ok())
+        self.config.pending_owner.clone()
     }
 
     pub fn set_role(&mut self, account_id: AccountId, role_bits: u8) {
@@ -247,27 +245,26 @@ impl Contract {
         )
     }
 
-    /// State migration hook, run by `upgrade`. Current state decodes as-is.
-    /// Older layouts are upgraded here (see docs/near-pre-audit.md):
-    ///
-    /// - before 2026-11-14 the root ended at `sp`. Borsh encodes a struct as
-    ///   its fields in order, so appending an empty `player_games` to the
-    ///   old bytes yields the new layout exactly.
+    /// State migration hook, run by `upgrade`. The current layout re-reads
+    /// as-is. Once there is live state, a layout change must migrate it here
+    /// (see docs/near-pre-audit.md §2): new root fields go at the end (Borsh
+    /// encodes fields in order, so the old bytes plus the new fields' encoding
+    /// decode as the new struct); changes to records stored in collections
+    /// (accounts, ships, games) need a versioned record type, because NEAR
+    /// can't rewrite every entry of a map in one call.
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        use near_sdk::borsh::BorshDeserialize;
-        let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("NoState"));
-        if let Ok(c) = Self::try_from_slice(&raw) {
-            return c;
-        }
-        let mut upgraded = raw;
-        upgraded.extend(near_sdk::borsh::to_vec(&history::PlayerGames::new()).unwrap_or_else(|_| env::panic_str("MigrationFailed")));
-        Self::try_from_slice(&upgraded).unwrap_or_else(|_| env::panic_str("MigrationFailed"))
+        env::state_read().unwrap_or_else(|| env::panic_str("NoState"))
     }
+}
 
-    /// Code-identity probe for the upgrade drill (test builds only).
-    #[cfg(feature = "upgrade-probe")]
+// Code-identity probe for the upgrade drill (test builds only). In its own
+// gated impl block: a #[cfg] on one method inside a #[near] impl still leaks
+// into the generated ABI.
+#[cfg(feature = "upgrade-probe")]
+#[near]
+impl Contract {
     pub fn upgrade_probe(&self) -> String {
         "v2".to_string()
     }
@@ -293,6 +290,25 @@ impl Contract {
         self.pvp.flush();
         self.rl.flush();
         self.player_games.flush();
+    }
+
+    /// Every game write goes through here and bumps `GameState::version`.
+    pub(crate) fn put_game(&mut self, game_id: u64, mut g: vt_core::engine::GameState) {
+        g.version = g.version.wrapping_add(1);
+        self.sp.games.insert(game_id, g);
+    }
+
+    /// Every ship write goes through here and bumps the owner's nonce.
+    pub(crate) fn put_ship(&mut self, ship_id: u64, rec: ships::ShipRecord) {
+        let owner = rec.owner.clone();
+        self.ships.insert(ship_id, rec);
+        self.touch_player(&owner);
+    }
+
+    /// Every roguelike run write goes through here and bumps the player's nonce.
+    pub(crate) fn put_run(&mut self, player: AccountId, run: roguelike::Run) {
+        self.rl.runs.insert(player.clone(), run);
+        self.touch_player(&player);
     }
 
     pub(crate) fn assert_owner(&self) {

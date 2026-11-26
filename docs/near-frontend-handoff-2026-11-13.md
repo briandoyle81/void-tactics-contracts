@@ -8,14 +8,14 @@ _Written 2026-11-13 for the frontend agent (updated the same day: real ship name
 
 | Contract | Account | Code SHA-256 |
 |---|---|---|
-| Game | `game.void-tactics.testnet` | `e1ead8a222d09350778c55ba4eb1ad42334b9616f76670a09345001545483521` (upgraded 2026-11-14 16:41 UTC; before that `9c226611…`, originally `0f4cf914…`) |
-| Renderer | `art.void-tactics.testnet` | `bcd705aadd752ba244180de778cedad0b24488f8aacced4cbbb0810ad8f37066` (upgraded 2026-11-14 16:41 UTC; was `f3243d04…`) |
+| Game | `game.void-tactics.testnet` | `a272ae842d6a5c936e0d746de6165d928a3c8f1636632b9d240c8c66370cc030` (fresh deploy 2026-11-14 17:34 UTC; earlier builds `e1ead8a2…`, `9c226611…`, `0f4cf914…`) |
+| Renderer | `art.void-tactics.testnet` | `f380058ce7c26c1f8b5f311aac50c9f1e092f90eab4ec1e5ec35f171979b326b` (fresh deploy 2026-11-14 17:34 UTC; earlier `bcd705aa…`, `f3243d04…`) |
 | Owner | `void-tactics.testnet` | (plain account) |
 
 - RPC: `https://test.rpc.fastnear.com`. ~~`https://rpc.testnet.near.org`~~ is deprecated and now rate-limits hard (noted 2026-11-14).
 - Full content is seeded: 72 maps, 64 AI configs, the 30-node campaign, the roguelike campaign (id `1`) and 6 PvP maps.
-- Ship prices were set from NEAR/USD $3.51. For example, 5 ships cost 1.42 NEAR.
-- `nft_metadata().base_uri` is unset until the frontend image route exists. Rendering works through the renderer views.
+- Ship prices were set from NEAR/USD $3.14 at the 2026-11-14 fresh deploy, so 5 ships cost about 1.59 NEAR. Read `get_price_tiers` for exact values. (The first deploy used $3.51.)
+- ~~`nft_metadata().base_uri` is unset until the frontend image route exists. Rendering works through the renderer views.~~ Set 2026-11-14: `base_uri` = `https://warpflow-git-near-migration-experiment-briandoyle81s-projects.vercel.app/api/ship`, and each ship's `media` is its id, so marketplaces fetch `…/api/ship/<id>`. **The frontend must serve that route** (NEP-177 JSON or the image, built from `get_ship` then the renderer's `token_uri`). It must also be **publicly reachable**: this preview is currently behind Vercel Authentication, so wallets and marketplaces get a login redirect.
 - The contract accounts still have their full-access keys, so they can be redeployed while we iterate. **State may be wiped by a redeploy.**
 - Smoke-tested on testnet after the deploy: register storage, claim 10 free ships (all constructed with real names within the same transaction's receipts), render ship #1 through `art.void-tactics.testnet`.
 

@@ -58,12 +58,15 @@ async fn a_whole_game_replays_from_logs_alone() -> anyhow::Result<()> {
     let fleet: Vec<String> = by_cost.iter().take(8).map(|x| x.1.to_string()).collect();
     let positions: Vec<Value> = (0..fleet.len()).map(|i| json!({"row": i as i64, "col": 1})).collect();
 
+    let used_before_start = env.used_bytes(&alice).await?;
     let start = alice
         .call(env.contract.id(), "start_node_match")
         .args_json(json!({"node_id": node, "ship_ids": fleet, "positions": positions}))
         .gas(Gas::from_tgas(300))
         .transact()
         .await?;
+    let mut gas_total = start.total_gas_burnt.as_gas() as u128;
+    let (mut human_txs, mut ai_txs) = (0u32, 0u32);
     let game_id: String = start.clone().into_result()?.json()?;
     let mut frames = boards(&start, &game_id);
     assert_eq!(frames.len(), 1, "one start frame");
@@ -103,6 +106,8 @@ async fn a_whole_game_replays_from_logs_alone() -> anyhow::Result<()> {
             out
         };
         max_log = max_log.max(max_receipt_log_bytes(&out));
+        gas_total += out.total_gas_burnt.as_gas() as u128;
+        if g.current_turn == Side::Creator { human_txs += 1 } else { ai_txs += 1 }
         let f = boards(&out.clone(), &game_id);
         out.into_result()?;
         assert!(!f.is_empty(), "every game-changing call carries a board");
@@ -120,6 +125,11 @@ async fn a_whole_game_replays_from_logs_alone() -> anyhow::Result<()> {
         frames[0].ships.len()
     );
     assert!(max_log < 16_384, "log cap per receipt");
+    let game_bytes = env.used_bytes(&alice).await? as i64 - used_before_start as i64;
+    eprintln!(
+        "cost: {} txs ({human_txs} human, {ai_txs} AI), {:.1} Tgas burnt total = {:.5} NEAR at 1e8 yocto/gas; player storage +{game_bytes} bytes = {:.5} NEAR locked",
+        txs, gas_total as f64 / 1e12, gas_total as f64 * 1e8 / 1e24, game_bytes as f64 * 1e19 / 1e24
+    );
     Ok(())
 }
 

@@ -1,0 +1,16 @@
+[package]
+name = "vt-sim"
+description = "Off-chain balance simulator for Void Tactics: simulated players (tactics + fleet composition) for PvP and PvE, built on vt-core."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+vt-core.workspace = true
+serde = { version = "1", features = ["derive"] }
+# Exact float round-trips: checkpoints must resume bit-identically.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+rand = "0.8"
+rand_chacha = "0.3"
+rayon = "1"

@@ -254,8 +254,10 @@ describe("Seeded AI ship configs", function () {
             .sort((a, b) => a.level - b.level);
           const first = line[0];
           const last = line[line.length - 1];
+          // 55 since the 2026-11-26 repricing made accuracy/hull/speed tiers
+          // cheaper (was 60; AI Aggressor V vs the entry aggressor is 55).
           expect(last.cost - first.cost, `${last.key} vs ${first.key} cost`).to.be.greaterThanOrEqual(
-            60,
+            55,
           );
           expect(
             Number(last.attrs.hullPoints) * (100 - 0) /

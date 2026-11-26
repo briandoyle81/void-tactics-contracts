@@ -40,12 +40,11 @@ All of these use fixtures exported from the unmodified Solidity contracts (`scri
   - **Upgrades.** `upgrade` (owner-only, raw WASM input) redeploys and then calls `#[private] migrate`. If the migration fails, the deploy fails too.
   - **Key posture.** After deploy, both contract accounts' full-access keys are deleted (`deploy --delete-keys`), so the owner's `upgrade` is the only way to change code. The deploy tool refuses this if the owner is a contract account, because that would freeze the code.
   - **Drill.** `phase6_hardening::upgrade_drill_with_full_access_keys_deleted` checks that only the owner can upgrade, that a direct redeploy is impossible once the key is deleted, and that state survives the upgrade.
-  - **State migrations** (2026-11-14). The root state struct may only grow by appending fields at the end. Borsh encodes a struct as its fields in order, so `migrate` upgrades older state by appending the new fields' encoding to the stored bytes; already-current state decodes as is. Storage-key enum variants are also append-only, because a variant's position is its storage prefix.
-    - `phase6_hardening::upgrade_migrates_state_written_by_the_2026_11_13_testnet_code` runs the exact WASM deployed on 2026-11-13 (`near/tests/fixtures/`) and upgrades it.
-    - It checks that ships, balances and the ledger survive, that new code works on the migrated state with byte-exact charging, and that a second upgrade is a no-op.
-    - Testnet was upgraded this way on 2026-11-14.
-    - The renderer did the same for its `pending_owner` field (2026-11-14). `renderer_upgrade_migrates_state_and_ownership_moves_in_two_steps` starts from the exact testnet renderer WASM.
-    - New game-contract settings from the second parity pass (pending owner, the per-token mint switches) live in the existing `settings` map instead of new root fields, so that upgrade needs no migration.
+  - **State migrations.** There is no live state yet (2026-11-14), so record layouts change freely, and testnet is redeployed fresh when they do. Once there's live state, `migrate` must convert it:
+    - New root fields go at the end. Borsh encodes a struct as its fields in order, so the old bytes plus the new fields' encoding decode as the new struct.
+    - Storage-key enum variants are append-only, because a variant's position is its storage prefix.
+    - Records stored in collections (accounts, ships, games, runs) can't be rewritten in bulk on NEAR. Changing their layout needs a versioned record type that decodes old entries lazily.
+    - Every migration needs a sandbox test that starts from the exact WASM it upgrades.
 - **Ownership transfer** (2026-11-14; Base: `Ownable.transferOwnership`). Both contracts use two steps: the owner nominates with `transfer_ownership`, and the nominee calls `accept_ownership`. A typo or an unreachable account can't take admin away. Roles are kept. `renounceOwnership` isn't offered, because without an owner, code and rules could never change again. This is how the deploy account hands over to a multisig.
 - **Live-game map edits** (2026-11-14; Base: `Maps.setBlockedTile`/`setImpassableTile`/`setScoringTile`). A `MAP_EDITOR` can change terrain and scoring in a game **in progress**, as on Base, until it ends. That's a real power over live matches: give `MAP_EDITOR` only to trusted operators. Each edit emits `game_map_edited`.
 - **Recommendation:** put the owner behind a multisig with a timelock. An upgrade can change any rule.
@@ -126,12 +125,12 @@ In Solidity these were try/catch wrapped. In the port they are written not to pa
 
 - **Architecture:** one contract instead of about 99. The allowlists between contracts, engine registries, the router, CREATE2 helpers, and setters that lock once an engine is live are gone, because there is nothing to re-point.
 - **Randomness:** a self-callback replaces the deferred blockhash. Ships construct automatically; there is no expiry and no fallback "baseline" ship.
-- **Referral ladder:** both purchase paths now pay 10/20/35/50%. ShipPurchaser's off-by-one 0/10/20/35% table was a bug; still to fix on EVM.
+- **Referral ladder:** both purchase paths now pay 10/20/35/50%. ShipPurchaser's off-by-one 0/10/20/35% table was a bug; ~~still to fix on EVM~~ fixed on EVM 2026-11-25 (`ShipPurchaser._processReferral`; not yet deployed to Base Sepolia).
 - **UTC purchases** always mint to the buyer.
 - **Template ships** (tutorial, grants) skip randomness. Their `serial_number` is 0.
 - **DroneYard cost** overflows at 68 lifetime modifications instead of about 196. Both are far above any UTC supply.
 - **`randomBase` increments** wrap instead of reverting (Solidity's revert near `u64::MAX` would brick a ship forever).
-- **Fleets:** a single-player fleet can't be empty (Solidity allowed it, which created a game that could never be played).
+- **Fleets:** ~~a single-player fleet can't be empty (Solidity allowed it, which created a game that could never be played).~~ No longer a difference (2026-11-25): empty fleets are rejected on both chains, in single-player and PvP (`EmptyFleet`). Not yet deployed to Base Sepolia.
 - **Approvals:** NEP-178 approvals are not supported; transfers are owner-only. `mt_transfer_call` is not implemented.
 - **Rendering:** the game contract can't call the renderer from a view. Clients compose `get_ship` → `token_uri`; marketplaces use `base_uri/<id>` through a gateway.
 
@@ -197,7 +196,32 @@ Every external function of the in-scope Solidity contracts was compared against 
 
 Tests: 40 new contract unit tests (`unit_tests/parity.rs`, plus the history and hostile-joiner cases in `pvp.rs` and `roguelike.rs`) and 1 new sandbox test (the migration).
 
-## 11. Open items before mainnet
+## 11. Internal security review (2026-11-14)
+
+The scope was the contract layer: storage ledger, tokens, randomness, ships, shop and treasury, PvP lobbies and matches, roguelike, single-player, and admin/roles. `vt-core` engine and AI behavior is covered by the golden and fuzz differential suites (§9, parity audit §10). The method was every external method against a hostile caller with no profit motive, with special attention to calls that write state owned by someone else.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| 1 | ~~A lobby creator could trap a joiner's ships. After the joiner commits a fleet, the creator empties its storage balance. The joiner's `leave_lobby` and `quit_with_penalty` both re-add the lobby to the open list, charged to the creator, so both reverted with `InsufficientStorageBalance`, and the joiner's ships stayed locked for as long as the creator liked. In the mirror case, a joiner emptying its balance blocked the creator's `leave_lobby` handover (the lobby record is charged to the new creator).~~ | **High** (a no-cost griefer locks another player's assets) | Fixed 2026-11-14. `open_add` and `save_lobby` charge the lobby's creator when it can cover the bytes, otherwise the caller (`charged_or_fallback`). Tests: `a_creator_draining_storage_cannot_trap_the_joiner_in_the_lobby`, `…cannot_block_quit_with_penalty`, `a_joiner_draining_storage_cannot_stop_the_creator_leaving`. Every other `charged(other, …)` call was reviewed: each is a refund, a same-size rewrite, a charge to the caller, or admin-only. |
+| 2 | ~~Recycling a ship before its randomness resolved left the pending request behind. The callback then failed with `ShipNotFound` and *restored* the request for a retry that could never succeed, so about 190 bytes stayed locked on the payer forever and blocked `storage_unregister`.~~ | Low (self-inflicted) | Fixed 2026-11-14. `recycle_ships` drops the pending request first (refunding its payer), and the callback no longer restores a request whose ship is gone. Test: `recycling_an_unconstructed_ship_drops_its_pending_request`. |
+| 3 | ~~An empty PvP fleet is accepted, as on Base. The game starts with one side empty. If the empty side moves first, the other player must wait the lobby's turn time (up to 24 h) and claim `end_game_on_timeout`, with their ships locked meanwhile. It also lets alt accounts feed someone free wins.~~ | Low | ~~**Open (decision).** Reject empty PvP fleets as single-player already does (`EmptyFleet`; a deliberate divergence from Base), or keep parity.~~ Fixed 2026-11-25 on both chains: `create_lobby_fleet` rejects `EmptyFleet` (tests `fleet_rejects_an_empty_creator_fleet` / `…joiner_fleet`), and Base's `Lobbies.createFleet` and `SinglePlayerMatch.startNodeMatch` revert `EmptyFleet`. |
+| 4 | `storage_unregister` requires that no state besides the account record remains. Game-history rows and completed-node records are permanent, so anyone who has played can never unregister. Their unlocked deposit stays withdrawable through `storage_withdraw`. | Informational | By design (safe). Revisit if finished-game compaction is added. |
+| 5 | Single-player and roguelike AI turns are charged to the human, whoever calls them. A player who empties their balance can stall the AI in their own game, which harms no one else. | Informational | Accepted. |
+| 6 | Role-gated admin writes are contract-paid: seed content, map edits, nullifier bindings, sponsored registrations. If the contract's own buffer runs out, every write fails with `LackBalanceForState`. | Operational | Keep the contract account funded above its code plus content. The owner can't withdraw players' storage deposits, only `revenue_near`. |
+
+**Checked and found sound:**
+- **Randomness:** the seed is read only in the private callback. The callback has no player-controlled failure, so `retry_resolve` can't be used to re-roll, and values are stored before use.
+- **Storage ledger:** exact per-call attribution, sponsored NEAR can't be withdrawn, and the contract owner can never withdraw players' deposits.
+- **Tokens:** overflow-checked, mints never panic, self-transfers rejected, receivers must be registered, the medal is soulbound.
+- **`nft_transfer_call`:** the receiver's return value is read capped at 16 bytes, and a ship only comes back if the receiver still holds it unlocked and can afford the move.
+- **Purchases:** exact prices, storage paid out of the price, referral paid from the amount just collected.
+- **Treasury:** UTC treasury and NEAR revenue are accounted separately.
+- **Lobbies:** time-gated timeouts, kicks and prunes; `end_game_on_timeout` on a finished game reverts in the engine (parity with Base).
+- **Fleet validation:** duplicates, positions, ownership, locks, construction, price version, single variant and the cost cap are all checked.
+- **Roguelike:** win effects are pre-checked and atomic, once-per-player grants are tracked, repairs are priced on missing HP.
+- **Remaining `unwrap`s** are internal invariants that untrusted input can't reach.
+
+## 12. Open items before mainnet
 
 1. ~~Port OnchainRandomShipNames (source pending) and refresh the generation goldens with real names.~~ Done 2026-11-13: ported, verified against the live contract; the generation goldens now check the mock name, as the Hardhat export used it.
 2. Set real NEAR pricing (`seed_rules_priced(.., NearUsd::Live)` prices from the live NEAR/USD rate).

@@ -193,6 +193,11 @@ derive_all! {
         pub removed_at_round_start: u64,
         pub heal_cap_percent_at_start: u8,
         pub map: GameMap,
+        /// Bumped by the contract on every write to this game (moves, AI
+        /// turns, ends, map edits), so a poller can tell whether anything
+        /// changed by reading one number (`get_game_version`). Not part of
+        /// the Solidity state; the engine itself never reads it.
+        pub version: u64,
     }
 }
 

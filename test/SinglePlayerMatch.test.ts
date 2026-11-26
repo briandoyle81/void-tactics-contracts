@@ -696,17 +696,30 @@ describe("SinglePlayerMatch", function () {
   });
 
   it("reverts startNodeMatch when the node's map has no AI placements configured", async function () {
-    const { maps, nodeMap, humanSinglePlayerMatch } = await loadFixture(
-      deploySinglePlayerFixture,
-    );
+    const { ships, randomManager, humanShips, human, maps, nodeMap, humanSinglePlayerMatch } =
+      await loadFixture(deploySinglePlayerFixture);
 
     await maps.write.createPresetMap([[], MapMode.Both]);
     const mapId = await maps.read.mapCount();
     const nodeId = await createCampaignNode(nodeMap, mapId);
+    // A real one-ship fleet (empty fleets are rejected first, 2026-11-25).
+    await purchaseAndConstructHumanShip(ships, randomManager, humanShips, human);
 
     await expect(
-      humanSinglePlayerMatch.write.startNodeMatch([nodeId, [], []]),
+      humanSinglePlayerMatch.write.startNodeMatch([nodeId, [1n], [{ row: 0, col: 0 }]]),
     ).to.be.rejectedWith("NoAIPlacementsConfigured");
+  });
+
+  // 2026-11-25: an empty human fleet made a match that could never be
+  // played. Rejected, as on NEAR.
+  it("reverts startNodeMatch with an empty fleet", async function () {
+    const { maps, nodeMap, aiEncounters, humanSinglePlayerMatch } =
+      await loadFixture(deploySinglePlayerFixture);
+    const mapId = await setupBasicAIEncounter(maps, aiEncounters);
+    const nodeId = await createCampaignNode(nodeMap, mapId);
+    await expect(
+      humanSinglePlayerMatch.write.startNodeMatch([nodeId, [], []]),
+    ).to.be.rejectedWith("EmptyFleet");
   });
 
   it("reverts startNodeMatch when the human fleet's variant doesn't match the campaign's required variant", async function () {
@@ -880,7 +893,7 @@ describe("SinglePlayerMatch", function () {
   });
 
   it("sizes the AI fleet dynamically from however many placements are configured (not fixed at 3)", async function () {
-    const { aiShips, maps, nodeMap, singlePlayerMatch, aiEncounters, humanSinglePlayerMatch, human } =
+    const { aiShips, maps, nodeMap, singlePlayerMatch, aiEncounters, humanSinglePlayerMatch, human, ships, randomManager, humanShips } =
       await loadFixture(deploySinglePlayerFixture);
 
     await maps.write.createPresetMap([[], MapMode.Both]);
@@ -911,11 +924,11 @@ describe("SinglePlayerMatch", function () {
 
     const nodeId = await createCampaignNode(nodeMap, mapId);
 
-    await humanSinglePlayerMatch.write.startNodeMatch([nodeId, [], []]);
-
-    // No human ships were minted in this test (empty fleet), so all 5 ids
-    // allocated here are the AI's — AIShips' pool starts at
-    // AI_SHIP_ID_OFFSET + 1 regardless.
+    // The human's ships come from the human Ships contract; AIShips' pool
+    // starts at AI_SHIP_ID_OFFSET + 1 regardless, so all 5 ids allocated
+    // there are the AI's.
+    await purchaseAndConstructHumanShip(ships, randomManager, humanShips, human);
+    await humanSinglePlayerMatch.write.startNodeMatch([nodeId, [1n], [{ row: 0, col: 0 }]]);
     for (let i = 1; i <= 5; i++) {
       const ship = await aiShips.read.getShip([AI_SHIP_ID_OFFSET + BigInt(i)]);
       expect(ship.owner.toLowerCase()).to.equal(
@@ -925,22 +938,38 @@ describe("SinglePlayerMatch", function () {
   });
 
   it("does not cap the AI fleet's cost against the node's costLimit", async function () {
-    const { maps, nodeMap, aiEncounters, humanSinglePlayerMatch } =
+    const { ships, randomManager, humanShips, human, maps, nodeMap, aiEncounters, humanSinglePlayerMatch } =
       await loadFixture(deploySinglePlayerFixture);
 
-    // setupBasicAIEncounter's single default-traits AI ship still costs 75
-    // (baseCost 50 + Laser's mainWeapon cost 25) — comfortably more than
-    // the costLimit: 1n below. If the AI fleet were still capped against
-    // the node's costLimit (the old behavior), minting it would revert
+    // The human brings one ship and the node's costLimit is exactly that
+    // ship's cost. (Until 2026-11-25 this used an empty human fleet and a
+    // costLimit of 1; empty fleets are now rejected.) The AI fleet is five
+    // default-traits ships at 75 each (baseCost 50 + mainWeapon 25), far
+    // more than the limit. If the AI fleet were still capped against the
+    // node's costLimit (the old behavior), minting it would revert
     // InvalidFleetCost; an admin-curated encounter should never be
     // second-guessed by the human's own fleet-cost ceiling.
-    const mapId = await setupBasicAIEncounter(maps, aiEncounters);
-    await nodeMap.write.createNode([1n, mapId, [], 1n, 600n, 20n, true]);
-    const nodeId = await nodeMap.read.nodeCount();
+    await purchaseAndConstructHumanShip(ships, randomManager, humanShips, human);
+    const humanCost = BigInt(tupleToShip((await ships.read.ships([1n])) as ShipTuple).shipData.cost);
 
-    // Human enters with an empty fleet (cost 0, so it alone can't prove
-    // anything — the AI fleet is what has to clear a costLimit of 1).
-    await humanSinglePlayerMatch.write.startNodeMatch([nodeId, [], []]);
+    await maps.write.createPresetMap([[], MapMode.Both]);
+    const mapId = await maps.read.mapCount();
+    await aiEncounters.write.createAIShipConfig([
+      "AI Ship",
+      defaultEquipment,
+      defaultTraits,
+      defaultArchetype,
+      false, // shiny
+      0, // shipsDestroyed
+    ]);
+    const configId = await aiEncounters.read.aiShipConfigCount();
+    const positions = [0, 1, 2, 3, 4].map((row) => ({ row, col: 13 }));
+    await aiEncounters.write.setMapPlacements([mapId, positions, positions.map(() => configId)]);
+    expect(5n * 75n > humanCost).to.equal(true);
+
+    await nodeMap.write.createNode([1n, mapId, [], humanCost, 600n, 20n, true]);
+    const nodeId = await nodeMap.read.nodeCount();
+    await humanSinglePlayerMatch.write.startNodeMatch([nodeId, [1n], [{ row: 0, col: 0 }]]);
   });
 
   describe("Deploy-seeded starter maps", function () {

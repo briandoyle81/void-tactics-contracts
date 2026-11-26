@@ -10,7 +10,10 @@ pub const TIER_COUNT: usize = 3;
 pub const RANK_COUNT: usize = 6;
 pub const MAX_RANK_BONUS_PCT: u8 = 100;
 pub const MIN_RANGE: u8 = 1;
-pub const MIN_MOVEMENT: u8 = 1;
+/// Raised from 1 to 3 (2026-11-26), matching `ShipAttributes.sol`: heavy
+/// armor/shield builds below 3 movement were worth less than nothing at any
+/// price (docs/balance-recommendations-2026-11-21.md section 7).
+pub const MIN_MOVEMENT: u8 = 3;
 
 /// rank = 1 + number of (strictly ascending) thresholds reached.
 pub fn rank_of(data: &VariantAttributeData, ships_destroyed: u64) -> u8 {

@@ -196,6 +196,13 @@ impl Contract {
     /// (half for an already-destroyed ship). Storage is refunded.
     pub fn recycle_ships(&mut self, ship_ids: Vec<U64>) -> U128 {
         let caller = env::predecessor_account_id();
+        // A ship recycled before its randomness resolved takes its pending
+        // request with it (refunded to whoever paid for it), before the
+        // caller's own storage is measured.
+        for U64(id) in &ship_ids {
+            self.drop_pending_request(*id);
+        }
+        self.flush_all();
         let initial = env::storage_usage();
         let mut total = 0u128;
         let mut burned = Vec::new();

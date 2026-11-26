@@ -86,6 +86,12 @@ pub enum WinEffect {
     DecBonus { amount: U128 },
     HealAboveFloor { percent: u8 },
     ShipGrant(ShipGrant),
+    /// The Shattered Hive medal for winning a run (2026-11-21): awarded on a
+    /// win at a node with no children, if the player doesn't hold it yet.
+    /// The EVM deploy gets the same result through RoguelikeCompletionWinEffect
+    /// plus ShatteredHiveMedal.claimMedal; here the medal lives in this
+    /// contract, so it's awarded directly.
+    HiveMedal,
 }
 
 #[near(serializers = [borsh, json])]
@@ -281,21 +287,8 @@ impl Default for RlState {
 }
 
 /// RoguelikeMatch._rosterPositions: rows of 4 in the creator band.
-fn roster_positions(n: usize) -> Vec<Position> {
-    (0..n).map(|i| Position { row: (i / 4) as i16, col: (i % 4) as i16 }).collect()
-}
-
-fn healed_hp(heal_pct: u8, hp: u8, max: u8) -> u8 {
-    let floor = (max as u16 * heal_pct as u16) / 100;
-    let mut h = (hp as u16).max(floor);
-    if h > max as u16 {
-        h = max as u16;
-    }
-    if h == 0 {
-        h = 1;
-    }
-    h as u8
-}
+// Pure run rules live in vt-core so the balance simulator shares them.
+use vt_core::roguelike::{check_advance, heal_above_floor, healed_hp, locked_by_advance, repair_missing_hp, roster_positions};
 
 impl Contract {
     fn run_of(&self, p: &AccountId) -> Run {
@@ -333,17 +326,14 @@ impl Contract {
             return node;
         }
         let current = self.rl.node(run.current_node).clone();
-        if current.kind == RlNodeKind::Combat {
-            require!(self.rl.is_defeated(p, run.generation, run.current_node), "CurrentNodeNotCleared");
+        let defeated = self.rl.is_defeated(p, run.generation, run.current_node);
+        let locked = self.rl.is_locked(p, run.generation, target);
+        if let Err(e) = check_advance(target, run.current_node, current.kind == RlNodeKind::Combat, defeated, locked, &current.children) {
+            env::panic_str(e);
         }
-        require!(!self.rl.is_locked(p, run.generation, target), "CannotAdvance");
-        require!(current.children.contains(&target), "CannotAdvance");
-        for &c in &current.children {
-            if c != target {
-                self.rl.locked.insert((p.clone(), run.generation, c), true);
-            }
+        for n in locked_by_advance(&run.current_node, &target, &current.children) {
+            self.rl.locked.insert((p.clone(), run.generation, n), true);
         }
-        self.rl.locked.insert((p.clone(), run.generation, run.current_node), true);
         self.rl.bump_node(run.current_node, false);
         self.rl.bump_node(target, true);
         run.current_node = target;
@@ -440,7 +430,7 @@ impl Contract {
         run.active_game_id = 0;
         if winner != Some(Side::Creator) {
             self.rl.end_run(&mut run, false);
-            self.rl.runs.insert(p.clone(), run);
+            self.put_run(p.clone(), run);
             events::emit("run_ended", json!({ "player": p, "won": false }));
             return;
         }
@@ -505,7 +495,7 @@ impl Contract {
             m.combat_fleet.clear();
             m.combat_fleet_cost = 0;
         }
-        self.rl.runs.insert(p, run);
+        self.put_run(p, run);
     }
 
     /// RoguelikeMatch._canRejoin.
@@ -530,10 +520,8 @@ impl Contract {
                 for &(id, _) in &run.roster {
                     let stored = self.rl.ship_hp(p, run, id);
                     let a = self.current_attrs(id).map_err(|e| e.name())?;
-                    let current = if stored == 0 { a.max_hull_points } else { stored };
-                    let target = (a.max_hull_points as u16 * *percent as u16) / 100;
-                    if target > current as u16 {
-                        updates.push((id, target as u8));
+                    if let Some(hp) = heal_above_floor(stored, a.max_hull_points, *percent) {
+                        updates.push((id, hp));
                     }
                 }
                 for (id, hp) in updates {
@@ -567,6 +555,15 @@ impl Contract {
                 events::emit("ship_granted", json!({ "node_id": U64(node_id), "player": p, "ship_id": U64(id) }));
                 Ok(())
             }
+            WinEffect::HiveMedal => {
+                // Live children, as RoguelikeCompletionWinEffect reads them:
+                // attached to a mid-run node by mistake, it awards nothing.
+                let is_ending = self.rl.nodes.get(&node_id).is_some_and(|n| n.children.is_empty());
+                if is_ending && self.accounts.get(p).is_some_and(|a| !a.hive_medal) {
+                    self.internal_award_medal(p);
+                }
+                Ok(())
+            }
         }
     }
 
@@ -577,7 +574,7 @@ impl Contract {
     }
 
     pub(crate) fn save_rl(&mut self, game_id: u64, g: GameState, m: RlMatch) {
-        self.sp.games.insert(game_id, g);
+        self.put_game(game_id, g);
         self.rl.matches.insert(game_id, m);
     }
 
@@ -741,7 +738,7 @@ impl Contract {
                     require!(g.variant != 0 && g.variant <= self.config.max_variant, "InvalidVariant");
                     require!(g.equipment.armor == Armor::None || g.equipment.shields == Shields::None, "ArmorAndShieldsBothSet");
                 }
-                WinEffect::DecBonus { .. } => {}
+                WinEffect::DecBonus { .. } | WinEffect::HiveMedal => {}
             }
         }
         n.win_effects = effects;
@@ -788,7 +785,7 @@ impl Contract {
         run.required_variant_at_start = c.required_variant;
         self.rl.bump_node(c.root_node, true);
         self.rl.runs_started += 1;
-        self.rl.runs.insert(p.clone(), run);
+        self.put_run(p.clone(), run);
         self.charge_storage_since(&p, initial);
         events::emit("run_started", json!({ "player": p, "campaign_id": campaign_id, "root_node": U64(c.root_node) }));
         U64(c.root_node)
@@ -850,7 +847,7 @@ impl Contract {
             combat_fleet: ids,
             combat_fleet_cost: combat_cost,
         };
-        self.rl.runs.insert(p.clone(), run);
+        self.put_run(p.clone(), run);
         self.save_rl(game_id, g, m);
         self.index_player_game(&p, game_id);
         self.charge_storage_since(&p, initial);
@@ -869,7 +866,7 @@ impl Contract {
         if node.cost_cap_override != 0 {
             run.current_cost_cap = node.cost_cap_override;
         }
-        self.rl.runs.insert(p.clone(), run);
+        self.put_run(p.clone(), run);
         self.charge_storage_since(&p, initial);
         events::emit("resupply_node_entered", json!({ "node_id": node_id, "player": p }));
     }
@@ -894,7 +891,7 @@ impl Contract {
             self.unlock_all(&res);
             run.reservation_cost = 0;
             self.rl.end_run(&mut run, false);
-            self.rl.runs.insert(p.clone(), run);
+            self.put_run(p.clone(), run);
             events::emit("run_ended", json!({ "player": p, "won": false }));
         }
         self.charge_storage_since(&p, initial);
@@ -920,8 +917,7 @@ impl Contract {
             require!(run.roster.iter().any(|e| e.0 == id), "ShipNotInRoster");
             let a = self.current_attrs(id).or_panic();
             let hp = self.rl.ship_hp(&p, &run, id);
-            let effective = if hp == 0 { a.max_hull_points } else { hp };
-            missing += a.max_hull_points.saturating_sub(effective) as u128;
+            missing += repair_missing_hp(hp, a.max_hull_points) as u128;
             self.rl.set_ship_hp(&p, &mut run, id, a.max_hull_points);
         }
         let cost = missing * self.rl.repair_cost_per_hp;
@@ -932,7 +928,7 @@ impl Contract {
             self.put_account(&p, a);
             self.config.treasury_utc += cost;
         }
-        self.rl.runs.insert(p.clone(), run);
+        self.put_run(p.clone(), run);
         self.charge_storage_since(&p, initial);
         events::emit("resupply_repaired", json!({ "player": p, "cost": U128(cost) }));
     }
@@ -965,7 +961,7 @@ impl Contract {
         self.rl.set_roster(&p, &mut run, &new_roster, None);
         run.reservation = new_roster;
         run.reservation_cost = cost;
-        self.rl.runs.insert(p.clone(), run);
+        self.put_run(p.clone(), run);
         self.charge_storage_since(&p, initial);
         events::emit("roster_modified", json!({ "player": p, "added": add.len(), "removed": remove.len() }));
     }
@@ -974,6 +970,23 @@ impl Contract {
 
     pub fn get_run(&self, account_id: AccountId) -> Run {
         self.run_of(&account_id)
+    }
+
+    /// Every roguelike node id is 1..=count (all campaigns, reachable or not).
+    pub fn get_rl_node_count(&self) -> U64 {
+        U64(self.rl.node_count)
+    }
+
+    pub fn get_rl_campaign_count(&self) -> U64 {
+        U64(self.rl.campaign_count)
+    }
+
+    /// RoguelikeNodeMap nodes by id, paginated from id `from_index + 1`
+    /// (default 20, max 100), whether or not they're reachable from a root.
+    pub fn get_rl_nodes(&self, from_index: Option<u64>, limit: Option<u64>) -> Vec<(U64, RlNode)> {
+        let start = from_index.unwrap_or(0) + 1;
+        let end = (start + limit.unwrap_or(20).min(100)).min(self.rl.node_count + 1);
+        (start..end).filter_map(|id| self.rl.nodes.get(&id).map(|n| (U64(id), n.clone()))).collect()
     }
 
     pub fn get_rl_campaign(&self, campaign_id: U64) -> Option<RlCampaign> {

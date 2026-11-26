@@ -386,6 +386,28 @@ fn fleet_rejects_duplicate_positions() {
     h.c.create_lobby_fleet(U64(id), ships[..2].iter().map(|&s| U64(s)).collect(), vec![pos(1, 1), pos(1, 1)]);
 }
 
+/// 2026-11-25 (pre-audit §11 #3): an empty fleet started a game with one
+/// side empty. Rejected for both sides, as on Base.
+#[test]
+#[should_panic(expected = "EmptyFleet")]
+fn fleet_rejects_an_empty_creator_fleet() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    let id = create(&mut h, "alice.near", None);
+    join(&mut h, "bob.near", id);
+    h.ctx("alice.near", 0);
+    h.c.create_lobby_fleet(U64(id), vec![], vec![]);
+}
+
+#[test]
+#[should_panic(expected = "EmptyFleet")]
+fn fleet_rejects_an_empty_joiner_fleet() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    let id = create(&mut h, "alice.near", None);
+    join(&mut h, "bob.near", id);
+    h.ctx("bob.near", 0);
+    h.c.create_lobby_fleet(U64(id), vec![], vec![]);
+}
+
 #[test]
 #[should_panic(expected = "InvalidPosition")]
 fn fleet_rejects_creator_outside_zone() {
@@ -710,6 +732,16 @@ fn play_out(h: &mut H, g: u64) {
         let who = if side == Side::Creator { "alice.near" } else { "bob.near" };
         let mine: Vec<u64> = state.active(side).iter().copied().filter(|&id| state.ship(id).hull_points > 0 && !state.has_moved(id)).collect();
         let enemies: Vec<u64> = state.active(side.other()).clone();
+        // Nothing can act (every ship disabled or already moved): retreat is
+        // the only legal move left.
+        if mine.is_empty() {
+            let id = state.active(side)[0];
+            let b = state.ship(id);
+            h.now_s += 1;
+            h.ctx(who, 0);
+            h.c.move_ship(U64(g), U64(id), b.row, b.col, ActionType::Retreat, U64(0));
+            continue;
+        }
         let me = mine[0];
         let b = state.ship(me);
         let legal = |m: &MoveInput| state.clone().move_ship(side, m, &h.c.config, 0).is_ok();
@@ -889,4 +921,62 @@ fn lobby_batch_membership_and_kick_views() {
     h.c.timeout_joiner(U64(id));
     assert!(h.c.is_kicked_from_lobby(U64(id), acc("bob.near")));
     assert!(h.c.get_player_timeout_end(acc("bob.near")).0 > h.now_s);
+}
+
+#[test]
+fn a_lobby_change_bumps_both_players_nonces() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    let id = create(&mut h, "alice.near", None);
+    let a0 = h.c.get_player_nonce(acc("alice.near")).unwrap().0;
+    join(&mut h, "bob.near", id);
+    assert!(h.c.get_player_nonce(acc("alice.near")).unwrap().0 > a0, "bob joining alice's lobby changes alice's lobby list");
+}
+
+// ------------------------------- audit 2026-11-14: cross-player storage locks
+
+fn drain(h: &mut H, who: &str) {
+    h.ctx(who, 1);
+    h.c.storage_withdraw(None);
+    assert_eq!(account(h, who).spare_bytes(), 0);
+}
+
+/// Hostile creator: the joiner commits a fleet, then the creator empties its
+/// storage balance. The joiner must still be able to leave (re-adding the
+/// lobby to the open list must not depend on the creator's balance).
+#[test]
+fn a_creator_draining_storage_cannot_trap_the_joiner_in_the_lobby() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    let id = create(&mut h, "alice.near", None);
+    join(&mut h, "bob.near", id);
+    submit(&mut h, "bob.near", id, false);
+    drain(&mut h, "alice.near");
+    h.ctx("bob.near", 0);
+    h.c.leave_lobby(U64(id));
+    assert!(h.owned("bob.near").iter().all(|&s| !h.ship(s).ship.ship_data.in_fleet), "bob's ships are unlocked");
+}
+
+#[test]
+fn a_creator_draining_storage_cannot_block_quit_with_penalty() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    let id = create(&mut h, "alice.near", None);
+    join(&mut h, "bob.near", id);
+    submit(&mut h, "bob.near", id, false);
+    drain(&mut h, "alice.near");
+    h.now_s += 301;
+    h.ctx("bob.near", 0);
+    h.c.quit_with_penalty(U64(id));
+    assert!(h.owned("bob.near").iter().all(|&s| !h.ship(s).ship.ship_data.in_fleet));
+}
+
+/// Hostile joiner: a creator handing the lobby over must not depend on the
+/// joiner's balance either.
+#[test]
+fn a_joiner_draining_storage_cannot_stop_the_creator_leaving() {
+    let mut h = setup(&["alice.near", "bob.near"]);
+    let id = create(&mut h, "alice.near", None);
+    join(&mut h, "bob.near", id);
+    drain(&mut h, "bob.near");
+    h.ctx("alice.near", 0);
+    h.c.leave_lobby(U64(id));
+    assert_eq!(h.c.get_lobby(U64(id)).unwrap().creator, acc("bob.near"), "bob inherits the lobby");
 }

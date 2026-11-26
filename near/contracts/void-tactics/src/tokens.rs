@@ -75,11 +75,10 @@ impl Contract {
     }
 
     pub(crate) fn token_mint_active(&self, kind: TokenKind) -> bool {
-        let key = match kind {
-            TokenKind::Utc => crate::config::SETTING_UTC_MINT_OFF,
-            TokenKind::Dec => crate::config::SETTING_DEC_MINT_OFF,
-        };
-        !self.config.settings.contains_key(&key)
+        match kind {
+            TokenKind::Utc => self.config.utc_mint_active,
+            TokenKind::Dec => self.config.dec_mint_active,
+        }
     }
 
     /// User-initiated burn: panics if the balance is insufficient.
@@ -226,14 +225,9 @@ impl Contract {
     /// (an emergency switch, like the other pauses).
     pub fn set_token_mint_active(&mut self, token_id: String, active: bool) {
         self.assert_role(crate::roles::PAUSER);
-        let key = match TokenKind::parse(&token_id) {
-            TokenKind::Utc => crate::config::SETTING_UTC_MINT_OFF,
-            TokenKind::Dec => crate::config::SETTING_DEC_MINT_OFF,
-        };
-        if active {
-            self.config.settings.remove(&key);
-        } else {
-            self.config.settings.insert(key, "1".into());
+        match TokenKind::parse(&token_id) {
+            TokenKind::Utc => self.config.utc_mint_active = active,
+            TokenKind::Dec => self.config.dec_mint_active = active,
         }
         crate::events::emit("token_mint_active", json!({ "token_id": token_id, "active": active }));
     }

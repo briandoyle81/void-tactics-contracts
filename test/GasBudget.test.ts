@@ -267,11 +267,18 @@ describe("Gas budgets for the largest player transactions", function () {
     return { gameId, ...setup };
   }
 
-  const shipAt = (g: any, ids: readonly bigint[], row: number, col: number) =>
-    ids.find((id) => {
+  // The human ship furthest forward in row 0, and its column. How many
+  // human ships fit under the cap depends on their random costs (and so on
+  // deploy order), so a second column at (0, 1) isn't guaranteed: with 11 or
+  // fewer ships everything sits in column 0.
+  const frontShip = (g: any, ids: readonly bigint[]) => {
+    let best: { id: bigint; col: number } | undefined;
+    for (const id of ids) {
       const p = g.shipPositions.find((s: any) => s.shipId === id)!.position;
-      return p.row === row && p.col === col;
-    })!;
+      if (p.row === 0 && (!best || p.col > best.col)) best = { id, col: p.col };
+    }
+    return best!;
+  };
 
   it("keeps the human's winning move under budget at the largest seeded fleets", async function () {
     const fx = await loadFixture(deployFixture);
@@ -280,20 +287,21 @@ describe("Gas budgets for the largest player transactions", function () {
     const game = deployed.game.address;
 
     // The last AI ship sits at 0 HP one shot from removal, next to the
-    // human ship at (0, 1).
+    // front human ship in row 0.
     let g = await deployed.game.read.getGame([gameId]);
     const ai = g.joinerActiveShipIds;
     for (const id of ai.slice(0, -1)) {
       await setShipHullPointsToZero(game, gameId, id);
     }
     const last = ai[ai.length - 1];
-    await setShipPosition(game, gameId, last, 0, 2);
+    const front = frontShip(g, g.creatorActiveShipIds);
+    await setShipPosition(game, gameId, last, 0, front.col + 1);
     await primeShipForRealDestruction(game, gameId, last);
-    const shooter = shipAt(g, g.creatorActiveShipIds, 0, 1);
+    const shooter = front.id;
 
     const gas = await gasOf(
       publicClient,
-      await humanGame.write.moveShip([gameId, shooter, 0, 1, ActionType.Shoot, last]),
+      await humanGame.write.moveShip([gameId, shooter, 0, front.col, ActionType.Shoot, last]),
     );
     g = await deployed.game.read.getGame([gameId]);
     expect(g.metadata.ended).to.equal(true);
@@ -313,13 +321,14 @@ describe("Gas budgets for the largest player transactions", function () {
 
     // One human ship left at 1 HP, with an AI ship next to it.
     let g = await deployed.game.read.getGame([gameId]);
-    const survivor = shipAt(g, g.creatorActiveShipIds, 0, 1);
+    const front = frontShip(g, g.creatorActiveShipIds);
+    const survivor = front.id;
     for (const id of g.creatorActiveShipIds) {
       if (id !== survivor) await setShipHullPointsToZero(game, gameId, id);
     }
     await setShipHullPoints(game, gameId, survivor, 1);
     const ai = g.joinerActiveShipIds;
-    await setShipPosition(game, gameId, ai[ai.length - 1], 0, 2);
+    await setShipPosition(game, gameId, ai[ai.length - 1], 0, front.col + 1);
 
     let endGas = 0n;
     for (let step = 0; step < 100 && endGas === 0n; step++) {

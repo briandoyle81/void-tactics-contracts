@@ -1,0 +1,40 @@
+{
+  "features": [
+    "count",
+    "hp",
+    "ehp",
+    "damage",
+    "range",
+    "dmg_range",
+    "movement",
+    "v1_special1",
+    "v1_special2",
+    "v1_special3",
+    "v2_special1",
+    "v2_special2",
+    "v2_special3"
+  ],
+  "beta": [
+    -0.31903587072169354,
+    0.07962409409628246,
+    0.022250359612443368,
+    0.1377676185829139,
+    0.015268398627984915,
+    0.07292422809473521,
+    0.4053726861882053,
+    0.024806583034285932,
+    0.11113530841939134,
+    0.019554930358969262,
+    -0.03342080048965324,
+    0.03759112369060482,
+    0.0791789970488484
+  ],
+  "intercept": -0.07662573296139412,
+  "provenance": {
+    "games": 8000,
+    "heldout_accuracy": 0.6682501979414094,
+    "heldout_logloss": 0.6410612955247238,
+    "method": "Bradley-Terry logistic fit on Average-vs-Average PvP (vt-sim fit-values)",
+    "seed": 3
+  }
+}

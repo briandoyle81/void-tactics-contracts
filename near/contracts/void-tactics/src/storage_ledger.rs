@@ -29,6 +29,11 @@ pub const MIN_STORAGE_DEPOSIT: NearToken = NearToken::from_yoctonear(12_500_000_
 #[near(serializers = [borsh])]
 #[derive(Clone, Debug, Default)]
 pub struct Account {
+    /// Bumped on every write to this record and on every change to the
+    /// player's ships, runs, game history or lobby lists, so a poller can tell
+    /// whether the player's data changed by reading one number
+    /// (`get_player_nonce`).
+    pub nonce: u64,
     /// Total NEAR prepaid by (or sponsored for) this account.
     pub deposit: NearToken,
     /// Bytes of contract storage attributed to this account, including this
@@ -100,8 +105,20 @@ impl Contract {
     }
 
     /// Writes back a record that already exists (same size: no storage change).
-    pub(crate) fn put_account(&mut self, id: &AccountId, a: Account) {
+    /// Every account write goes through here and bumps the nonce. The record
+    /// is fixed-size, so this never changes storage usage.
+    pub(crate) fn put_account(&mut self, id: &AccountId, mut a: Account) {
+        a.nonce = self.accounts.get(id).map_or(a.nonce, |old| old.nonce).wrapping_add(1);
         self.accounts.insert(id.clone(), a);
+    }
+
+    /// The player's data changed outside their account record (a ship, run,
+    /// history row or lobby list): bump their nonce. No-op for an
+    /// unregistered account.
+    pub(crate) fn touch_player(&mut self, id: &AccountId) {
+        if let Some(a) = self.accounts.get(id).cloned() {
+            self.put_account(id, a);
+        }
     }
 
     /// Charges `account_id` for the storage delta since `initial_usage`

@@ -27,6 +27,8 @@ jobs:
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
       - name: Rules, golden parity, contract + renderer unit tests
         run: cargo test -p vt-core -p void-renderer && cargo test -p void-tactics --features test-hooks
+      - name: Balance simulator (move generator, reproducibility, smoke run)
+        run: cargo test -p vt-sim --profile sim && cargo run -p vt-sim --profile sim -- smoke --out "$RUNNER_TEMP/vt-sim-smoke"
       - name: Generated art is up to date with the Solidity leaves
         working-directory: .
         run: node scripts/renderer-pipeline/sol-to-rust.js && git diff --exit-code near/contracts/void-renderer/src/art.rs

@@ -83,9 +83,11 @@ CI (`.github/workflows/near.yml`) runs all of the above on every change under `n
 
 | Contract | Account | Code SHA-256 |
 |---|---|---|
-| Game | `game.void-tactics.testnet` | `e1ead8a222d09350778c55ba4eb1ad42334b9616f76670a09345001545483521` (upgraded in place 2026-11-14 16:41 UTC) |
-| Renderer | `art.void-tactics.testnet` | `bcd705aadd752ba244180de778cedad0b24488f8aacced4cbbb0810ad8f37066` (upgraded in place 2026-11-14 16:41 UTC) |
+| Game | `game.void-tactics.testnet` | `fa1d5a12b23f5b334f092f25ae10a0843a6dc74e873edb4b74655b1578a5c595` (fresh deploy 2026-11-14 17:34 UTC; AI-ship fix upgrade 21:57 UTC) |
+| Renderer | `art.void-tactics.testnet` | `f380058ce7c26c1f8b5f311aac50c9f1e092f90eab4ec1e5ec35f171979b326b` (fresh deploy 2026-11-14 17:34 UTC) |
 | Owner | `void-tactics.testnet` | (plain account) |
+
+NFT `base_uri` (2026-11-14): `https://warpflow-git-near-migration-experiment-briandoyle81s-projects.vercel.app/api/ship`. Ship metadata is fetched from `…/api/ship/<id>`, a route the frontend serves.
 
 Content ids (content key → on-chain id) are listed in [`deployments/testnet.json`](deployments/testnet.json). The tool verifies every id on chain before writing that file.
 
@@ -125,6 +127,7 @@ Security notes are in [`docs/near-pre-audit.md`](../docs/near-pre-audit.md). The
 | Hardening: full seed parity with the Solidity deploy (72 maps, 64 AI configs), upgrade/migrate drill with contract keys deleted, gas budgets, deploy tool with live NEAR/USD pricing, CI, pre-audit and frontend docs | Done (Phase 6). Deployed to testnet 2026-11-13; not on mainnet |
 | EVM parity audit (2026-11-14): `sync_ship_costs`, the card-checkout minter (`create_ships_for`), map/node/AI-config/roguelike-node edits, `get_games_for_player`, settings and player views, the deployment record, the state migration | Done, unit + sandbox tested, live on testnet |
 | Second parity pass (2026-11-14, `docs/near-evm-parity-audit-2026-11-14.md`): two-step ownership transfer (game + renderer), UTC/DEC mint kill switch, player burn, NEP-245 token metadata, ship stats view, move previews, batch/count/lens views, live-game tile edits, differential engine fuzzing | Done, live on testnet (2026-11-14) |
+| Change counters (`get_game_version`, `get_player_nonce`) and roguelike node listing (2026-11-14) | Done, live on testnet (fresh deploy 17:34 UTC) |
 | Replay through an indexer (2026-11-14): every event that changes a game carries the whole compact board (`vt_core::replay`); a whole game rebuilds from logs alone (`tests/tests/phase7_replay.rs`) | Done, live on testnet (2026-11-14). The indexer service itself isn't built |
 | Tournaments, Uniswap v4 lottery hook | Dropped for the NEAR version |
 

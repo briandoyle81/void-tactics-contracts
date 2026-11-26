@@ -93,6 +93,27 @@ impl Contract {
         ids
     }
 
+    /// Removes the randomness request still pending for an unconstructed
+    /// ship (before burning it) and refunds its bytes to whoever paid.
+    pub(crate) fn drop_pending_request(&mut self, ship_id: u64) {
+        let Some(rec) = self.ships.get(&ship_id) else { return };
+        if rec.ship.ship_data.constructed {
+            return;
+        }
+        let rid = rec.ship.traits.serial_number;
+        if self.random_to_ship.get(&rid).copied() != Some(ship_id) {
+            return;
+        }
+        let Some(req) = self.random_requests.get(&rid).cloned() else { return };
+        self.flush_all();
+        let before = env::storage_usage();
+        self.random_requests.remove(&rid);
+        self.random_to_ship.remove(&rid);
+        self.flush_all();
+        let freed = before - env::storage_usage();
+        self.adjust_used_bytes(&req.owner, -(freed as i64));
+    }
+
     pub(crate) fn schedule_resolution(ids: Vec<u64>) -> Promise {
         let n = ids.len();
         let ids: Vec<U64> = ids.into_iter().map(U64).collect();
@@ -123,7 +144,9 @@ impl Contract {
         self.adjust_used_bytes(&req.owner, -(freed as i64));
 
         let result = self.try_construct(ship_id, req.value, true);
-        if result.is_err() {
+        // A request whose ship no longer exists is spent for good (nothing
+        // could ever construct it), so it isn't restored.
+        if result.is_err() && result != Err("ShipNotFound") {
             // Keep the resolved value for a later `construct_ship`: restore
             // the request (same bytes the payer just got back).
             self.random_requests.insert(id, req.clone());

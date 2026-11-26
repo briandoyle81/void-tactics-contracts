@@ -1388,6 +1388,21 @@ describe("Lobbies", function () {
   });
 
   describe("Fleet Creation", function () {
+    // 2026-11-25: an empty fleet started a game with one side empty (the
+    // other player could be left waiting out the turn time, and alt
+    // accounts could feed free wins). Rejected, as on NEAR.
+    it("rejects an empty fleet", async function () {
+      const { creatorLobbies, joinerLobbies } = await loadFixture(deployLobbiesFixture);
+      await creatorLobbies.write.createLobby([1000n, 300n, true, 0n, 100n, zeroAddress]);
+      await joinerLobbies.write.joinLobby([1n]);
+      await expect(creatorLobbies.write.createFleet([1n, [], []])).to.be.rejectedWith(
+        "EmptyFleet",
+      );
+      await expect(joinerLobbies.write.createFleet([1n, [], []])).to.be.rejectedWith(
+        "EmptyFleet",
+      );
+    });
+
     it("should only allow Lobbies contract to create fleets", async function () {
       const {
         creatorLobbies,

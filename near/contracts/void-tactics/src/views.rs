@@ -320,3 +320,20 @@ impl Contract {
         self.nullifiers.get(&crate::shop::parse_hash_pub(&nullifier_hash)).cloned()
     }
 }
+
+// ---- change detection for pollers (2026-11-14) ----
+
+#[near]
+impl Contract {
+    /// `GameState::version`: changes on every write to the game. None for an
+    /// unknown game.
+    pub fn get_game_version(&self, game_id: U64) -> Option<U64> {
+        self.sp.games.get(&game_id.0).map(|g| U64(g.version))
+    }
+
+    /// `Account::nonce`: changes whenever the player's account, ships, runs,
+    /// game history or lobbies change. None for an unregistered account.
+    pub fn get_player_nonce(&self, account_id: AccountId) -> Option<U64> {
+        self.accounts.get(&account_id).map(|a| U64(a.nonce))
+    }
+}

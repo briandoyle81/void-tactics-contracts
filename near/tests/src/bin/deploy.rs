@@ -103,16 +103,35 @@ fn release_wasm(name: &str) -> Result<Vec<u8>> {
 }
 
 async fn run<T: near_workspaces::Network + Send + Sync + 'static>(worker: Worker<T>, a: Args) -> Result<()> {
-    // near-cli-rs legacy keychain files carry `private_key` (older near-cli:
-    // `secret_key`) but not always `account_id`, so read the key ourselves.
-    let load = |id: &str| -> Result<Account> {
-        let path = key_file(&a, id);
-        let raw = std::fs::read_to_string(&path).with_context(|| format!("missing key file {}", path.display()))?;
-        let v: serde_json::Value = serde_json::from_str(&raw).with_context(|| format!("bad key file {}", path.display()))?;
-        let sk = v["private_key"].as_str().or(v["secret_key"].as_str()).with_context(|| format!("no private_key in {}", path.display()))?;
-        Ok(Account::from_secret_key(id.parse()?, sk.parse()?, &worker))
-    };
-    let (game_acc, renderer_acc, owner) = (load(&a.game)?, load(&a.renderer)?, load(&a.owner)?);
+    // near-cli-rs legacy keychain: `<account>.json` plus one file per key in
+    // `<account>/`. When an account is recreated, the new key lands only in
+    // the folder and the top-level file keeps the dead key, so try every
+    // candidate and use one whose public key is on chain. Files carry
+    // `private_key` (older near-cli: `secret_key`), not always `account_id`.
+    let dir = key_file(&a, "x").parent().map(|d| d.to_path_buf()).unwrap_or_default();
+    let mut accounts = Vec::new();
+    for id in [&a.game, &a.renderer, &a.owner] {
+        let mut candidates = vec![dir.join(format!("{id}.json"))];
+        if let Ok(entries) = std::fs::read_dir(dir.join(id.as_str())) {
+            candidates.extend(entries.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")));
+        }
+        let on_chain: Vec<String> = worker.view_access_keys(&id.parse()?).await?.into_iter().map(|k| k.public_key.to_string()).collect();
+        let mut found = None;
+        for path in candidates {
+            let Ok(raw) = std::fs::read_to_string(&path) else { continue };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) else { continue };
+            let Some(sk) = v["private_key"].as_str().or(v["secret_key"].as_str()) else { continue };
+            let sk: near_workspaces::types::SecretKey = sk.parse()?;
+            if on_chain.contains(&sk.public_key().to_string()) {
+                found = Some(Account::from_secret_key(id.parse()?, sk, &worker));
+                break;
+            }
+        }
+        accounts.push(found.with_context(|| format!("no key file for {id} matches an on-chain access key (looked in {})", dir.display()))?);
+    }
+    let owner = accounts.pop().unwrap();
+    let renderer_acc = accounts.pop().unwrap();
+    let game_acc = accounts.pop().unwrap();
 
     let (game, seed) = match a.mode {
         Mode::Deploy => {

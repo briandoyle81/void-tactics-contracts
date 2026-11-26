@@ -106,7 +106,7 @@
       },
       {
         "name": "migrate",
-        "doc": " Current state decodes as-is. State from before 2026-11-14 ended at\n `names`: Borsh encodes fields in order, so appending an empty\n `pending_owner` gives the new layout.",
+        "doc": " State migration hook, run by `upgrade`; the current layout re-reads\n as-is (same rules as the game contract's `migrate`).",
         "kind": "call",
         "modifiers": [
           "init",

@@ -1,5 +1,5 @@
 {
-  "writtenAt": "2026-11-13T19:47:56.432Z",
+  "writtenAt": "2026-11-26T16:28:18.616Z",
   "source": "ignition/modules/DeployAndConfig.ts (PRODUCTION=false) on the ephemeral hardhat network",
   "variants": {
     "1": {
@@ -194,21 +194,21 @@
       "currentAttributesVersion": 1,
       "costs": {
         "version": 1,
-        "baseCost": 50,
+        "baseCost": 95,
         "accuracy": [
           0,
-          10,
-          25
+          5,
+          10
         ],
         "hull": [
           0,
-          10,
-          25
+          5,
+          10
         ],
         "speed": [
           0,
           10,
-          25
+          15
         ],
         "mainWeapon": [
           25,
@@ -223,8 +223,8 @@
         "armor": [
           0,
           5,
-          10,
-          15,
+          20,
+          25,
           0,
           0,
           0,
@@ -233,8 +233,8 @@
         "shields": [
           0,
           10,
-          20,
           30,
+          35,
           0,
           0,
           0,
@@ -445,16 +445,16 @@
       "currentAttributesVersion": 1,
       "costs": {
         "version": 1,
-        "baseCost": 50,
+        "baseCost": 95,
         "accuracy": [
           0,
           10,
-          25
+          20
         ],
         "hull": [
           0,
           10,
-          25
+          10
         ],
         "speed": [
           0,
@@ -474,8 +474,8 @@
         "armor": [
           0,
           5,
-          10,
           15,
+          20,
           0,
           0,
           0,
@@ -493,9 +493,9 @@
         ],
         "special": [
           0,
-          15,
-          20,
-          10,
+          5,
+          25,
+          35,
           0,
           0,
           0,
