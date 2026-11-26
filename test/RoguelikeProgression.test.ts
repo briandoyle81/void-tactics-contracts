@@ -17,13 +17,14 @@ describe("Roguelike enemy progression", function () {
   const COMBAT = 0;
   // Nodes deliberately off the rule while the story is being rewritten
   // (2026-10-20). A new m05 -> d01 edge makes d01 ("Sneak Attack")
-  // mission 5, and through it s01 (reached from d03) mission 8; both keep
-  // their variant 1 rosters. The seed files are the source of truth; drop a
+  // mission 5; it keeps its variant 1 roster. (s01 was exempt too until the
+  // unreachable d02-f06/r03-r05 nodes were deleted from the seed file on
+  // 2026-11-20.) The seed files are the source of truth; drop a
   // key from here once its node is back on the rule. m08 (mission 7) moved
   // to map rlM06 on the 2026-11-04 deploy's content export, which fights the
   // shiny variant 1 set (see AIShipConfigs.test.ts's OFF_LADDER). m10 (map70)
   // and m15 (map72) fight it too since the 2026-11-10 content export.
-  const RULE_EXEMPT_NODE_KEYS = new Set(["d01", "s01", "m08", "m10", "m15"]);
+  const RULE_EXEMPT_NODE_KEYS = new Set(["d01", "m08", "m10", "m15"]);
   const nodeKeyOf = (id: bigint) => roguelikeStarterContent.nodes[Number(id) - 1]?.key;
 
   // Mission number of every root-reachable Combat node in the data file

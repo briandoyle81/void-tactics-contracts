@@ -1,0 +1,20 @@
+[package]
+name = "vt-core"
+description = "Pure, deterministic Void Tactics game rules (no near-sdk dependency)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+tiny-keccak.workspace = true
+borsh = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+
+# near-sdk generates its ABI host-side with schemars 0.8; derive JsonSchema only
+# there so the WASM build carries no schema code.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+schemars = "0.8"
+borsh = { version = "1", features = ["derive", "unstable__schema"] }
+
+[dev-dependencies]
+serde_json = "1"

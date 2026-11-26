@@ -521,7 +521,7 @@ describe("Ship costs, versions, and fleets", function () {
       ).to.equal(200);
     });
 
-    it("floors a ship's final range and movement at 1", async function () {
+    it("floors a ship's final range at 1 and movement at 3", async function () {
       const { shipAttributes, owner } = await loadFixture(deployShipsFixture);
 
       // Movement modifiers that sum below zero (base 0, gun -1, armor -2,
@@ -543,7 +543,7 @@ describe("Ship costs, versions, and fleets", function () {
       const attrs = await shipAttributes.read.calculateShipAttributes([
         makeShip(1),
       ]);
-      expect(attrs.movement).to.equal(1);
+      expect(attrs.movement).to.equal(3);
       expect(attrs.range).to.equal(1);
 
       // Bonuses scale the true (zero) base, so a top-rank ship isn't inflated
@@ -551,11 +551,11 @@ describe("Ship costs, versions, and fleets", function () {
       const topRank = await shipAttributes.read.calculateShipAttributes([
         makeShip(1, 1000),
       ]);
-      expect(topRank.movement).to.equal(1);
+      expect(topRank.movement).to.equal(3);
       expect(topRank.range).to.equal(1);
     });
 
-    it("leaves range and movement untouched when they are already at or above 1", async function () {
+    it("leaves range and movement untouched when they are already at or above their floors", async function () {
       const { shipAttributes } = await loadFixture(deployShipsFixture);
 
       // Variant 1's deployed defaults: Laser range 3; movement = base speed 4
@@ -571,13 +571,13 @@ describe("Ship costs, versions, and fleets", function () {
     it("counts the None (no defensive gear) movement bonus once, not once per slot", async function () {
       const { shipAttributes, owner } = await loadFixture(deployShipsFixture);
 
-      // base speed 3, tier-0 engine, Generic gun 0. Armor: None +1, Light 0,
+      // base speed 5 (clear of the movement floor of 3), tier-0 engine, Generic gun 0. Armor: None +1, Light 0,
       // Heavy -2. Shields: None +5 (a deliberately absurd value that must
       // never be read), Light +1.
       await shipAttributes.write.setVariantAttributes(
         [
           baselineAttributes(1, {
-            baseSpeed: 3,
+            baseSpeed: 5,
             engineSpeeds: [0, 0, 0],
             guns: [{ range: 3, damage: 50, movement: 0 }],
             armors: [
@@ -604,14 +604,14 @@ describe("Ship costs, versions, and fleets", function () {
 
       // No defensive gear: the None bonus applies once (armor table's +1);
       // the shields table's None entry is never read.
-      expect(await move(0, 0)).to.equal(4);
+      expect(await move(0, 0)).to.equal(6);
       // Armor only: just the armor's own movement — no None bonus from the
       // unused shields slot.
-      expect(await move(1, 0)).to.equal(3); // Light armor: 3 + 0
-      expect(await move(3, 0)).to.equal(1); // Heavy armor: 3 - 2
+      expect(await move(1, 0)).to.equal(5); // Light armor: 5 + 0
+      expect(await move(3, 0)).to.equal(3); // Heavy armor: 5 - 2
       // Shields only: just the shields' own movement — no None bonus from the
       // unused armor slot.
-      expect(await move(0, 1)).to.equal(4); // Light shields: 3 + 1
+      expect(await move(0, 1)).to.equal(6); // Light shields: 5 + 1
     });
 
     it("reads special data at a specific published version, independent of the live one", async function () {
@@ -941,11 +941,11 @@ describe("Ship costs, versions, and fleets", function () {
       const { shipAttributes, owner } = await loadFixture(deployShipsFixture);
 
       // Costs are per-variant now (ShipAttributes.costsByVariant) — set
-      // variant 2's baseCost 50 higher than variant 1's constructor-seeded
-      // default (50), leaving variant 1 untouched.
+      // variant 2's baseCost 50 higher than variant 1's deployed default
+      // (95 since the 2026-11-26 repricing), leaving variant 1 untouched.
       const variant2Costs = costsParams({
         version: 0,
-        baseCost: 100,
+        baseCost: 145,
         accuracy: [0, 10, 25],
         hull: [0, 10, 25],
         speed: [0, 10, 25],

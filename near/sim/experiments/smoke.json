@@ -1,0 +1,13 @@
+{
+  "name": "smoke",
+  "seed": 1,
+  "smoke": true,
+  "stages": ["components", "pve", "roguelike", "factorial", "economy", "matrix"],
+  "components": { "fit_games": 100, "pick_composes": 4 },
+  "pve": { "pools_per_node": 1, "pool_size": 30 },
+  "roguelike": { "runs_per_level": 2, "runs_per_path": 1, "pool_size": 30 },
+  "factorial": { "scenarios": 2, "variants": [{ "name": "calibrated", "poor_noise": null, "excellent_plies": null }] },
+  "economy": { "days": 3, "players_per_archetype": 1 },
+  "matrix": { "scenarios_per_pair": 1, "brackets": [1000] },
+  "flags": { "pay_to_win_max": 0.65, "skill_min": 0.65, "node_average_clear_min": 0.2, "node_spike": 0.35, "component_mispricing": 0.3, "ai_config_min_appearances": 20 }
+}

@@ -58,7 +58,10 @@ contract ShipAttributes is IShipAttributes, Ownable {
     // after every bonus, so individual table entries (including negative
     // movement modifiers and inert range-0 filler guns) stay expressible.
     uint8 internal constant MIN_RANGE = 1;
-    uint8 internal constant MIN_MOVEMENT = 1;
+    // Raised from 1 to 3 (2026-11-26): the balance simulator found heavy
+    // armor/shield builds that drop below 3 movement worth less than nothing
+    // at any price (docs/balance-recommendations-2026-11-21.md section 7).
+    uint8 internal constant MIN_MOVEMENT = 3;
 
     error InvalidAttributesVersion();
     error ShipNotFound();

@@ -1,0 +1,13 @@
+[package]
+name = "test-receiver"
+description = "Test-only NEP-171 receiver with hostile behaviors (sandbox tests)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk.workspace = true

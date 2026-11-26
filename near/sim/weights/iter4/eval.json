@@ -1,0 +1,142 @@
+{
+  "features": [
+    "hp",
+    "live",
+    "disabled",
+    "firepower",
+    "score",
+    "score_race",
+    "tile_hold",
+    "tile_reach",
+    "threat",
+    "killable",
+    "shots_now",
+    "tempo",
+    "to_move",
+    "reactor",
+    "exposed",
+    "outgun",
+    "held_hp",
+    "repair_live",
+    "repair_exposed",
+    "tile_pace",
+    "reach_pace",
+    "exposed_dmg"
+  ],
+  "weights": [
+    0.75754666,
+    0.3166009,
+    0.0011067191,
+    -0.1555514,
+    -0.0075431853,
+    -0.15464589,
+    0.024910688,
+    0.31059876,
+    0.20734054,
+    -0.04319701,
+    0.05096119,
+    -0.047681443,
+    -0.08086448,
+    -0.1657906,
+    -0.0073996093,
+    -0.008837495,
+    0.16164568,
+    0.0065939906,
+    -0.0034819487,
+    0.17940447,
+    0.18252772,
+    -0.07108368
+  ],
+  "value_scale": 0.56008434,
+  "provenance": {
+    "campaign_clear_rate": {
+      "seed_weights": 0.18333333333333332,
+      "trained": 0.36666666666666664
+    },
+    "excellent_selection": [
+      {
+        "candidate": "gen_1/3",
+        "excellent_clear": 0.7555555555555555,
+        "pvp_vs_start": 0.475,
+        "score": 0.6152777777777778
+      },
+      {
+        "candidate": "gen_2/3",
+        "excellent_clear": 0.8444444444444444,
+        "pvp_vs_start": 0.5625,
+        "score": 0.7034722222222223
+      },
+      {
+        "candidate": "final",
+        "excellent_clear": 0.8222222222222222,
+        "pvp_vs_start": 0.5325,
+        "score": 0.6773611111111111
+      },
+      {
+        "candidate": "start",
+        "excellent_clear": 0.8888888888888888,
+        "pvp_vs_start": 0.5,
+        "score": 0.6944444444444444
+      }
+    ],
+    "final_generation": {
+      "best_fitness": 0.53125,
+      "generation": 149,
+      "mean": [
+        3.1946897506713867,
+        1.4124534130096436,
+        -0.2358756810426712,
+        -0.6585537195205688,
+        -0.10079655796289444,
+        -0.8168909549713135,
+        0.4469524621963501,
+        1.15537428855896,
+        0.8291044235229492,
+        0.03456231951713562,
+        0.29245397448539734,
+        -0.0664672777056694,
+        -0.4552663266658783,
+        -0.49029088020324707,
+        0.007018979638814926,
+        0.045273613184690475,
+        0.8665580153465271,
+        -0.17463158071041107,
+        -0.22360581159591675,
+        0.9465849995613098,
+        0.8022034764289856,
+        -0.28217723965644836
+      ],
+      "mean_fitness": 0.455078125,
+      "sigma": 0.09775969050978735
+    },
+    "method": "sep-CMA-ES self-play (vt-sim train)",
+    "opts": {
+      "generations": 150,
+      "hard_nodes": [
+        "m09",
+        "m10",
+        "m13",
+        "m14",
+        "m11",
+        "m15"
+      ],
+      "hard_share": 0.5,
+      "lambda": 12,
+      "pve_games": 16,
+      "pvp_scenarios": 16,
+      "roguelike_cap": 1000,
+      "roguelike_share": 0.0,
+      "seed": 1,
+      "sigma0": 0.3,
+      "value_fit_scenarios": 200
+    },
+    "trained_vs_seed_weights": {
+      "a_score": 0.70375,
+      "a_wins": 250,
+      "ci95": 0.04035110870452269,
+      "draws": 63,
+      "games": 400
+    },
+    "warm_start": "sim/weights/iter3/eval.json"
+  }
+}

@@ -70,6 +70,7 @@ describe("Seeded AI ship configs", function () {
   // deliberate design exceptions.
   const SNIPER_EXCEPTIONS: Record<string, { gun: number; minRange: number }> = {
     v2sniper3: { gun: 2, minRange: 4 }, // intentional, 2026-10-12
+    aiConfig62: { gun: 2, minRange: 5 }, // Silencio, shiny missile sniper: intentional, 2026-11-13
   };
   // Ships outside the level ramp: the shiny set made in the content editor
   // (La Sombra, Murcielago, Umbria, Abismo, Vacia, Oscuridad, Velo, Umbral,
@@ -253,8 +254,10 @@ describe("Seeded AI ship configs", function () {
             .sort((a, b) => a.level - b.level);
           const first = line[0];
           const last = line[line.length - 1];
+          // 55 since the 2026-11-26 repricing made accuracy/hull/speed tiers
+          // cheaper (was 60; AI Aggressor V vs the entry aggressor is 55).
           expect(last.cost - first.cost, `${last.key} vs ${first.key} cost`).to.be.greaterThanOrEqual(
-            60,
+            55,
           );
           expect(
             Number(last.attrs.hullPoints) * (100 - 0) /

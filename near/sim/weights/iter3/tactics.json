@@ -1,0 +1,60 @@
+{
+  "poor_noise": 0.16796875,
+  "poor_temperature": 0.083984375,
+  "poor_epsilon": 0.050390627,
+  "average_temperature": 0.0,
+  "excellent": {
+    "simulations": 100,
+    "c_uct": 1.0,
+    "widen_base": 2.0,
+    "widen_rate": 1.0,
+    "rollout_plies": 6,
+    "model_onchain_ai": true
+  },
+  "loss_aversion": [
+    0.0,
+    0.05,
+    0.05
+  ],
+  "provenance": {
+    "ladder": [
+      {
+        "a": "average",
+        "a_score": 0.7675,
+        "b": "poor",
+        "ci95": 0.053305769625593774,
+        "games": 200
+      },
+      {
+        "a": "excellent",
+        "a_score": 0.715,
+        "b": "average",
+        "ci95": 0.05579728384448572,
+        "games": 200
+      },
+      {
+        "a": "excellent",
+        "a_score": 0.825,
+        "b": "poor",
+        "ci95": 0.04542214057341815,
+        "games": 200
+      }
+    ],
+    "poor_noise": 0.16796875,
+    "pve_clear_rate": [
+      [
+        "poor",
+        0.16666666666666666
+      ],
+      [
+        "average",
+        0.45
+      ],
+      [
+        "excellent",
+        0.9166666666666666
+      ]
+    ],
+    "warnings": []
+  }
+}

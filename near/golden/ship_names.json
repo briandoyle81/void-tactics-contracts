@@ -1,0 +1,490 @@
+{
+ "writtenAt": "2026-11-13T20:14:19.912Z",
+ "source": "eth_call getRandomShipName on Base Sepolia 0x2b6C2e73D7D8B9dd49aF848B7A19FF003ED0d779",
+ "vectors": [
+  {
+   "seed": "0x6636313932303132383935653232313434333441653944433144353536374675",
+   "name": "Milne"
+  },
+  {
+   "seed": "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce",
+   "name": "Castleton"
+  },
+  {
+   "seed": "0x6c31fc15422ebad28aaf9089c306702f67540b53c7eea8b7d2941044b027100f",
+   "name": "Marmion"
+  },
+  {
+   "seed": "0x859f11b75569a4eb0496c5138fd42cc52aee8cf5c4e7cfafe58c92b2ed138e04",
+   "name": "Tanais"
+  },
+  {
+   "seed": "0xd4c69e49e83a6047f46e42b2d053a1f0c6e70ea42862e5ef4ad66b3666c5e2af",
+   "name": "Pompée"
+  },
+  {
+   "seed": "0xd2ed8d75f801ae8a206c07ff9b104f0e005238dcd1cbaf844fd9f40d63174c56",
+   "name": "De Soto County"
+  },
+  {
+   "seed": "0xfe07a98784cd1850eae35ede546d7028e6bf9569108995fc410868db775e5e6a",
+   "name": "Small Swallow"
+  },
+  {
+   "seed": "0xc3751ea2572cb6b4f061af1127a67eaded2cfc191f2a18d69000bbe2e98b680a",
+   "name": "Cadiz"
+  },
+  {
+   "seed": "0xea2e640cf9cf85178466ebb2f721ea6b3ec88def0a8c3d3f7d31e775eed05347",
+   "name": "E. A. Poe"
+  },
+  {
+   "seed": "0x7b2d9ad83603f6d16ce3a070609e9ad72bcf844975f740bddbafde0a0de6dc06",
+   "name": "City of Pekin"
+  },
+  {
+   "seed": "0xc05de23bfc9a474d4cb19960330725d05fd8960ebedae32eb1868990b29a9056",
+   "name": "Groenland"
+  },
+  {
+   "seed": "0xfda940ba5250d10bd3c701ef3e627a7b0bd0fd5143c45a35981f247fa1db3812",
+   "name": "Dunlap"
+  },
+  {
+   "seed": "0x3f4efaf51cd915ee9f21d9f383cd44234d8cc20b70dbe44d9cc1b9e9c51b5cd2",
+   "name": "Izard"
+  },
+  {
+   "seed": "0x626899464858d84aa8a337b4fd305d199dad99f1c20a1129ab98bc233c50c6da",
+   "name": "Seven Seas"
+  },
+  {
+   "seed": "0x0a1d16d5f4fda7e23b7730ca962dc906376114d9f843ea4f8a32aaee64eab062",
+   "name": "Aragón"
+  },
+  {
+   "seed": "0xc0b646ed04f297a93680687cb423a4c1d724de4b9f723145da6b5cdbeedb3f72",
+   "name": "Edsall"
+  },
+  {
+   "seed": "0xe605c2edc7ca1e162661ab489fde73d3a712bed04c26a55e7286ee5dc4542a6c",
+   "name": "West Elcajon"
+  },
+  {
+   "seed": "0xc7d45de61fbaffaad10c6cffc2c93ad8b5aa82ee66772cd6c88fe08a7641e97e",
+   "name": "Xarifa"
+  },
+  {
+   "seed": "0x4e86d666b86e18211956872f95be0febe83929df38e87208aecf641db0418e55",
+   "name": "Peony"
+  },
+  {
+   "seed": "0x45a9ae46a4c3f09611b66629c4f800fb1de763ee06b79fad771b2e97161ef7be",
+   "name": "Samarinda"
+  },
+  {
+   "seed": "0x6f679f7690d28d42c1de1aaa1d4c6668a8506608c8c9a58cd73122dcd4c4b771",
+   "name": "Meadowlark"
+  },
+  {
+   "seed": "0x53943dd57b334394088bcce658a9a8a838371243bd18fae95da6cf7af8e1f0a4",
+   "name": "Gay Forester"
+  },
+  {
+   "seed": "0x88867debcaf2a31bc5ed38f1d1492af66cf5a1d1107c0855bba0151ca4ffb26a",
+   "name": "Migadan"
+  },
+  {
+   "seed": "0x20dd72172e4bd9c99a919c217dd8c0154cbe0f9e305e67c5247f2ee8ae987c06",
+   "name": "Naka"
+  },
+  {
+   "seed": "0xf19c5e2028c6a7d285e93f83ec09d4c6c920ed502bed5ef3911620cd58f97533",
+   "name": "Tourbillon"
+  },
+  {
+   "seed": "0x3ae7a9e2e8385c4559eec28609d3bdfcd76efccdde47738fa82e6e2c732544d4",
+   "name": "Abele"
+  },
+  {
+   "seed": "0xa0a6c335ad156c33f14778b24614ec8236b2463f3296e558c0abe20df28db0a9",
+   "name": "Zeya"
+  },
+  {
+   "seed": "0x6fd480f2f1e19fca27f091a3b866899037186481fbddf0fc6e965bdc2187ada9",
+   "name": "Fayoum"
+  },
+  {
+   "seed": "0xef9d197f8d4641f26f3be8d35543ce3545e1556b1e409daa0e777692ed8858d3",
+   "name": "Pinguin"
+  },
+  {
+   "seed": "0x461cb3a3df2e16763d1ad6b85d827db15e3d9d4db0b2a462cf95d2bf8c991891",
+   "name": "General Richard Arnold"
+  },
+  {
+   "seed": "0x25a2fcdb755adf6c353223908407d7457b651782e4d8f8fdb31cf869fda5285c",
+   "name": "Fernando VII"
+  },
+  {
+   "seed": "0xa815e15bc34a3c06744518bda21a12ba1053562d331abd31220876360beaf512",
+   "name": "Fanny Skinner"
+  },
+  {
+   "seed": "0x2bdc97a14940533e5a1a02c75179e94fcd7ffcbbc435fd009143b17d9c3c7343",
+   "name": "Semmes"
+  },
+  {
+   "seed": "0xc05ff25c9e4bcfb57a5bab271a38b46a8c8b2d5d9ef815ba449d6e211da42251",
+   "name": "Salamaua"
+  },
+  {
+   "seed": "0xec9de0c71f6168183d2255ac67ffb74a2a9628fac122709c782d4ec412de658a",
+   "name": "Action Stations"
+  },
+  {
+   "seed": "0x834fcc871f14a59445276c0e3fe41508db939d3fb83c4f6f906211bdf656fddc",
+   "name": "Olivin"
+  },
+  {
+   "seed": "0xc4050abd3a0f290303f9a641eb5c9b47931281516d984db52fd8c97dab2546d7",
+   "name": "John W. Crittenden"
+  },
+  {
+   "seed": "0x00f622b1836c8262e37432bdc3ddc773fcf1e0b8752c56f9ba25912d675da5e8",
+   "name": "Shaumian"
+  },
+  {
+   "seed": "0x28542533f913619097e02cf57288f5e6c415158e248a03404f648c9aa59e50fd",
+   "name": "Surprise"
+  },
+  {
+   "seed": "0x12564d03c3a998b4e109606c02499b0e5f5c848ec0a3010bacb9573befcbe415",
+   "name": "Kanran"
+  },
+  {
+   "seed": "0xf37a766f91a0f8a37f7b32947eb2ddaa049b1c41999dc3bf87faefe62c6f7fc6",
+   "name": "Second-Maitre Le Bihan"
+  },
+  {
+   "seed": "0x24d58bf734de10f8f404bd04f1c38bf25e5b2cecf81cf2b08b45f67074b03a1a",
+   "name": "Peridot"
+  },
+  {
+   "seed": "0xf20cd3070ef8370c3bd2aa4481f350e6c4494a351ca7c9f93595ee73f5305600",
+   "name": "Indefatigable"
+  },
+  {
+   "seed": "0xc915e80eae100359639667317a39e43392d56b02d9328e8069bb872011b6e63b",
+   "name": "Nabberley"
+  },
+  {
+   "seed": "0xd668b97c46f685b4399da16016da3ab54f72c9e39aeea3677503d9d2407568bf",
+   "name": "Lake County"
+  },
+  {
+   "seed": "0x0f575ba0a0525e6a4d96555f38dc578f1b667d05958d8beab634caeffc805ed9",
+   "name": "Buffoluto"
+  },
+  {
+   "seed": "0x23b34b3a82430c361c6dc3e5d32793e862489f4d42753daab42434e5affc1bb3",
+   "name": "F-11 Júpiter"
+  },
+  {
+   "seed": "0xb5d44e52e5e72f1ef89938c38e0e671231696d70da78c23805b2bf5033a6c500",
+   "name": "Phalarope"
+  },
+  {
+   "seed": "0x5031a31242bc5aab7438d98088269fc55e51a4450907a15502d2fdb2a34af025",
+   "name": "Zircon"
+  },
+  {
+   "seed": "0xd7208e0b37a6b67ffd32dd3781c4f9e4b21e30394c01e6ad30e7151c7a78a4bd",
+   "name": "Griswold"
+  },
+  {
+   "seed": "0xc50b151edf3e6fa2ea7672c248b426bb44c4e4b7affabfc7f399471ea64ed635",
+   "name": "Glennon"
+  },
+  {
+   "seed": "0xae1999b8cda52ff673a09f609bb2cd32ada130d6049d30ee8bac8c59dc4669d1",
+   "name": "Hashidate"
+  },
+  {
+   "seed": "0xacf57773fd31244dde3331b0e6d2e8e702b75e45aa4489b2744f58cec2a80cd0",
+   "name": "Monocacy"
+  },
+  {
+   "seed": "0x1e101d13274ed306cd8be0f3622965364271a934e5534a231d030300e98883bb",
+   "name": "Bessemer"
+  },
+  {
+   "seed": "0x552058f676df746abd968e5010373c29f9699f8ea50a41055ccfe7d8fee0c192",
+   "name": "Weaver"
+  },
+  {
+   "seed": "0x55dd15413149f97f221679ae0d4903287bdec2fe967d017d68f3b25a082afb56",
+   "name": "Yury Ivanov"
+  },
+  {
+   "seed": "0x2a601d1fe016a42454831df0311522d608647642c584d1efc1c265640eee90d5",
+   "name": "Abeille"
+  },
+  {
+   "seed": "0x196dc4ae7d94cde028cd6c387d0658d715d8fcba91ce58a65d7d8234ab1ae52d",
+   "name": "Seattle"
+  },
+  {
+   "seed": "0x354a9e5f1faa49ee6dbc76a2fd82bb0d3e12641724babeea6310135b238f067f",
+   "name": "Saturno"
+  },
+  {
+   "seed": "0x925bbab3955df51e830b797f1eaf1756d77f7265bcf6301a08973e749ed472da",
+   "name": "Armada del Mar del Sur"
+  },
+  {
+   "seed": "0x0cfb69e7c89f85ce765f7ccb3265af577dc73833cd3bfebfb04695a6c0a9f4d6",
+   "name": "Sky Soldiers"
+  },
+  {
+   "seed": "0x1f0dfd84530fbacd8e546563fec4910d6ba0d0bc946643ff3298f18084906b6e",
+   "name": "Saxifrage"
+  },
+  {
+   "seed": "0xff2097f4c75779f0d2a7f4f081f87b52911d90bbff08ff7161ebeec92cddea69",
+   "name": "Rolette"
+  },
+  {
+   "seed": "0x62705691daad5ba52f087445d9b6d58e3e8734806e6fbe92ba1fbb513718b4ea",
+   "name": "Sonoma"
+  },
+  {
+   "seed": "0x3d086530a97591477ba89a48bfb86c034826b5281e8e1d52aad64aa4f336c568",
+   "name": "Joseph Cudahy"
+  },
+  {
+   "seed": "0xf4db18d5c10c14075c4363aa1eb1e784e113b03ee1284db65b99e764a53707cd",
+   "name": "Manna Hata"
+  },
+  {
+   "seed": "0x4e9c54c3c958c8dc5484475ca3c18e65a94085f884c9ab1d489a9f8842e039db",
+   "name": "General J. M. Brannan"
+  },
+  {
+   "seed": "0xd34a24fe9cd8ec244d2cdf8027626d3949b065ee8a057586f6e4c0de52e7f45c",
+   "name": "James Adger"
+  },
+  {
+   "seed": "0x7ac8599d50438f45d2de2cb91eb372f5eb3526dd95187132dedd10347b11d308",
+   "name": "Admiral Greig"
+  },
+  {
+   "seed": "0xfc96d21aa7fb5f764bacd1b7065ee4bf6f97e8ba51933963a954e38727a26c26",
+   "name": "San Hipólito"
+  },
+  {
+   "seed": "0xa58d32aeb3177553eae0a2f0fde4c54d23a9c76b7451d34924fff2ca8ffb9b05",
+   "name": "Scarpe"
+  },
+  {
+   "seed": "0xb7b785b698ceea2adf994e172dc4e520152362a435307bf6f37ad05de8eff2a9",
+   "name": "Feodosii Totemskii"
+  },
+  {
+   "seed": "0x90f37d5ce900b3a136f58aed5e19191f3bd818d76eb3324b7a68cd8374399b45",
+   "name": "Croix de Lorraine"
+  },
+  {
+   "seed": "0xb2129ecec681c1f2db64fb1579a72b278debc2bc7e4f4ab88bee57be29482aeb",
+   "name": "Crescent Moon"
+  },
+  {
+   "seed": "0x2d00c726cedc6b663c4c54ccf655d1b56d69af359ba237870f5c42ea90cdac14",
+   "name": "Forces Network"
+  },
+  {
+   "seed": "0x27fa30bb5ab4acf02e969fd1ddac3782bfa3cb56bda7a8da28d8c3bdf72ffb24",
+   "name": "Besshumnyi"
+  },
+  {
+   "seed": "0x74d0720e9dc03de35b1c8d4d1551b0fcd308dec36de6dd09909945fe5c0bd6ff",
+   "name": "İzahlı Osmanlı Tarihi Kronolojisi"
+  },
+  {
+   "seed": "0x7a2f9b5177e515f86251a29201c26dcb4cc50e0c6926e070f5f3e71ab45b81a7",
+   "name": "Herbert"
+  },
+  {
+   "seed": "0x0dc3d4ed3057bd6ccfe303cb51b9cfa7bd6109c37e706b57c251e5e4880d6627",
+   "name": "Guglielmo Pepe"
+  },
+  {
+   "seed": "0x20ff54fcce7565fc9378933166d9e2118974318aa8674837a7f718095f196756",
+   "name": "Men of War"
+  },
+  {
+   "seed": "0x2724e3ef81bb62f0b13aeb573e55aef00957d69525b303d15d049e231eeea499",
+   "name": "Kurama"
+  },
+  {
+   "seed": "0xf3073e2c0da0b972385d2c4b1cd317dfd17e83c8648d19f42095b5bcbb790d33",
+   "name": "Bracken"
+  },
+  {
+   "seed": "0xbaf36b1eb023f37a15c058db05eebc420145bd5ac4e4b837b5ef080ade794eed",
+   "name": "Bessarabia"
+  },
+  {
+   "seed": "0x2a3bfa7bfe029120820f6933f8331b6f59dbb823a14b026f9116af0c096ae8cf",
+   "name": "St John Prize"
+  },
+  {
+   "seed": "0x3e670b307b2654ad96b8c3bfbf83829034860390213e2cd177de56049d98d537",
+   "name": "Bamberg County"
+  },
+  {
+   "seed": "0x93b9ac6c54dfec39810a97b46375d7cda6436cb9e19a82e209d36f591fe86a3e",
+   "name": "Bilsthorpe"
+  },
+  {
+   "seed": "0xe55f66865acf63e52350dc04f6a93bc8a2558d16ca641804c977ad3eb8ba03dc",
+   "name": "Herkules"
+  },
+  {
+   "seed": "0x0a7f02341f1a302312fcea95c058b82f30a15f330ee5006f8cc9400362b0b2c6",
+   "name": "Cottonwood"
+  },
+  {
+   "seed": "0xaf04acb4451d7204202a58943bc860ed070658251a6dcf29a1ac4e3ef98d4230",
+   "name": "Foley"
+  },
+  {
+   "seed": "0x92fe4bc997b9eb05e59a5cd131b543dc4b55702ee71025e5ecd07653242d8bfa",
+   "name": "Princeton"
+  },
+  {
+   "seed": "0x4708a6de4323c7b01ea35eb19aeb72b6f13166eb34a510598401d563c9515c3b",
+   "name": "Totem"
+  },
+  {
+   "seed": "0xad0d66a7d277602e56864a408038e7e8910ed6f13f3c524839584d9bfee3c733",
+   "name": "Corunna"
+  },
+  {
+   "seed": "0x647df6859ae7ac47994e154d39a097d85e07d825eb549f0d3626bf51074b9598",
+   "name": "Card"
+  },
+  {
+   "seed": "0xc82a7fb5094dbdf23d2f200c25b71b48818b3b8e0e3c2a2eb9b26e9db1196265",
+   "name": "Kolkata"
+  },
+  {
+   "seed": "0x2069a4158f2c8da08f9df8dd4ce6fc52cb1262546b76e577bf14cca1331e19ee",
+   "name": "Albatros"
+  },
+  {
+   "seed": "0x253e51d19b80af15a8ca7a76519493856e01f3aa5edf9d5a05037b40477dfe6b",
+   "name": "Medusa"
+  },
+  {
+   "seed": "0x56f6d0912c7439141b7a684c7d15dae9785d42cabf1ed4d72d9248e63218ff7c",
+   "name": "Kerrville"
+  },
+  {
+   "seed": "0x49aa925c481fa5b30e6c843c68c678758417636e5b95ea3dc8c03a18ef2ce7d2",
+   "name": "Kildorough"
+  },
+  {
+   "seed": "0x7e198b636fe95026cedfd59ab9a3bcf5d5f74648b763381e2fd67408b9b9ac50",
+   "name": "Almirante Cervera"
+  },
+  {
+   "seed": "0x6af0934d530670faa7d1d2f4ec0fc3d30578207110078b4903252bd1a8540d9f",
+   "name": "Carrillo"
+  },
+  {
+   "seed": "0xb0d6d6fe9cc26ef9a4c5dc62dd0f1281e40366b6cc01428bf57c52dd66c6e1b3",
+   "name": "Charles David"
+  },
+  {
+   "seed": "0xdc961d2e5d46532f7b9f65afdb640c5284dfb1a947abf2b23758931400995e0f",
+   "name": "Private John F. Thorson"
+  },
+  {
+   "seed": "0xaef30ba80b189c392eb77497b1656439380067e142f10970b452c35146be844d",
+   "name": "Algerine"
+  },
+  {
+   "seed": "0xc3cc6b2305ff2937ac441a9bd54a737536cb99d8adedeebb2e8e0aad7d09a1d7",
+   "name": "Phlegethon"
+  },
+  {
+   "seed": "0x2909d12aa327439eb8e6a1470335ff2600d5173935e7ec8e7f36eaba1eec9c9c",
+   "name": "Derbent"
+  },
+  {
+   "seed": "0xd7b55dfc82dbe4b7936a4fd7a4cb9ac4aa816ebef5867ba1eb33dd50f9864837",
+   "name": "Kipanga II"
+  },
+  {
+   "seed": "0xd3a09cc9389a40907d3f5f4032c995249fd13b2872a4b8d27630b8d3a2ce67f5",
+   "name": "Moosbrugger"
+  },
+  {
+   "seed": "0x127cd2615f97476cc182cfd8e98fac5d201eba1b72ca9d0b892542cd88cb80df",
+   "name": "Portcullis"
+  },
+  {
+   "seed": "0x8b1aba75aae5de347e08df2be134c1e9d898db1a16eec78795b60f2695349892",
+   "name": "Accohanoc"
+  },
+  {
+   "seed": "0xb5e8cfc5b37a93bb327353a141157a1ae2a1ebabdf43b6ab6b779cc85a16f53c",
+   "name": "Berry Head"
+  },
+  {
+   "seed": "0x118e2f57de16313cc769c2b3a383f99fb8ca8cb325ecd849f2c8b570f55c9b3d",
+   "name": "Merkurii"
+  },
+  {
+   "seed": "0x69d6789ddf944b7e563206fa43696e962c7db25b3e11bfbceedbd4f064d297b7",
+   "name": "Dromio"
+  },
+  {
+   "seed": "0xf01339ccc7fd20178a89f276662feceda4d9e3adf8b9164c6823885f69c9d6e0",
+   "name": "Sudarshini"
+  },
+  {
+   "seed": "0xa571c9209e28b75895589ffe5166a507c0921d9bc7b495339d45f805fb3ac4dd",
+   "name": "Arleigh Burke"
+  },
+  {
+   "seed": "0x3bf73aefc612f39206a1dd7e21ab3e0f723f05c2f9425b77097afcc1dd695c77",
+   "name": "Real Macy"
+  },
+  {
+   "seed": "0xce484f7fa645eca0a1245795b4337eb655ba1c0fe63b080d26da7466bf9d939f",
+   "name": "Welborn C. Wood"
+  },
+  {
+   "seed": "0x3e3cafa002a7f36852782630212d5a24cc64109da697e5514d934253f8a74bd9",
+   "name": "Latimer"
+  },
+  {
+   "seed": "0xfe4dfdf74a7bb7f16210a511ff9b2f49a9f763899432c47f7736e45fc38b7c11",
+   "name": "Sakuntala"
+  },
+  {
+   "seed": "0x633a19379101d2d29b2c12c27f377fb75aeb53054ab1799458ecad5dcb5061f7",
+   "name": "Ridley"
+  },
+  {
+   "seed": "0x9caa1302a7c6db4a48190f5cfce3ddc9856ebec6c4061b344d52a2d893cd28fe",
+   "name": "Kumano"
+  },
+  {
+   "seed": "0x2e20b058b4777e7e7a51b7e232fa32bca0ec2d089305f5b9fbae6d86f832f1d8",
+   "name": "Mistral"
+  }
+ ]
+}

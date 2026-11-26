@@ -431,7 +431,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // variants (e.g. a third faction with its own campaign medal) only need
   // a setRequiredNft call here, not a Ships.sol change. Wired to require
   // the Shattered Hive Campaign medal for variant 2 further below, once
-  // that medal contract (and the campaign's final node id) exist.
+  // that medal contract exists.
   const variantPurchaseGate = m.contract("VariantPurchaseGate");
 
   // Generic per-AI-faction-variant reward token registry (variant -> reward
@@ -632,6 +632,13 @@ const DeployModule = buildModule("DeployModule", (m) => {
   ]);
   // Grants nothing until a ship is configured per node via setGrant.
   const shipGrantWinEffect = m.contract("ShipGrantWinEffect", [ships]);
+  // Records who has won a roguelike run (a win at a node with no children);
+  // ShatteredHiveMedal reads it to award the campaign medal (2026-11-21).
+  // Attached to every ending node in the win-effect loop below.
+  const roguelikeCompletionWinEffect = m.contract(
+    "RoguelikeCompletionWinEffect",
+    [roguelikeNodeMap],
+  );
 
   // ShipsRouter.lobbyAddress used to point straight at SinglePlayerMatch,
   // whose isSinglePlayerOrchestrator is a hardcoded `== address(this)`
@@ -725,6 +732,12 @@ const DeployModule = buildModule("DeployModule", (m) => {
     "setIsAllowedToTrigger",
     [roguelikeMatch, true],
     { id: "AllowRoguelikeMatchToTriggerShipGrant" },
+  );
+  const allowRoguelikeMatchToTriggerCompletionCall = m.call(
+    roguelikeCompletionWinEffect,
+    "setIsAllowedToTrigger",
+    [roguelikeMatch, true],
+    { id: "AllowRoguelikeMatchToTriggerRoguelikeCompletion" },
   );
   const allowShipGrantWinEffectToCreateShipsCall = m.call(
     ships,
@@ -1249,14 +1262,17 @@ const DeployModule = buildModule("DeployModule", (m) => {
       1, // variant
       {
         version: 0, // ignored by setCosts, which always computes version+1 itself
-        baseCost: 50,
-        accuracy: [0, 10, 25],
-        hull: [0, 10, 25],
-        speed: [0, 10, 25],
+        // Repriced 2026-11-26 from the balance simulator's price fit
+        // (docs/balance-recommendations-2026-11-21.md section 7). Was base 50,
+        // accuracy/hull/speed [0,10,25], armor [0,5,10,15], shields [0,10,20,30].
+        baseCost: 95,
+        accuracy: [0, 5, 10],
+        hull: [0, 5, 10],
+        speed: [0, 10, 15],
         // Slots 4-7 are the inert `future*` filler (see header note).
         mainWeapon: [25, 30, 40, 40, 25, 25, 25, 25],
-        armor: [0, 5, 10, 15, 0, 0, 0, 0],
-        shields: [0, 10, 20, 30, 0, 0, 0, 0],
+        armor: [0, 5, 20, 25, 0, 0, 0, 0],
+        shields: [0, 10, 30, 35, 0, 0, 0, 0],
         special: variant1SpecialCosts,
       },
     ],
@@ -1300,7 +1316,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
   // unused (inert, free). Point-costs for its three specials are
   // placeholders (loosely mirroring FlakArray/EMP/a cheap passive tier) —
   // retune anytime via another setCosts call.
-  const variant2SpecialCosts = [0, 15, 20, 10, 0, 0, 0, 0];
+  const variant2SpecialCosts = [0, 5, 25, 35, 0, 0, 0, 0]; // was [0, 15, 20, 10, ...] before 2026-11-26
   // Variant 2 is the heavy faction: compared with variant 1 its ships have
   // ~25% more hull (base 125 vs 100, tiers 12/25 vs 10/20), one less base
   // speed (3 vs 4), guns with ~1 less range but ~20% more damage, and
@@ -1363,13 +1379,17 @@ const DeployModule = buildModule("DeployModule", (m) => {
       2, // variant
       {
         version: 0,
-        baseCost: 50,
-        accuracy: [0, 10, 25],
-        hull: [0, 10, 25],
+        // Repriced 2026-11-26 (see variant 1). Was base 50, accuracy/hull
+        // [0,10,25], armor [0,5,10,15], specials [0,15,20,10].
+        baseCost: 95,
+        accuracy: [0, 10, 20],
+        hull: [0, 10, 10],
         speed: [0, 10, 25],
         // Slots 4-7 are the inert `future*` filler (see header note).
         mainWeapon: [25, 30, 40, 40, 25, 25, 25, 25],
-        armor: [0, 5, 10, 15, 0, 0, 0, 0],
+        // Each armor tier costs more than the one below (human, 2026-11-26);
+        // the fit's 8 / 20 / 16 rounded to the nearest rising prices.
+        armor: [0, 5, 15, 20, 0, 0, 0, 0],
         shields: [0, 10, 20, 30, 0, 0, 0, 0],
         special: variant2SpecialCosts,
       },
@@ -1900,17 +1920,49 @@ const DeployModule = buildModule("DeployModule", (m) => {
     HEAL_ABOVE_FLOOR_WIN_EFFECT: healAboveFloorWinEffect,
     SHIP_GRANT_WIN_EFFECT: shipGrantWinEffect,
   };
+  // The campaign medal (2026-11-21): winning any ending — a combat node
+  // reachable from the root with no outgoing edge — completes the run, so
+  // each ending also gets RoguelikeCompletionWinEffect after its seeded
+  // effects. Derived from the graph rather than listed in the seed file,
+  // which the frontend's export rewrites.
+  const roguelikeChildCount = new Map<string, number>();
+  for (const edge of roguelikeContent.edges as any[]) {
+    roguelikeChildCount.set(edge.from, (roguelikeChildCount.get(edge.from) ?? 0) + 1);
+  }
+  const roguelikeReachable = new Set<string>([roguelikeContent.root]);
+  for (const queue = [roguelikeContent.root]; queue.length; ) {
+    const from = queue.shift()!;
+    for (const edge of roguelikeContent.edges as any[]) {
+      if (edge.from === from && !roguelikeReachable.has(edge.to)) {
+        roguelikeReachable.add(edge.to);
+        queue.push(edge.to);
+      }
+    }
+  }
+  const roguelikeEndingKeys = roguelikeContent.nodes
+    .filter(
+      (node: any) =>
+        node.kind === "Combat" &&
+        roguelikeReachable.has(node.key) &&
+        !roguelikeChildCount.get(node.key),
+    )
+    .map((node: any) => node.key as string);
+  if (roguelikeEndingKeys.length === 0) {
+    throw new Error("Roguelike campaign has no reachable ending to award the medal at");
+  }
   const roguelikeWinEffectCalls: ReturnType<typeof m.call>[] = [];
   roguelikeContent.nodes.forEach((node: any) => {
     const effectKeys: string[] = node.winEffects ?? [];
-    if (effectKeys.length === 0) return;
-    const effects = effectKeys.map((k) => {
+    const isEnding = roguelikeEndingKeys.includes(node.key);
+    if (effectKeys.length === 0 && !isEnding) return;
+    const effects: any[] = effectKeys.map((k) => {
       const effect = WIN_EFFECTS_BY_KEY[k];
       if (!effect) {
         throw new Error(`Roguelike node "${node.key}" lists unknown win effect "${k}"`);
       }
       return effect;
     });
+    if (isEnding) effects.push(roguelikeCompletionWinEffect);
     const capitalizedKey = `${node.key[0].toUpperCase()}${node.key.slice(1)}`;
     roguelikeWinEffectCalls.push(
       m.call(
@@ -1926,18 +1978,14 @@ const DeployModule = buildModule("DeployModule", (m) => {
   });
 
   // Shattered Hive Campaign medal: soulbound, awarded via player-initiated
-  // claimMedal() once the campaign's true final node (f06 — the end of the
-  // reconverged m/s/f storyline, not d06's dead-end branch; see
-  // singlePlayerStarterContent.json) has been completed. Deployed after the
-  // node-seeding loop above so nodeIds["f06"] is populated; the constructor
-  // arg is just a JS-side number by this point (createNode's own `after`
-  // chaining is what makes nodeIds trustworthy in the first place), but the
-  // deploy is still ordered after f06's own createNode call for good measure.
-  const shatteredHiveMedal = m.contract(
-    "ShatteredHiveMedal",
-    [nodeMap, nodeIds["f06"]],
-    { after: [nodeCalls["f06"]] },
-  );
+  // claimMedal() once the player has won a roguelike run at either ending
+  // (2026-11-21; the single-player campaign it used to read, ending at f06,
+  // is a stub). Its `nodeMap` is RoguelikeCompletionWinEffect, which
+  // ignores the node id, so finalNodeId is 0.
+  const shatteredHiveMedal = m.contract("ShatteredHiveMedal", [
+    roguelikeCompletionWinEffect,
+    0n,
+  ]);
 
   // On-chain art for the medal, referenced via an owner-settable address
   // (not a constructor param) so it can be swapped later without
@@ -2697,6 +2745,11 @@ const DeployModule = buildModule("DeployModule", (m) => {
       ],
     });
 
+    m.call(roguelikeCompletionWinEffect, "transferOwnership", [MAP_EDITOR], {
+      id: "TransferRoguelikeCompletionWinEffectOwnership",
+      after: [allowRoguelikeMatchToTriggerCompletionCall],
+    });
+
     m.call(shipGrantWinEffect, "transferOwnership", [MAP_EDITOR], {
       id: "TransferShipGrantWinEffectOwnership",
       after: [
@@ -2892,6 +2945,7 @@ const DeployModule = buildModule("DeployModule", (m) => {
     decBonusWinEffect,
     healAboveFloorWinEffect,
     shipGrantWinEffect,
+    roguelikeCompletionWinEffect,
     singlePlayerOrchestratorRegistry,
     variantPurchaseGate,
     factionRewardTokenRegistry,

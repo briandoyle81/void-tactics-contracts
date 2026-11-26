@@ -98,6 +98,7 @@ contract Lobbies is Ownable, ReentrancyGuard {
     error InsufficientUTC();
     error UTCTransferFailed();
     error LobbyNotStaleYet();
+    error EmptyFleet();
 
     uint public constant MIN_TURN_TIME = 60; // 1 minute in seconds
     uint public constant MAX_TURN_TIME = 86400; // 24 hours in seconds
@@ -572,6 +573,11 @@ contract Lobbies is Ownable, ReentrancyGuard {
             msg.sender == lobby.players.joiner &&
             lobby.players.joinerFleetId != 0
         ) revert FleetAlreadyCreated();
+
+        // 2026-11-25: an empty fleet started a game with one side empty.
+        // If that side moved first, the other player waited out the turn
+        // time with ships locked; alt accounts could also feed free wins.
+        if (_shipIds.length == 0) revert EmptyFleet();
 
         // Create fleet through Fleets contract
         bool isCreator = (msg.sender == lobby.basic.creator);

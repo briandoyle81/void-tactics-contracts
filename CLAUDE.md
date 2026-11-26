@@ -54,6 +54,15 @@ Do **not** use `tx.origin` in any contract, for authentication, authorization, o
 - It also silently misattributes actions for anyone interacting through a smart-contract wallet — this project already uses Dynamic for wallet auth, so that's a real case, not a hypothetical one. `tx.origin` resolves to the wallet's underlying signer, not the smart account actually holding funds or making the call.
 - **Found 2026-09-11:** `UTCLotteryHook.sol`'s first draft used `tx.origin` to decide which player should get lottery-entry credit for a swap. Caught before it shipped — the correct fix was decoding the real trader's address from `hookData` (the mechanism Uniswap v4 hooks already provide for exactly this), not `sender` (the calling router, not the trader) or `tx.origin`.
 
+## NEAR: Never Read `random_seed` in a User Receipt
+
+Do **not** call `env::random_seed()` / `env::random_seed_array()` anywhere except the contract's own self-callback that resolves randomness (`resolve_randomness` in `near/contracts/void-tactics/src/randomness.rs`, which is `#[private]`). Code that needs randomness records a request and schedules that callback; it never reads the seed in the user's own receipt.
+
+- A NEAR transaction can carry several FunctionCall actions to the same contract, executed in one receipt that reverts as a whole if any action fails. If the seed is read in the user's receipt, a player can batch `[mint/roll, call-that-panics-on-a-bad-outcome]` (e.g. `start_node_match` with a cost cap the bad roll would exceed) and retry until they get a roll they like, for the cost of gas.
+- The self-callback runs as a separate receipt in a later block: the player can't predict its seed, can't include it in their batch, and its outcome can't be rolled back by anything they do.
+- Anything that consumes the resolved value afterward (e.g. `construct_ship`) must be deterministic from the stored value, so retrying it can never re-roll.
+- Decided 2026-11-13 while porting `RandomManager.sol`'s deferred-blockhash design to native NEAR; covered by `near/tests/tests/phase0_spikes.rs` (`batched_failing_action_reverts_the_request_entirely`, `resolve_randomness_rejects_external_callers`).
+
 ## Dating Cross-Agent Documents
 
 Any document or set of instructions written for another agent to consume (e.g. a frontend-integration handoff doc, a migration guide) must include the date it was written, near the top. These documents describe contract state at a point in time and go stale as the contracts evolve — a reader needs the date to judge whether the content is still current.

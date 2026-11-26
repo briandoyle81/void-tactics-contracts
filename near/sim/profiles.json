@@ -1,0 +1,53 @@
+{
+  "_comment": "Balance-simulator player profiles (vt-sim economy). Spend tiers = spend + play time; skill levels apply to both composition and tactics. Edit freely; economy constants mirror the contract seed (ignition/modules/DeployAndConfig.ts, near/seed/config.json) as of 2026-11-16. loss_aversion (added 2026-11-17): how much the player minds losing an average ship for good, in win-probability units, before hangar scarcity (see economy::World::loss_prefs). 2026-11-20: the single-player campaign is a stub, so its share of play (mix.campaign) moved to roguelike runs, and the medal comes from winning a run at either Hive ending (m11 The Hive: Dominance, m15 The Hive: Alliance).",
+  "spend": {
+    "ftp": {
+      "usd_per_month": 0.0,
+      "sessions_per_week": 10.0,
+      "games_per_session": 4,
+      "mix": { "campaign": 0.0, "roguelike": 0.70, "pvp": 0.30 },
+      "pack_tier": null,
+      "modify_share": 0.0,
+      "loss_aversion": 0.2
+    },
+    "casual": {
+      "usd_per_month": 10.0,
+      "sessions_per_week": 3.0,
+      "games_per_session": 3,
+      "mix": { "campaign": 0.0, "roguelike": 0.65, "pvp": 0.35 },
+      "pack_tier": 1,
+      "modify_share": 0.0,
+      "loss_aversion": 0.1
+    },
+    "whale": {
+      "usd_per_month": 200.0,
+      "sessions_per_week": 5.0,
+      "games_per_session": 4,
+      "mix": { "campaign": 0.0, "roguelike": 0.50, "pvp": 0.50 },
+      "pack_tier": 4,
+      "modify_share": 0.25,
+      "loss_aversion": 0.02
+    }
+  },
+  "economy": {
+    "pack_ships": [5, 11, 22, 40, 60],
+    "pack_usd": [4.99, 9.99, 19.99, 34.99, 49.99],
+    "free_claim_base": 10,
+    "free_topup_floor": 10,
+    "claim_cooldown_days": 28,
+    "recycle_reward_utc": 0.1,
+    "pvp_kill_reward_utc": 0.025,
+    "repair_utc_per_hp": 0.01,
+    "modification_base_utc": 0.998,
+    "medal_nodes": ["m11", "m15"],
+    "variant2_requires_medal": true
+  },
+  "pvp": {
+    "brackets": [1000, 2000],
+    "max_score": 100,
+    "elo_k": 24.0,
+    "elo_start": 1200.0,
+    "matchmaking_noise": 100.0,
+    "meta_window": 24
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "name": "prices-rl",
+  "seed": 1,
+  "stages": [
+    "roguelike"
+  ],
+  "components": {
+    "fit_games": 20000,
+    "pick_composes": 300
+  },
+  "pve": {
+    "pools_per_node": 8,
+    "pool_size": 30
+  },
+  "roguelike": {
+    "runs_per_level": 40,
+    "pool_size": 30,
+    "runs_per_path": 10
+  },
+  "factorial": {
+    "scenarios": 40,
+    "variants": [
+      {
+        "name": "narrow",
+        "poor_noise": 0.06,
+        "excellent_plies": 0
+      },
+      {
+        "name": "calibrated",
+        "poor_noise": null,
+        "excellent_plies": null
+      },
+      {
+        "name": "wide",
+        "poor_noise": 0.25,
+        "excellent_plies": 12
+      }
+    ]
+  },
+  "economy": {
+    "days": 84,
+    "players_per_archetype": 3
+  },
+  "matrix": {
+    "scenarios_per_pair": 30,
+    "brackets": [
+      1000,
+      2000
+    ]
+  },
+  "flags": {
+    "pay_to_win_max": 0.65,
+    "skill_min": 0.65,
+    "node_average_clear_min": 0.2,
+    "node_spike": 0.35,
+    "component_mispricing": 0.3,
+    "ai_config_min_appearances": 20,
+    "min_final_ships": 8,
+    "matrix_min_played": 0.5
+  }
+}

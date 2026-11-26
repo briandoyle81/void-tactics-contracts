@@ -19,7 +19,9 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
 
     // Static - Contract with the world
     // Hardcoded referral tiers (stages: 1000, 10000, 50000, 100000)
-    // Percentages: 0%, 10%, 20%, 35%, 50%
+    // Percentages: 0% below 1000, then 10%, 20%, 35%, 50% (the same ladder as
+    // Ships._processReferral and the NEAR port). referralPercentages[i] is
+    // the rate once referralStages[i - 1] is reached; [0] is below the first.
     uint8[] public referralPercentages = [0, 10, 20, 35, 50];
     // Amount of Ships sold to reach each tier
     uint32[] public referralStages = [
@@ -131,9 +133,11 @@ contract ShipPurchaser is Ownable, ReentrancyGuard {
 
         uint referralPercentage = 0; // Default 0% for < 1000 ships
 
+        // Fixed 2026-11-25: this read referralPercentages[i - 1], one rate
+        // too low at every stage (0/10/20/35% instead of 10/20/35/50%).
         for (uint i = referralStages.length; i > 0; i--) {
             if (referralCount[_referrer] >= referralStages[i - 1]) {
-                referralPercentage = referralPercentages[i - 1];
+                referralPercentage = referralPercentages[i];
                 break;
             }
         }
